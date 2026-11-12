@@ -1,0 +1,12 @@
+[files]
+extend-exclude = [
+  "openapi/*.json",
+  "tests/contract/fixtures/",
+  "db/nestjs-schema.sql",
+  "internal/controller/http/gen/",
+  "go.mod",
+  "go.sum",
+  "tools/go.mod",
+  "tools/go.sum",
+  "LICENSE",
+]

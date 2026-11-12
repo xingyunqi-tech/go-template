@@ -1,0 +1,11 @@
+# 公共服务定义；按环境叠加 docker-compose.<env>.yaml
+#
+# 用法：docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.ci.yaml up -d
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - '${APP_PORT:-3000}:3000'

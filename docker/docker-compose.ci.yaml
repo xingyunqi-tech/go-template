@@ -1,0 +1,9 @@
+# CI / e2e 叠加层：生产构建、非生产配置
+#
+# 用法：make test-e2e
+
+services:
+  api:
+    environment:
+      APP_ENV: test
+      APP_PORT: '3000'

@@ -1,118 +1,53 @@
-// Package httpserver implements HTTP server.
+// Package httpserver runs a net/http server with graceful shutdown.
 package httpserver
 
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
+	"net/http"
 	"time"
-
-	"github.com/evrone/go-clean-template/pkg/logger"
-	"github.com/goccy/go-json"
-	"github.com/gofiber/fiber/v3"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
-	_defaultAddr            = ":80"
-	_defaultReadTimeout     = 5 * time.Second
-	_defaultWriteTimeout    = 5 * time.Second
-	_defaultShutdownTimeout = 3 * time.Second
+	_readHeaderTimeout = 10 * time.Second
+	_readTimeout       = 60 * time.Second
+	_writeTimeout      = 60 * time.Second
+	_idleTimeout       = 120 * time.Second
 )
 
-// Server -.
+// Server wraps http.Server.
 type Server struct {
-	ctx context.Context
-	eg  *errgroup.Group
-
-	App    *fiber.App
-	notify chan error
-
-	address         string
-	prefork         bool
-	readTimeout     time.Duration
-	writeTimeout    time.Duration
-	shutdownTimeout time.Duration
-
-	logger logger.Interface
+	srv *http.Server
 }
 
-// New -.
-func New(l logger.Interface, opts ...Option) *Server {
-	group, ctx := errgroup.WithContext(context.Background())
-	group.SetLimit(1) // Run only one goroutine
-
-	s := &Server{
-		ctx:             ctx,
-		eg:              group,
-		App:             nil,
-		notify:          make(chan error, 1),
-		address:         _defaultAddr,
-		readTimeout:     _defaultReadTimeout,
-		writeTimeout:    _defaultWriteTimeout,
-		shutdownTimeout: _defaultShutdownTimeout,
-		logger:          l,
-	}
-
-	// Custom options
-	for _, opt := range opts {
-		opt(s)
-	}
-
-	app := fiber.New(fiber.Config{
-		ReadTimeout:  s.readTimeout,
-		WriteTimeout: s.writeTimeout,
-		JSONDecoder:  json.Unmarshal,
-		JSONEncoder:  json.Marshal,
-	})
-
-	s.App = app
-
-	return s
+// New returns a server for handler on addr.
+func New(addr string, handler http.Handler) *Server {
+	return &Server{srv: &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: _readHeaderTimeout,
+		ReadTimeout:       _readTimeout,
+		WriteTimeout:      _writeTimeout,
+		IdleTimeout:       _idleTimeout,
+	}}
 }
 
-// Start -.
-func (s *Server) Start() {
-	s.eg.Go(func() error {
-		err := s.App.Listen(s.address, fiber.ListenConfig{EnablePrefork: s.prefork})
-		if err != nil {
-			s.notify <- err
-
-			close(s.notify)
-
-			return err
-		}
-
-		return nil
-	})
-
-	s.logger.Info("restapi server - Server - Started")
-}
-
-// Notify -.
-func (s *Server) Notify() <-chan error {
-	return s.notify
-}
-
-// Shutdown -.
-func (s *Server) Shutdown() error {
-	var shutdownErrors []error
-
-	err := s.App.ShutdownWithTimeout(s.shutdownTimeout)
-	if err != nil && !errors.Is(err, context.Canceled) {
-		s.logger.Error(err, "restapi server - Server - Shutdown - s.App.ShutdownWithTimeout")
-
-		shutdownErrors = append(shutdownErrors, err)
+// Serve accepts connections on ln until Shutdown; it returns nil after a graceful shutdown.
+func (s *Server) Serve(ln net.Listener) error {
+	if err := s.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("httpserver: %w", err)
 	}
 
-	// Wait for all goroutines to finish and get any error
-	err = s.eg.Wait()
-	if err != nil && !errors.Is(err, context.Canceled) {
-		s.logger.Error(err, "restapi server - Server - Shutdown - s.eg.Wait")
+	return nil
+}
 
-		shutdownErrors = append(shutdownErrors, err)
+// Shutdown stops accepting connections and waits for in-flight requests until ctx is done.
+func (s *Server) Shutdown(ctx context.Context) error {
+	if err := s.srv.Shutdown(ctx); err != nil {
+		return fmt.Errorf("httpserver: shutdown: %w", err)
 	}
 
-	s.logger.Info("restapi server - Server - Shutdown")
-
-	return errors.Join(shutdownErrors...)
+	return nil
 }

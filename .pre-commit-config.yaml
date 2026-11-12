@@ -1,0 +1,80 @@
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [pre-commit]
+
+repos:
+  - repo: builtin
+    hooks:
+      - id: check-added-large-files
+        exclude: ^(openapi/|tests/contract/fixtures/|internal/controller/http/gen/)
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: end-of-file-fixer
+        exclude: ^(openapi/.*\.json|tests/contract/fixtures/|LICENSE$)
+      - id: trailing-whitespace
+        exclude: ^(openapi/.*\.json|tests/contract/fixtures/|LICENSE$)
+
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks
+        language: docker_image
+        entry: zricethezav/gitleaks:v8.30.1 git --pre-commit --staged --redact --no-banner
+        pass_filenames: false
+
+      - id: golangci-lint-fmt
+        name: golangci-lint fmt
+        entry: make --no-print-directory fmt
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: golangci-lint
+        name: golangci-lint run（仅本次改动）
+        entry: make --no-print-directory lint-new
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: typos
+        name: typos
+        entry: make --no-print-directory typos
+        language: system
+        types: [text]
+        pass_filenames: false
+
+      - id: go-mod-tidy
+        name: go mod tidy -diff
+        entry: bash -c 'go mod tidy -diff && go -C tools mod tidy -diff'
+        language: system
+        files: (^|/)go\.(mod|sum)$|\.go$
+        pass_filenames: false
+
+      - id: generated
+        name: 生成代码新鲜度
+        entry: scripts/check-generated.sh
+        language: system
+        files: ^(openapi/|tools/openapigen/)
+        pass_filenames: false
+
+      - id: comment-history
+        name: 注释变更历史提示（只告警）
+        entry: scripts/check-comment-history.sh
+        language: system
+        types: [go]
+        pass_filenames: false
+        verbose: true
+
+      - id: commit-msg
+        name: conventional commits
+        entry: scripts/commit-msg.sh
+        language: system
+        stages: [commit-msg]
+
+      - id: make-check
+        name: make check
+        entry: make check
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true

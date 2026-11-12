@@ -1,0 +1,206 @@
+//go:build contract
+
+package contract_test
+
+import (
+	"bufio"
+	"bytes"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
+
+	httpapi "github.com/xingyunqi-tech/go-template/internal/controller/http"
+	v1 "github.com/xingyunqi-tech/go-template/internal/controller/http/v1"
+	"github.com/xingyunqi-tech/go-template/openapi"
+)
+
+const root = "../.."
+
+// sharedArtifacts are byte-identical across the nestjs-compatible backend templates.
+var sharedArtifacts = []string{ //nolint:gochecknoglobals // fixture list
+	"openapi/nestjs-baseline.json",
+	"openapi/validation.json",
+	"openapi/SOURCE",
+	"openapi/nest_handlers.json",
+	"db/nestjs-schema.sql",
+	"scripts/openapi-sync.sh",
+	"scripts/schema_snapshot.py",
+	"scripts/gen_validation_cases.py",
+	"scripts/gen_nest_handlers.py",
+	"scripts/nestjs/validation-cases.ts",
+	"scripts/nestjs/nestjs.compose.yaml",
+	"tests/contract/fixtures/validation-cases.json",
+}
+
+// undocumentedRoutes may be registered without appearing in the baseline document.
+var undocumentedRoutes = []string{"GET /docs", "GET /docs-json", "GET /metrics"} //nolint:gochecknoglobals // whitelist
+
+type operation struct {
+	method, path string
+}
+
+func readFile(t *testing.T, rel string) []byte {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join(root, rel))
+	require.NoError(t, err)
+
+	return data
+}
+
+func newRouter(t *testing.T) *httpapi.Router {
+	t.Helper()
+
+	r, err := httpapi.NewRouter(v1.New("app"), httpapi.Options{APIPrefix: "api", SwaggerEnabled: true, Docs: openapi.Baseline})
+	require.NoError(t, err)
+
+	return r
+}
+
+func loadBaseline(t *testing.T) map[string]operation {
+	t.Helper()
+
+	doc, err := openapi3.NewLoader().LoadFromData(readFile(t, "openapi/nestjs-baseline.json"))
+	require.NoError(t, err)
+
+	ops := map[string]operation{}
+
+	for path, item := range doc.Paths.Map() {
+		for method, op := range item.Operations() {
+			if op.OperationID != "" {
+				ops[op.OperationID] = operation{method: method, path: path}
+			}
+		}
+	}
+
+	return ops
+}
+
+func loadScope(t *testing.T) []string {
+	t.Helper()
+
+	var scope struct {
+		Operations []string `yaml:"operations"`
+	}
+	require.NoError(t, yaml.Unmarshal(readFile(t, "openapi/scope.yaml"), &scope))
+	require.NotEmpty(t, scope.Operations)
+
+	return scope.Operations
+}
+
+func registeredRoutes(t *testing.T, routes chi.Routes) []string {
+	t.Helper()
+
+	var out []string
+
+	err := chi.Walk(routes, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		out = append(out, method+" "+route)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	return out
+}
+
+func TestDocsJSONServesBaselineBytes(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+	newRouter(t).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/docs-json", http.NoBody))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.True(t, bytes.Equal(readFile(t, "openapi/nestjs-baseline.json"), rec.Body.Bytes()),
+		"/docs-json differs from openapi/nestjs-baseline.json")
+}
+
+func TestSourceDeclaresContractOrigin(t *testing.T) {
+	t.Parallel()
+
+	keys := map[string]string{}
+	scanner := bufio.NewScanner(bytes.NewReader(readFile(t, "openapi/SOURCE")))
+
+	for scanner.Scan() {
+		key, value, ok := strings.Cut(scanner.Text(), "=")
+		require.True(t, ok, scanner.Text())
+
+		keys[key] = value
+	}
+
+	hex := regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+	assert.Equal(t, "xingyunqi-tech/nestjs-template", keys["repository"])
+	assert.NotEmpty(t, keys["branch"])
+	assert.Regexp(t, hex, keys["commit"])
+	assert.Regexp(t, hex, keys["validation_script"])
+	assert.Equal(t, "NODE_ENV=development FILE_DRIVER=local", keys["environment"])
+	assert.Len(t, keys, 5)
+}
+
+func TestSharedArtifactsMatchFastapiTemp(t *testing.T) {
+	t.Parallel()
+
+	dir := os.Getenv("FASTAPI_DIR")
+
+	switch {
+	case dir == "":
+		dir = filepath.Join(root, "..", "fastapi-temp")
+		if _, err := os.Stat(filepath.Join(dir, "openapi", "SOURCE")); err != nil {
+			t.Skipf("fastapi-temp not found at %s; set FASTAPI_DIR to require the comparison", dir)
+		}
+	case !filepath.IsAbs(dir):
+		dir = filepath.Join(root, dir)
+	}
+
+	for _, rel := range sharedArtifacts {
+		theirs, err := exec.CommandContext(t.Context(), "git", "-C", dir, "show", "HEAD:"+rel).Output()
+		require.NoError(t, err, rel)
+		assert.True(t, bytes.Equal(theirs, readFile(t, rel)), "%s differs from fastapi-temp HEAD", rel)
+	}
+}
+
+func TestEveryScopedOperationIsRegistered(t *testing.T) {
+	t.Parallel()
+
+	ops := loadBaseline(t)
+	registered := registeredRoutes(t, newRouter(t).Routes())
+
+	for _, id := range loadScope(t) {
+		op, ok := ops[id]
+		if !assert.True(t, ok, "%s is not in the baseline", id) {
+			continue
+		}
+
+		assert.Contains(t, registered, op.method+" "+op.path, "%s has no registered handler", id)
+	}
+}
+
+func TestEveryRegisteredRouteIsDocumented(t *testing.T) {
+	t.Parallel()
+
+	documented := map[string]bool{}
+	for _, op := range loadBaseline(t) {
+		documented[op.method+" "+op.path] = true
+	}
+
+	for _, route := range registeredRoutes(t, newRouter(t).Routes()) {
+		if strings.HasPrefix(route, http.MethodHead+" ") {
+			continue
+		}
+
+		assert.True(t, documented[route] || slices.Contains(undocumentedRoutes, route),
+			"%s is neither documented nor whitelisted", route)
+	}
+}

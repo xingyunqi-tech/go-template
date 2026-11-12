@@ -1,103 +1,45 @@
+// Package logger builds the process-wide slog.Logger.
 package logger
 
 import (
-	"fmt"
-	"os"
-	"strings"
-
-	"github.com/rs/zerolog"
+	"io"
+	"log/slog"
 )
 
-// Interface -.
-type Interface interface {
-	Debug(message any, args ...any)
-	Info(message string, args ...any)
-	Warn(message string, args ...any)
-	Error(message any, args ...any)
-	Fatal(message any, args ...any)
+// Levels outside slog's four built-in ones, matching pino's names.
+const (
+	LevelTrace slog.Level = slog.LevelDebug - 4
+	LevelFatal slog.Level = slog.LevelError + 4
+)
+
+// New returns a JSON logger, or a single-line text logger when pretty is set; level "silent" discards.
+func New(w io.Writer, level string, pretty bool) *slog.Logger {
+	if level == "silent" {
+		return slog.New(slog.DiscardHandler)
+	}
+
+	opts := &slog.HandlerOptions{Level: ParseLevel(level)}
+	if pretty {
+		return slog.New(slog.NewTextHandler(w, opts))
+	}
+
+	return slog.New(slog.NewJSONHandler(w, opts))
 }
 
-// Logger -.
-type Logger struct {
-	logger *zerolog.Logger
-}
-
-var _ Interface = (*Logger)(nil)
-
-// New -.
-func New(level string) *Logger {
-	var l zerolog.Level
-
-	switch strings.ToLower(level) {
-	case "error":
-		l = zerolog.ErrorLevel
-	case "warn":
-		l = zerolog.WarnLevel
-	case "info":
-		l = zerolog.InfoLevel
+// ParseLevel maps a LOG_LEVEL value to a slog level; unknown values are info.
+func ParseLevel(level string) slog.Level {
+	switch level {
+	case "trace":
+		return LevelTrace
 	case "debug":
-		l = zerolog.DebugLevel
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	case "fatal":
+		return LevelFatal
 	default:
-		l = zerolog.InfoLevel
-	}
-
-	zerolog.SetGlobalLevel(l)
-
-	skipFrameCount := 3
-	logger := zerolog.
-		New(os.Stdout).
-		With().
-		Timestamp().
-		CallerWithSkipFrameCount(zerolog.CallerSkipFrameCount + skipFrameCount).
-		Logger()
-
-	return &Logger{
-		logger: new(logger),
-	}
-}
-
-// Debug -.
-func (l *Logger) Debug(message any, args ...any) {
-	l.msg(zerolog.DebugLevel, message, args...)
-}
-
-// Info -.
-func (l *Logger) Info(message string, args ...any) {
-	l.log(zerolog.InfoLevel, message, args...)
-}
-
-// Warn -.
-func (l *Logger) Warn(message string, args ...any) {
-	l.log(zerolog.WarnLevel, message, args...)
-}
-
-// Error -.
-func (l *Logger) Error(message any, args ...any) {
-	l.msg(zerolog.ErrorLevel, message, args...)
-}
-
-// Fatal -.
-func (l *Logger) Fatal(message any, args ...any) {
-	l.msg(zerolog.FatalLevel, message, args...)
-
-	os.Exit(1)
-}
-
-func (l *Logger) log(level zerolog.Level, message string, args ...any) {
-	if len(args) == 0 {
-		l.logger.WithLevel(level).Msg(message)
-	} else {
-		l.logger.WithLevel(level).Msgf(message, args...)
-	}
-}
-
-func (l *Logger) msg(level zerolog.Level, message any, args ...any) {
-	switch msg := message.(type) {
-	case error:
-		l.log(level, msg.Error(), args...)
-	case string:
-		l.log(level, msg, args...)
-	default:
-		l.log(level, fmt.Sprintf("%s message %v has unknown type %v", level, message, msg), args...)
+		return slog.LevelInfo
 	}
 }

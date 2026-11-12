@@ -1,0 +1,25 @@
+{
+  "go.toolsManagement.autoUpdate": false,
+  "go.lintTool": "golangci-lint-v2",
+  "go.lintFlags": ["--fast-only"],
+  "go.alternateTools": {
+    "golangci-lint-v2": "${workspaceFolder}/bin/golangci-lint-2.15.0"
+  },
+  "go.buildTags": "integration,e2e,contract,parity",
+  "go.testFlags": ["-race"],
+  "gopls": {
+    "formatting.gofumpt": true,
+    "formatting.local": "github.com/xingyunqi-tech/go-template",
+    "build.buildFlags": ["-tags=integration,e2e,contract,parity"]
+  },
+  "[go]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "files.exclude": {
+    "bin": true,
+    "coverage": true
+  }
+}

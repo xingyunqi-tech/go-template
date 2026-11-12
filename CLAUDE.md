@@ -1,259 +1,104 @@
-# go-clean-template
+# go-template
 
-Go clean-architecture reference service. Three domains (`user`, `task`, `translation`) exposed
-over four transports (REST/Fiber, gRPC, RabbitMQ RPC, NATS RPC) from one shared use-case layer.
-Module path: `github.com/evrone/go-clean-template`. The Go version is declared in `go.mod`.
+Go 后端模板，与 nestjs-template（`release/exam-prep`）**API 契约一致**：vite-vue3-temp、uniapp-template 用 Orval 从 `/docs-json` 生成的前端可以无改动切换到本服务。
+模块路径 `github.com/xingyunqi-tech/go-template`，Go 版本见 `go.mod`。完整方案与阶段划分见 `TEMPLATE_PLAN.md`。
 
-## Commands — drive everything through the Makefile
+## 命令：一律通过 Makefile
 
-The `Makefile` loads `.env` (falling back to `.env.example`) and exports it into every target, and
-several targets carry flags that matter. Running the underlying tool directly means running it with
-different settings than CI. Use the target, not the tool.
+| 任务 | 命令 |
+|---|---|
+| 下载 golangci-lint / prek / typos 二进制，安装 Git 钩子 | `make install` |
+| 本地启动 API | `make dev` |
+| 生成代码（oapi-codegen） | `make generate` |
+| 格式化 | `make fmt` |
+| lint（golangci-lint、typos、`go mod tidy -diff`） | `make lint` |
+| vet + build | `make vet` |
+| 单元测试 | `make test` |
+| 集成测试（testcontainers，需要 Docker） | `make test-integration` |
+| 契约测试 | `make test-contract` |
+| e2e（构建镜像，compose 启动后黑盒测试） | `make test-e2e` |
+| 覆盖率门槛（单元 + 集成，≥80%） | `make coverage` |
+| 同步共享产物 | `make openapi-sync` |
+| 本地 CI | `make ci` |
 
-| Task | Use this | Not this |
-| --- | --- | --- |
-| Install tool binaries (`swag`, `mockgen`, `migrate`, linters) | `make bin-deps` | `go install ...` |
-| Unit tests | `make test` | `go test ./...` — the target adds `-race -covermode atomic` and scopes to `./internal/... ./pkg/...` |
-| Integration tests | `make compose-up-integration-test` | `make integration-test` — see below |
-| Lint | `make linter-golangci` | `golangci-lint run` |
-| Format | `make format` | `gofmt` — the target runs `go fix`, `gofumpt`, and `gci` with the repo's import grouping |
-| Regenerate mocks | `make mock` | `mockgen ...` |
-| Regenerate Swagger | `make swag-v1` | `swag init` — the target passes `--parseDependency -g internal/controller/restapi/router.go` |
-| Regenerate protobuf | `make proto-v1` | `protoc ...` |
-| Tidy / verify modules | `make deps` | `go mod tidy` |
-| Vulnerability scan | `make deps-audit` | `govulncheck ./...` |
-| Start dependencies (Postgres, RabbitMQ, NATS) | `make compose-up` | `docker compose up` |
-| Start the whole stack including the app | `make compose-up-all` | `docker compose up` |
-| Tear down | `make compose-down` | `docker compose down` |
-| Run the app locally | `make run` | `go run ./cmd/app` — the target regenerates docs and builds with `-tags migrate` |
-| Create a migration | `make migrate-create <name>` | `migrate create ...` |
-| Apply migrations | `make migrate-up` | `migrate -path ... up` |
-| Full check before pushing | `make pre-commit` | running the steps by hand |
+`make check` = lint + vet + 单元测试，是 pre-push 钩子。宣称改动完成之前，`make check`、`make test-integration`、`make test-contract` 必须通过；涉及部署形态的改动再跑 `make test-e2e` 与 `make image`。
 
-`make help` lists every target.
+工具版本：golangci-lint、prek、typos 写在 Makefile 变量里，下载官方二进制到 `bin/`；纯 Go 工具（oapi-codegen、goose、mockgen、govulncheck、gotestsum、go-test-coverage）在 `tools/go.mod`，用 `go tool -modfile=tools/go.mod <name>` 调用。主 `go.mod` 只放运行时依赖。
 
-Three traps in these targets:
+## 契约：spec-first
 
-- **`make integration-test` is not the one you want.** It runs `go test ./integration-test/...` on
-  the host, where the suite cannot resolve the container hostnames it needs, so it always fails.
-  `make compose-up-integration-test` is the real entry point.
-- **`make migrate-create <name>` prints an error after it succeeds.** The target reads the name via
-  `$(word 2,$(MAKECMDGOALS))`, so `make` then tries to build `<name>` as a target and reports
-  `No rule to make target`. The migration files are already created; ignore that line.
-- **`make run` and `make pre-commit` depend on `swag-v1` and `proto-v1`**, so they need `swag` and
-  `protoc` on `PATH`. Run `make bin-deps` first (`protoc` itself is not installed by it).
+- `openapi/nestjs-baseline.json` 是 nestjs `/docs-json` 的原始字节，`GET /docs-json` 原样返回。
+- `openapi/{nestjs-baseline.json,validation.json,SOURCE,nest_handlers.json}`、`db/nestjs-schema.sql`、`scripts/{openapi-sync.sh,schema_snapshot.py,gen_validation_cases.py,gen_nest_handlers.py,nestjs/}`、`tests/contract/fixtures/validation-cases.json` 是与 fastapi-temp、springboot-template **逐字节相同的共享产物**，只能通过 `make openapi-sync` 更新，不得手改。接口变更先在 nestjs 落地。
+- `openapi/scope.yaml` 列出本期已实现的 operationId；`make generate` 只为它们生成处理器接口与路由注册。新增实现时先把 operationId 加进去，再生成、实现。
+- `openapi/overlay.yaml` 只作用于代码生成输入，不改变对外文档。
+- `openapi/templates/strict-interface.tmpl` 覆盖 oapi-codegen 的 strict 响应写出：成功一律 HTTP 200（仅 `uploadFile` 为 201），body 为 `{code: 200, message: "success", data}`，无内容时不输出 `data`。
 
-Never claim a change is done without `make format`, `make linter-golangci` and `make test` passing.
-
-## Dependency rule
+## 分层
 
 ```
-cmd/app → internal/app → internal/controller/*  ─┐
-                       → internal/repo/*        ─┤→ internal/usecase (interfaces)
-                                                 └→ internal/entity
+cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（接口在 usecase/contracts.go）
+                                                      → internal/repo（端口在 repo/contracts.go）
+                                                      → internal/entity
 ```
 
-- `internal/entity` — domain types and sentinel errors. Imports nothing from this module.
-- `internal/usecase/contracts.go` — the interfaces controllers call. `internal/usecase/<domain>/`
-  implements them.
-- `internal/repo/contracts.go` — the interfaces use cases call. `internal/repo/persistent/<domain>/`
-  (Postgres) and `internal/repo/webapi/` (outbound HTTP) implement them.
-- `internal/controller/<transport>/v1/` — one package per transport, each with its own
-  `request/` and `response/` DTOs. Controllers never import each other.
-- `pkg/` — transport-agnostic infrastructure (servers, logger, jwt, postgres, tracing). Must not
-  import `internal/`.
+| 目录 | 内容 |
+|---|---|
+| `internal/entity` | 领域对象与领域错误；不引用 pgx、生成代码、net/http（depguard 检查） |
+| `internal/usecase` | 业务规则；不引用 controller |
+| `internal/controller/http` | chi 路由、Express 路由语义、`/docs-json`；`gen/` 为生成代码，`v1/` 实现 `gen.StrictServerInterface`，`v1/view/` 是手写响应视图 |
+| `internal/config` | caarlos0/env 解析，变量名与 nestjs 一致，启动时一次性校验并列出全部问题 |
+| `pkg/` | 与业务无关的封装，不引用 `internal/` |
 
-Inner layers never import outer ones. Wiring happens exactly once, in `internal/app/app.go`
-(`initUseCases`, `initServers`).
+- 配置只从 `config.Config` 读取，业务代码禁止 `os.Getenv`（forbidigo）。
+- 日志用 `log/slog`，禁止 `fmt.Print*` 与标准库 `log`。
+- 构造函数手写，在 `internal/app` 组装，不引入 wire / fx。
+- 未导出的包级常量以下划线开头（`_scalarVersion`）；`mnd` 拒绝裸数字，先定义常量。
+- 新约束命名：`<table>_<column>_key`、`<table>_<column>_fkey`、`idx_<table>_<column>`。
 
-## Where code goes
+## 路由语义（与 Express 一致）
 
-Decide by asking what the code knows about:
+- 路由匹配基于百分号编码的原始路径：`/api/%68ealth` 不命中 `/api/health`。
+- 静态段不区分大小写，允许一个末尾斜杠，路径参数保留原始大小写与编码。
+- 未匹配路由与方法不符都返回 404 `{code: 404, message: "Cannot <METHOD> <originalUrl>", data: null}`，不带 `Allow`。
+- `HEAD` 命中同路径的 `GET` 处理器。
 
-| The code knows about… | It belongs in | Shape |
-| --- | --- | --- |
-| nothing but the domain | `internal/entity/<name>.go` | struct + methods (`Task.Transition`, `TaskStatus.Valid`) |
-| a domain rule that spans repositories | `internal/usecase/<domain>/<domain>.go` | method on `UseCase` |
-| SQL, a table, a driver error code | `internal/repo/persistent/<domain>/<domain>.go` | method on `Repo` |
-| an outbound HTTP API | `internal/repo/webapi/<name>.go` | method on the webapi struct |
-| an HTTP status, a gRPC code, a message envelope | `internal/controller/<transport>/v1/<domain>.go` | handler |
-| a server, pool, client or middleware with no domain knowledge | `pkg/<name>/` | reusable package |
+## 测试
 
-Layout rules:
+| 层 | 位置 | 标签 |
+|---|---|---|
+| 单元 | 与源码同目录 `*_test.go` | 无 |
+| 集成 | 与源码同目录 `*_integration_test.go`，夹具在 `internal/testutil` | `integration` |
+| e2e | `tests/e2e` | `e2e` |
+| 契约 | `tests/contract` | `contract` |
+| parity | `tests/parity` | `parity` |
 
-- One file per domain per layer, named after the domain (`task.go`, `user.go`, `translation.go`),
-  plus a `tracing.go` in every `usecase/<domain>/` and `repo/persistent/<domain>/` package.
-- Package name matches the directory name. `internal/repo/persistent/translation/` is the one
-  violation in the tree — it declares `package persistent`, which is why `internal/app/app.go`
-  imports the three repositories under aliases. Follow `task/` and `user/`, not `translation/`.
-- Constructors are always `New`, return the *interface* from `contracts.go`, and take their
-  dependencies as arguments. No package-level state — `gochecknoglobals` and `gochecknoinits` are on.
-- Unexported package constants are prefixed with an underscore (`_defaultEntityCap`,
-  `_tracerName`). `mnd` rejects bare numeric literals, so add a constant rather than inlining one.
+- 用例调用 `t.Parallel()`（paralleltest）；使用 `t.Setenv` 的用例除外。
+- testcontainers 起不来时测试失败，不跳过。Docker Desktop 的 socket 不在 `/var/run/docker.sock` 时，夹具自动使用 `~/.docker/run/docker.sock`。
 
-## The handler contract
+## 生成文件（不手改）
 
-Every controller method, on every transport, does the same six things in the same order. Copy the
-shape from a neighbouring handler in the same transport.
+- `internal/controller/http/gen/gen.go` ← `make generate`
 
-1. **Get the caller.** REST: `ctx.Locals("userID").(string)`. gRPC: `grpcmw.UserIDFromContext(ctx)`.
-   AMQP / NATS: `extractUserID(d, r.j)`. A failure here is an auth error, not a 500.
-2. **Decode into a transport-local DTO** from `<transport>/v1/request/`. Never decode into an
-   `entity` type, and never pass a `request.*` type into a use case.
-3. **Validate the DTO** with the injected `*validator.Validate` (`r.v.Struct(req)`). Structural
-   validation (required, min, max, oneof) lives here. Domain validation — anything that needs to
-   know the rules, like a status transition — lives on the entity or the use case and must not be
-   duplicated in the controller.
-4. **Call the use case** with the request context: `ctx.UserContext()` in Fiber (**not**
-   `ctx.Context()`, which drops the trace), the handler's `ctx` everywhere else. `context.Context`
-   is the first parameter of every method that crosses a layer.
-5. **Map the error.** `errors.Is` against the `entity.Err*` sentinels → a transport status. Log the
-   wrapped error, return a generic message to the caller.
-6. **Encode the response.** Return an `entity` type directly only when its JSON shape is already
-   the API shape — `entity.User` is safe this way because `PasswordHash` is tagged `json:"-"`.
-   Anything with a wrapper, a projection or a different field set gets a type in
-   `<transport>/v1/response/` (`response.TaskList`, `response.Token`). gRPC always converts through
-   `response.New*Response`.
+## 注释规范
 
-AMQP and NATS handlers are closures returning that transport's `server.CallHandler` —
-`func(ctx, *amqp.Delivery) (any, error)` and `func(ctx, *nats.Msg) (any, error)`. Each transport
-has its own `extractUserID` in `v1/auth.go` taking its own message type. Handlers return a plain
-wrapped `error`; the RPC server turns it into a generic `ErrInternalServer` / `ErrBadHandler`
-reply. Do not hand-build an error envelope there.
+- 禁止段落式注释：不复述代码在做什么，不写"为什么不用另一种写法"的论证，不在 JSDoc 里写背景故事。
+- 注释只描述**当前**代码，不写变更历史：禁止"原来/之前/现在改/不再/已修复/回归/新增了/移除了"等字眼；变更原因交给 commit message。
+- 测试用例名只陈述行为，不写"回归 / 防止 / 修复"。
+- 通过 Agent 派发的子任务同样受本规则约束，派发时必须把本规则原文写进提示词，并要求其收尾时统计新增注释行数。
 
-## Conventions that will bite you
+Go 中的对应：
 
-**Traced decorators.** Every repo and use-case constructor returns the *interface*, wrapped:
-`func New(...) usecase.Task { return newTraced(&UseCase{...}) }`. The wrapper lives in
-`tracing.go` next to each implementation. Adding a method to a contract means implementing it in
-three places: the interface, the struct, and the `traced*` decorator. Skipping the decorator is a
-compile error that reads as an unrelated interface mismatch.
+- 「JSDoc」对应 godoc 注释（包、导出标识符上方的注释）。
+- 「测试用例名」对应 `TestXxx` 函数名与 `t.Run` 子测试名。
 
-**Mocks are generated, not written.** `internal/usecase/mocks_*_test.go` come from `go:generate`
-directives in the two `contracts.go` files. After any contract change run `make mock` before
-running tests.
+prek pre-commit 钩子会对新增注释与 `t.Run` 名中的变更历史句式告警（不阻断），最终以 review 为准。
 
-**Error style.** Domain failures are sentinel errors in `internal/entity/errors.go`
-(`ErrTaskNotFound`, `ErrTaskForbidden`, `ErrInvalidTransition`, …). Every other error is wrapped
-with the layer path: `fmt.Errorf("TaskUseCase - Create - uc.repo.Store: %w", err)`. The `err113`
-linter rejects `errors.New`/`fmt.Errorf` for new dynamic errors — add a sentinel to `entity`
-instead. Controllers are the only place that translates a sentinel into a transport status.
+## 提交与推送
 
-**Config is environment-only.** `config/config.go` parses env vars with `caarlos0/env`. A new
-setting needs the struct field, an entry in `.env.example`, and — if the container needs it — the
-`environment` block in `docker-compose.yml`. Fields tagged `required` make the app fail at
-startup.
+- **只有用户当次明确说「提交 / commit」才能提交**。"开始做吧""继续""按这个改""可以"都只是让你写代码，不是让你提交。
+- 一次提交授权只覆盖那一批改动，**不延续到后续任务**。下一轮要提交必须重新拿到许可。
+- 改完停在工作区，汇报改了什么 + 验证结果，等用户 review。想提交就问一句，别自己决定。
+- push 同理，且比 commit 更严：没听到"推 / push"就不要推。
+- 通过 Agent 派发的子任务同样受本规则约束，派发时必须把本规则原文写进提示词。
 
-**The linter is strict and non-obvious.** `.golangci.yml` enables ~45 linters. The ones that
-reject otherwise-fine code: `wsl_v5` and `nlreturn` (blank line required before `return` and
-around blocks), `funlen` (65 lines / 40 statements), `gocyclo` (10), `gocognit` (15), `mnd`,
-`gochecknoglobals`, `exhaustive` (switches over enum types need every case or a `default`), `dupl`
-(threshold 100 — copy-pasting a handler across transports trips it).
-
-## Generated files — do not hand-edit
-
-- `docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml` ← `make swag-v1`, driven by the
-  annotation comments above REST handlers and on `NewRouter` in `internal/controller/restapi/router.go`.
-- `docs/proto/v1/*.pb.go` ← `make proto-v1` from the `.proto` files beside them.
-- `internal/usecase/mocks_*_test.go` ← `make mock`.
-
-## READMEs must be updated as a set
-
-`README.md` (English) is canonical. `README_RU.md` and `README_CN.md` are full translations that
-mirror it **section for section, table row for table row** — same headings in the same order, same
-tables, same code blocks, same links. Changing one and not the other two is the most common
-regression in this repo.
-
-Update all three whenever a change touches what they document:
-
-| Change | What to update in every README |
-| --- | --- |
-| New or changed REST / gRPC endpoint | the domain table under `Domains` (`Домены` / `领域`) |
-| New domain | the `Overview` bullet list, `Content` index, and a new `Domains` subsection |
-| New or renamed env var | the config table under `Observability` if tracing-related; otherwise the `config` section |
-| New transport, server, port or service URL | the `Quick start` service list |
-| New `make` target used in the getting-started flow | the `Quick start` code blocks |
-| Renamed or moved package under `internal/` or `pkg/` | the matching `Project structure` subsection |
-
-Rules for the translations:
-
-- Translate the prose; leave identifiers, paths, `make` targets, URLs, env var names, code blocks
-  and route strings verbatim in English.
-- Headings are translated, so the `Content` index anchors are localized too (`#домены`, `#领域`).
-  Adding or renaming a section means updating that file's own anchors — an anchor copied from the
-  English file will not resolve.
-- Keep the heading level identical across the three files.
-- If you genuinely cannot produce a translation, still add the section in English to the other two
-  files so the structure stays aligned, and say so in the change description.
-
-## Adding a use case to an existing domain
-
-1. Add the method to `internal/usecase/contracts.go`.
-2. Implement it in `internal/usecase/<domain>/<domain>.go` and mirror it in the same package's
-   `tracing.go`.
-3. If it needs new persistence, repeat the same three steps in `internal/repo/contracts.go`,
-   `internal/repo/persistent/<domain>/`, and that package's `tracing.go`.
-4. `make mock`, then extend `internal/usecase/<domain>_test.go` (table-driven, gomock, `t.Parallel()` —
-   `paralleltest` enforces it).
-5. Expose it on whichever transports need it:
-   - REST: handler in `internal/controller/restapi/v1/<domain>.go` + route in that package's
-     `router.go` + swagger annotations, then `make swag-v1`.
-   - gRPC: `.proto` change → `make proto-v1` → controller method in
-     `internal/controller/grpc/v1/`.
-   - AMQP / NATS: handler returning a `CallHandler` + a `"v1.<domain>.<action>"` key in the
-     transport's `v1/router.go`.
-
-Transports are independent by design; adding a method to only one is a legitimate choice, not an
-oversight — but say which ones you covered.
-
-## Adding a whole domain
-
-Work outward from the entity. Every step has a counterpart in the existing `task` domain — read it
-before writing.
-
-1. **Entity** — `internal/entity/<domain>.go` with the type and its invariants; new sentinel errors
-   go in `internal/entity/errors.go`.
-2. **Migration** — `make migrate-create create_<table>`, then fill both the `.up.sql` and the
-   `.down.sql`. A missing down-migration is a review failure.
-3. **Repo contract** — add the interface to `internal/repo/contracts.go`.
-4. **Repo implementation** — `internal/repo/persistent/<domain>/<domain>.go` (`package <domain>`,
-   Squirrel queries, driver errors mapped to sentinels) plus `tracing.go` next to it, and a `New`
-   returning the interface wrapped in `newTraced`.
-5. **Use-case contract** — add the interface to `internal/usecase/contracts.go`.
-6. **Use-case implementation** — `internal/usecase/<domain>/<domain>.go` plus its `tracing.go`,
-   same `New` pattern.
-7. **`make mock`**, then `internal/usecase/<domain>_test.go` against the generated mocks.
-8. **Wiring** — add a field to `useCases` in `internal/app/app.go`, construct repo and use case in
-   `initUseCases`, and thread the use case through `initServers` into each router you are exposing.
-9. **Transports** — for each one: DTOs in `<transport>/v1/request/` and `response/`, handlers in
-   `<transport>/v1/<domain>.go`, registration in that transport's `v1/router.go`, and the use case
-   added to the `V1` / controller struct in `<transport>/v1/controller.go`. gRPC also needs
-   `docs/proto/v1/<domain>.proto` and `make proto-v1`.
-10. **Docs** — swagger annotations on the REST handlers, `make swag-v1`, and the README updates
-    listed above in all three languages.
-11. **Integration test** — `integration-test/<domain>_test.go` exercising the domain over the
-    transports you exposed.
-
-## API versioning
-
-Routes are grouped under a version package (`<transport>/v1/`). A v2 means a new sibling package
-with the same layout, registered alongside v1 in the transport's top-level `router.go` — REST adds
-an `app.Group("/v2")`, gRPC registers a second set of `NewXRoutes`, AMQP/NATS add more
-`"v2.<domain>.<action>"` keys to the same route map. v1 stays untouched. `README.md` documents this
-with worked examples per transport; follow it rather than inventing a scheme.
-
-## Database
-
-`migrations/` holds golang-migrate pairs (`<timestamp>_<name>.up.sql` / `.down.sql`). Create with
-`make migrate-create <name>`, apply with `make migrate-up`. The app applies them itself at startup
-only when built with the `migrate` build tag (`internal/app/migrate.go`) — that is what `make run`
-and the Dockerfile do. Queries are built with Squirrel via the embedded `*postgres.Postgres`;
-there is no ORM and no raw string concatenation.
-
-## Tests
-
-- Unit: `internal/...` and `pkg/...`, run by `make test` with `-race`. Use-case tests use the
-  generated gomock mocks, are table-driven, and call `t.Parallel()` (`paralleltest` enforces it).
-- Integration: `integration-test/` runs *inside* the docker network — it resolves the service as
-  host `app` and talks to `rabbitmq` / `nats` by container name, so it fails on the host machine.
-  Always run it through `make compose-up-integration-test`.
+提交信息为 conventional commits（类型同 nestjs commitlint，标题 ≤72 字符），由 commit-msg 钩子检查。

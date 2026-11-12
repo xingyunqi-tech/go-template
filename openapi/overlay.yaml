@@ -1,0 +1,10 @@
+overlay: 1.0.0
+info:
+  title: go-template codegen overlay
+  version: 1.0.0
+actions:
+  - target: $.paths.*.*.parameters[?(@.in == 'path' && @.schema.type == 'number')].schema
+    update:
+      x-go-type: int32
+  - target: $.paths.*.*.parameters[?(@.in == 'header' && @.name == 'Accept-Language')]
+    remove: true

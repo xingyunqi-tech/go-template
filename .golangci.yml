@@ -1,13 +1,21 @@
 version: "2"
 
+run:
+  build-tags:
+    - integration
+    - e2e
+    - contract
+    - parity
+
 linters:
   default: none
   enable:
-    - wsl_v5
     - asciicheck
     - bodyclose
+    - contextcheck
     - copyloopvar
     - cyclop
+    - depguard
     - dogsled
     - dupl
     - durationcheck
@@ -15,6 +23,7 @@ linters:
     - errcheck
     - errorlint
     - exhaustive
+    - exhaustruct_v5
     - forbidigo
     - funlen
     - gochecknoglobals
@@ -42,6 +51,7 @@ linters:
     - predeclared
     - revive
     - rowserrcheck
+    - sloglint
     - sqlclosecheck
     - staticcheck
     - thelper
@@ -50,20 +60,55 @@ linters:
     - unparam
     - unused
     - whitespace
+    - wsl_v5
   settings:
-    wsl_v5:
-      allow-first-in-block: true
-      allow-whole-block: false
-      branch-max-lines: 2
+    depguard:
+      rules:
+        entity:
+          files:
+            - "**/internal/entity/**"
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: entity 不依赖数据库驱动
+            - pkg: github.com/xingyunqi-tech/go-template/internal/controller
+              desc: entity 不依赖 controller 与生成代码
+            - pkg: net/http
+              desc: entity 不依赖 HTTP
+        usecase:
+          files:
+            - "**/internal/usecase/**"
+          deny:
+            - pkg: github.com/xingyunqi-tech/go-template/internal/controller
+              desc: usecase 不依赖 controller
+        pkg:
+          files:
+            - "**/pkg/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/xingyunqi-tech/go-template/internal
+              desc: pkg 与业务无关，不引用 internal
     dupl:
       threshold: 100
     errcheck:
       check-type-assertions: true
-      check-blank: true
+      check-blank: false
     errorlint:
       errorf: true
     exhaustive:
       default-signifies-exhaustive: false
+    exhaustruct_v5:
+      explicit-mode: true
+      enforce-patterns:
+        - ^github\.com/xingyunqi-tech/go-template/internal/config\.
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^fmt\.Print(f|ln)?$
+          msg: 用 slog 输出日志
+        - pattern: ^log\.(Print|Fatal|Panic)(f|ln)?$
+          msg: 用 slog 输出日志
+        - pattern: ^os\.(Getenv|LookupEnv)$
+          msg: 配置只从 config.Config 读取
     funlen:
       lines: 65
       statements: 40
@@ -72,7 +117,6 @@ linters:
     goconst:
       min-len: 2
       min-occurrences: 5
-      ignore-tests: true
     gocritic:
       disabled-checks:
         - dupImport
@@ -92,41 +136,60 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+    sloglint:
+      kv-only: true
+      context: scope
+      static-msg: true
+      key-naming-case: snake
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
   exclusions:
-    generated: lax
+    generated: strict
     presets:
       - comments
       - common-false-positives
       - legacy
       - std-error-handling
     rules:
-      - linters:
-          - godot
-          - paralleltest
-        path: integration-test
-      - linters:
-          - godot
-        path: internal
+      - path: _test\.go
+        linters:
+          - dupl
+          - err113
+          - exhaustruct_v5
+          - funlen
+          - goconst
+          - mnd
+      - path: (internal/config|internal/testutil|tests)/
+        text: os\.(Getenv|LookupEnv)
+        linters:
+          - forbidigo
+      - path: tools/
+        linters:
+          - forbidigo
+      - path: tests/
+        text: G70[23]
+        linters:
+          - gosec
     paths:
       - bin/
-      - third_party$
-      - builtin$
-      - examples$
 
 formatters:
   enable:
     - gci
-    - gofmt
     - gofumpt
-    - goimports
   settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - localmodule
     gofumpt:
       extra:
         group-params: true
+        clothe-returns: true
   exclusions:
-    generated: lax
+    generated: strict
     paths:
       - bin/
-      - third_party$
-      - builtin$
-      - examples$

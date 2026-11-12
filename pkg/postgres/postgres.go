@@ -1,86 +1,32 @@
-// Package postgres implements postgres connection.
+// Package postgres opens a pgx connection pool pinned to the UTC session time zone.
 package postgres
 
 import (
 	"context"
 	"fmt"
-	"log"
-	"math"
-	"time"
 
-	"github.com/Masterminds/squirrel"
-	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const (
-	_defaultMaxPoolSize  = 1
-	_defaultConnAttempts = 10
-	_defaultConnTimeout  = time.Second
-)
-
-// Postgres -.
-type Postgres struct {
-	maxPoolSize  int
-	connAttempts int
-	connTimeout  time.Duration
-
-	Builder squirrel.StatementBuilderType
-	Pool    *pgxpool.Pool
-}
-
-// New -.
-func New(url string, opts ...Option) (*Postgres, error) {
-	pg := &Postgres{
-		maxPoolSize:  _defaultMaxPoolSize,
-		connAttempts: _defaultConnAttempts,
-		connTimeout:  _defaultConnTimeout,
-	}
-
-	// Custom options
-	for _, opt := range opts {
-		opt(pg)
-	}
-
-	pg.Builder = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-
-	poolConfig, err := pgxpool.ParseConfig(url)
+// New parses dsn, pins every connection to timezone UTC and verifies connectivity.
+func New(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("postgres - NewPostgres - pgxpool.ParseConfig: %w", err)
+		return nil, fmt.Errorf("postgres: parse config: %w", err)
 	}
 
-	poolConfig.MaxConns = safeIntToInt32(pg.maxPoolSize)
-	poolConfig.ConnConfig.Tracer = otelpgx.NewTracer()
+	cfg.ConnConfig.RuntimeParams["timezone"] = "UTC"
 
-	for pg.connAttempts > 0 {
-		pg.Pool, err = pgxpool.NewWithConfig(context.Background(), poolConfig)
-		if err == nil {
-			break
-		}
-
-		log.Printf("Postgres is trying to connect, attempts left: %d", pg.connAttempts)
-
-		time.Sleep(pg.connTimeout)
-
-		pg.connAttempts--
-	}
-
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("postgres - NewPostgres - connAttempts == 0: %w", err)
+		return nil, fmt.Errorf("postgres: open pool: %w", err)
 	}
 
-	return pg, nil
-}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
 
-// Close -.
-func (p *Postgres) Close() {
-	if p.Pool != nil {
-		p.Pool.Close()
+		return nil, fmt.Errorf("postgres: ping: %w", err)
 	}
-}
 
-func safeIntToInt32(v int) int32 {
-	clamped := v & math.MaxInt32
-
-	return int32(clamped)
+	return pool, nil
 }

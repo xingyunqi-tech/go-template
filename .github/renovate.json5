@@ -1,0 +1,76 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: ['config:recommended', 'helpers:pinGitHubActionDigests', ':semanticCommitTypeAll(chore)'],
+  timezone: 'Asia/Shanghai',
+  schedule: ['before 9am on monday'],
+  prConcurrentLimit: 5,
+  labels: ['dependencies'],
+  ignorePaths: ['scripts/nestjs/nestjs.compose.yaml'],
+  postUpdateOptions: ['gomodTidy', 'gomodUpdateImportPaths'],
+  packageRules: [
+    {
+      description: 'Go 保持 1.27.x',
+      matchDatasources: ['golang-version', 'docker'],
+      matchPackageNames: ['go', 'golang'],
+      allowedVersions: '<1.28',
+    },
+    {
+      description: 'Postgres / Redis 大版本需要迁移数据，只接收同大版本更新',
+      matchDatasources: ['docker'],
+      matchPackageNames: ['postgres', 'redis'],
+      matchUpdateTypes: ['major'],
+      enabled: false,
+    },
+    {
+      matchPackageNames: ['go.opentelemetry.io/**', 'github.com/exaring/otelpgx'],
+      groupName: 'opentelemetry',
+    },
+    {
+      description: 'oapi-codegen 升级可能改变用户模板的上下文，单独 PR',
+      matchPackageNames: ['github.com/oapi-codegen/**'],
+      groupName: 'oapi-codegen',
+      automerge: false,
+    },
+    {
+      description: '开发工具与测试依赖',
+      matchFileNames: ['tools/go.mod', 'Makefile'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'dev tooling',
+      automerge: true,
+    },
+    {
+      matchPackageNames: ['github.com/stretchr/testify', 'github.com/testcontainers/**', 'go.uber.org/mock'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'test tooling',
+      automerge: true,
+    },
+    {
+      matchManagers: ['github-actions', 'custom.regex'],
+      groupName: 'github actions',
+    },
+    {
+      matchManagers: ['dockerfile', 'docker-compose'],
+      matchUpdateTypes: ['minor', 'patch', 'digest'],
+      groupName: 'docker images',
+    },
+    {
+      matchUpdateTypes: ['major'],
+      automerge: false,
+    },
+  ],
+  customManagers: [
+    {
+      customType: 'regex',
+      managerFilePatterns: ['/^\\.github/workflows/.+\\.ya?ml$/'],
+      matchStrings: ['_IMAGE: (?<depName>[^:\\s]+):(?<currentValue>[^\\s]+)'],
+      datasourceTemplate: 'docker',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: ['/(^|/)Makefile$/', '/^\\.github/workflows/.+\\.ya?ml$/'],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>\\S+)\\s+[A-Z_]+_VERSION\\s*:?=\\s*v?(?<currentValue>\\S+)',
+      ],
+    },
+  ],
+}
