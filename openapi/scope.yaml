@@ -1,3 +1,4 @@
 # 本期已实现的 operationId；make generate 只为这些接口生成处理器接口与路由注册
 operations:
   - getAppInfo
+  - simpleHealthCheck

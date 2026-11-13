@@ -8,3 +8,8 @@ actions:
       x-go-type: int32
   - target: $.paths.*.*.parameters[?(@.in == 'header' && @.name == 'Accept-Language')]
     remove: true
+  - target: $.paths['/api/health'].get.responses['200'].content['application/json'].schema
+    update:
+      x-go-type: view.HealthCheck
+      x-go-type-import:
+        path: github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view

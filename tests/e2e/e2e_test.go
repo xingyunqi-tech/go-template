@@ -100,3 +100,12 @@ func TestUnknownRouteIsNestStyle404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, status)
 	assert.JSONEq(t, `{"code":404,"message":"Cannot GET /api/v1/nope","data":null}`, string(body))
 }
+
+func TestSimpleHealthCheck(t *testing.T) {
+	t.Parallel()
+
+	status, body, err := get(t.Context(), "/api/health")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, status)
+	assert.Contains(t, string(body), `"status":"ok"`)
+}

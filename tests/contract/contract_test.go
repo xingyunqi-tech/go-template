@@ -5,6 +5,7 @@ package contract_test
 import (
 	"bufio"
 	"bytes"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,7 +24,9 @@ import (
 
 	httpapi "github.com/xingyunqi-tech/go-template/internal/controller/http"
 	v1 "github.com/xingyunqi-tech/go-template/internal/controller/http/v1"
+	"github.com/xingyunqi-tech/go-template/internal/i18n"
 	"github.com/xingyunqi-tech/go-template/openapi"
+	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
 )
 
 const root = "../.."
@@ -49,6 +52,7 @@ var undocumentedRoutes = []string{"GET /docs", "GET /docs-json", "GET /metrics"}
 
 type operation struct {
 	method, path string
+	bearer       bool
 }
 
 func readFile(t *testing.T, rel string) []byte {
@@ -63,7 +67,24 @@ func readFile(t *testing.T, rel string) []byte {
 func newRouter(t *testing.T) *httpapi.Router {
 	t.Helper()
 
-	r, err := httpapi.NewRouter(v1.New("app"), httpapi.Options{APIPrefix: "api", SwaggerEnabled: true, Docs: openapi.Baseline})
+	translator, err := i18n.New("en")
+	require.NoError(t, err)
+
+	validator, err := validatorx.New(openapi.Validation)
+	require.NoError(t, err)
+
+	r, err := httpapi.NewRouter(v1.New("app"), &httpapi.Options{
+		APIPrefix:      "api",
+		SwaggerEnabled: true,
+		Docs:           openapi.Baseline,
+		Validator:      validator,
+		Translator:     translator,
+		Log:            slog.New(slog.DiscardHandler),
+		Production:     false,
+		FrontendDomain: "",
+		Guards:         nil,
+		Permission:     nil,
+	})
 	require.NoError(t, err)
 
 	return r
@@ -79,13 +100,29 @@ func loadBaseline(t *testing.T) map[string]operation {
 
 	for path, item := range doc.Paths.Map() {
 		for method, op := range item.Operations() {
-			if op.OperationID != "" {
-				ops[op.OperationID] = operation{method: method, path: path}
+			if op.OperationID == "" {
+				continue
 			}
+
+			ops[op.OperationID] = operation{method: method, path: path, bearer: hasBearer(op)}
 		}
 	}
 
 	return ops
+}
+
+func hasBearer(op *openapi3.Operation) bool {
+	if op.Security == nil {
+		return false
+	}
+
+	for _, req := range *op.Security {
+		if _, ok := req["bearer"]; ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func loadScope(t *testing.T) []string {
@@ -203,4 +240,37 @@ func TestEveryRegisteredRouteIsDocumented(t *testing.T) {
 		assert.True(t, documented[route] || slices.Contains(undocumentedRoutes, route),
 			"%s is neither documented nor whitelisted", route)
 	}
+}
+
+func TestPoliciesMatchScopeAndDocumentedSecurity(t *testing.T) {
+	t.Parallel()
+
+	ops := loadBaseline(t)
+	policies := httpapi.Policies()
+	scope := loadScope(t)
+
+	for _, id := range scope {
+		policy, ok := policies[id]
+		if !assert.True(t, ok, "%s has no policy", id) {
+			continue
+		}
+
+		switch policy.Auth {
+		case httpapi.AuthJWT, httpapi.AuthOptionalJWT, httpapi.AuthRefresh, httpapi.AuthMonitor:
+			assert.True(t, ops[id].bearer, "%s uses %s but the document has no bearer security", id, policy.Auth)
+		case httpapi.AuthNone:
+			assert.False(t, ops[id].bearer, "%s is documented with bearer but has no auth", id)
+		}
+	}
+
+	for id := range policies {
+		assert.Contains(t, scope, id, "policy %s is not in scope.yaml", id)
+	}
+}
+
+func TestValidationMetadataIsFullyImplemented(t *testing.T) {
+	t.Parallel()
+
+	_, err := validatorx.New(openapi.Validation)
+	require.NoError(t, err)
 }

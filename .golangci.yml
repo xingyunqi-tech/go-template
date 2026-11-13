@@ -168,6 +168,14 @@ linters:
       - path: tools/
         linters:
           - forbidigo
+      - path: pkg/validatorx/
+        linters:
+          - cyclop
+          - funlen
+          - gochecknoglobals
+          - gocognit
+          - gocyclo
+          - mnd
       - path: tests/
         text: G70[23]
         linters:

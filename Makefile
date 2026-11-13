@@ -109,8 +109,13 @@ test-integration: ## 第 2 层：集成测试（testcontainers，需要 Docker�
 	$(GOTOOL) gotestsum --junitfile $(COVERAGE_DIR)/integration.xml -- $(TEST_FLAGS) -tags integration -coverprofile=$(COVERAGE_DIR)/integration.out -coverpkg=./internal/...,./pkg/... $(PKGS)
 
 .PHONY: test-contract
-test-contract: ## 第 4 层：契约测试
-	$(GOTOOL) gotestsum -- $(TEST_FLAGS) -tags contract ./tests/contract/...
+test-contract: ## 第 4 层：契约测试（含 validation-cases.json 全部 nestjs oracle 用例）
+	@mkdir -p $(COVERAGE_DIR)
+	$(GOTOOL) gotestsum --junitfile $(COVERAGE_DIR)/contract.xml -- $(TEST_FLAGS) -tags contract -coverprofile=$(COVERAGE_DIR)/contract.out -coverpkg=./internal/...,./pkg/... ./tests/contract/...
+
+.PHONY: test-parity
+test-parity: ## 第 5 层：parity（启动 nestjs 参照服务与本服务后比对；NESTJS_PORT / PARITY_PORT，默认 3001 / 3000）
+	scripts/parity.sh
 
 .PHONY: test-e2e
 test-e2e: ## 第 3 层：构建镜像并以 compose 启动后黑盒测试（APP_URL，默认 http://localhost:3000）
@@ -119,7 +124,7 @@ test-e2e: ## 第 3 层：构建镜像并以 compose 启动后黑盒测试（APP_
 	$(E2E_COMPOSE) down -v
 
 .PHONY: coverage
-coverage: ## 合并单元与集成覆盖率并校验门槛（.testcoverage.yml）
+coverage: ## 合并单元、集成与契约覆盖率并校验门槛（.testcoverage.yml）
 	$(GOTOOL) go-test-coverage --config .testcoverage.yml
 
 .PHONY: image

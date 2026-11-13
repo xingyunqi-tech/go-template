@@ -17,7 +17,8 @@ Go 后端模板，与 nestjs-template（`release/exam-prep`）**API 契约一致
 | 集成测试（testcontainers，需要 Docker） | `make test-integration` |
 | 契约测试 | `make test-contract` |
 | e2e（构建镜像，compose 启动后黑盒测试） | `make test-e2e` |
-| 覆盖率门槛（单元 + 集成，≥80%） | `make coverage` |
+| parity（启动 nestjs 参照服务后比对，需要 Docker） | `make test-parity` |
+| 覆盖率门槛（单元 + 集成 + 契约，≥80%） | `make coverage` |
 | 同步共享产物 | `make openapi-sync` |
 | 本地 CI | `make ci` |
 
@@ -45,9 +46,11 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 |---|---|
 | `internal/entity` | 领域对象与领域错误；不引用 pgx、生成代码、net/http（depguard 检查） |
 | `internal/usecase` | 业务规则；不引用 controller |
-| `internal/controller/http` | chi 路由、Express 路由语义、`/docs-json`；`gen/` 为生成代码，`v1/` 实现 `gen.StrictServerInterface`，`v1/view/` 是手写响应视图 |
+| `internal/controller/http` | 全局中间件、Express 路由语义、请求管线、`policy.go`（按 operationId 声明鉴权 / RBAC / 查询 DTO 等）、`/docs-json`；`gen/` 为生成代码，`v1/` 实现 `gen.StrictServerInterface`，`v1/view/` 是手写响应视图 |
+| `internal/controller/http/httperr` | nestjs HttpException 与 AllExceptionsFilter 翻译规则、业务错误键表、唯一约束表 |
+| `internal/i18n` | nestjs `src/i18n` 翻译文件与 `Accept-Language` 解析 |
 | `internal/config` | caarlos0/env 解析，变量名与 nestjs 一致，启动时一次性校验并列出全部问题 |
-| `pkg/` | 与业务无关的封装，不引用 `internal/` |
+| `pkg/` | 与业务无关的封装，不引用 `internal/`；`pkg/validatorx` 按 `openapi/validation.json` 复刻 nestjs ValidationPipe（含 validator.js 移植） |
 
 - 配置只从 `config.Config` 读取，业务代码禁止 `os.Getenv`（forbidigo）。
 - 日志用 `log/slog`，禁止 `fmt.Print*` 与标准库 `log`。
@@ -61,6 +64,7 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 - 静态段不区分大小写，允许一个末尾斜杠，路径参数保留原始大小写与编码。
 - 未匹配路由与方法不符都返回 404 `{code: 404, message: "Cannot <METHOD> <originalUrl>", data: null}`，不带 `Allow`。
 - `HEAD` 命中同路径的 `GET` 处理器。
+- 处理顺序：Request ID 与语言 → CORS（`OPTIONS` 一律 204）→ 访问日志与 panic 兜底 → 安全头 → JSON 请求体（256kb，413 / 400）→ 路由匹配 → 路径参数解码 → 鉴权 → RBAC → `ParseIdPipe`（数字 `:id`）→ 请求体 / 查询 DTO 校验 → 生成的处理器。新增接口必须在 `policy.go` 声明，缺失时启动失败。
 
 ## 测试
 
@@ -70,7 +74,7 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 | 集成 | 与源码同目录 `*_integration_test.go`，夹具在 `internal/testutil` | `integration` |
 | e2e | `tests/e2e` | `e2e` |
 | 契约 | `tests/contract` | `contract` |
-| parity | `tests/parity` | `parity` |
+| parity | `tests/parity`，`make test-parity` 自动启动 nestjs 参照服务（compose 项目 `go-template-parity-nestjs`） | `parity` |
 
 - 用例调用 `t.Parallel()`（paralleltest）；使用 `t.Setenv` 的用例除外。
 - testcontainers 起不来时测试失败，不跳过。Docker Desktop 的 socket 不在 `/var/run/docker.sock` 时，夹具自动使用 `~/.docker/run/docker.sock`。

@@ -17,6 +17,7 @@ make dev          # http://localhost:3000
 ```
 
 - `GET /`：应用信息
+- `GET /api/health`：简单健康检查
 - `GET /docs-json`：OpenAPI 文档（与 nestjs-template 逐字节相同）
 - `GET /docs`：Scalar 文档页面
 
@@ -29,7 +30,8 @@ make help              # 列出全部目标
 make generate          # 按 openapi/scope.yaml 生成接口代码
 make check             # lint + vet + 单元测试
 make test-integration  # 集成测试（需要 Docker）
-make test-contract     # 契约测试
+make test-contract     # 契约测试（含 4516 条 nestjs 校验 oracle 用例）
+make test-parity       # 与 nestjs 参照服务逐请求比对（需要 Docker）
 make test-e2e          # 构建镜像并以 compose 启动后黑盒测试
 make openapi-sync      # 从 fastapi-temp 同步共享契约产物
 make image             # 构建生产镜像

@@ -22,6 +22,10 @@ func echoPattern(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(body))
 }
 
+func notFound(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "Cannot "+r.Method+" "+r.RequestURI, http.StatusNotFound)
+}
+
 func newTestMux(t *testing.T, prefix string) http.Handler {
 	t.Helper()
 

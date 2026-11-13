@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/response"
+	"github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view"
 	"github.com/xingyunqi-tech/go-template/pkg/jsontime"
 )
 
@@ -5839,6 +5840,9 @@ type ServerInterface interface {
 	// GetAppInfo 获取应用信息
 	// (GET /)
 	GetAppInfo(w http.ResponseWriter, r *http.Request)
+	// SimpleHealthCheck 简单健康检查
+	// (GET /api/health)
+	SimpleHealthCheck(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -5848,6 +5852,12 @@ type Unimplemented struct{}
 // GetAppInfo 获取应用信息
 // (GET /)
 func (_ Unimplemented) GetAppInfo(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// SimpleHealthCheck 简单健康检查
+// (GET /api/health)
+func (_ Unimplemented) SimpleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5865,6 +5875,20 @@ func (siw *ServerInterfaceWrapper) GetAppInfo(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAppInfo(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SimpleHealthCheck operation middleware
+func (siw *ServerInterfaceWrapper) SimpleHealthCheck(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SimpleHealthCheck(w, r)
 	}))
 
 	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
@@ -5990,6 +6014,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/", wrapper.GetAppInfo)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/health", wrapper.SimpleHealthCheck)
+	})
 
 	return r
 }
@@ -6012,11 +6039,27 @@ func (resp GetAppInfo200Response) VisitGetAppInfoResponse(w http.ResponseWriter)
 	return response.WriteData(w, http.StatusOK, resp.Body)
 }
 
+type SimpleHealthCheckRequestObject struct {
+}
+
+type SimpleHealthCheckResponseObject interface {
+	VisitSimpleHealthCheckResponse(w http.ResponseWriter) error
+}
+
+type SimpleHealthCheck200JSONResponse view.HealthCheck
+
+func (resp SimpleHealthCheck200JSONResponse) VisitSimpleHealthCheckResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, resp)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetAppInfo 获取应用信息
 	// (GET /)
 	GetAppInfo(ctx context.Context, request GetAppInfoRequestObject) (GetAppInfoResponseObject, error)
+	// SimpleHealthCheck 简单健康检查
+	// (GET /api/health)
+	SimpleHealthCheck(ctx context.Context, request SimpleHealthCheckRequestObject) (SimpleHealthCheckResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -6075,6 +6118,30 @@ func (sh *strictHandler) GetAppInfo(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAppInfoResponseObject); ok {
 		if err := validResponse.VisitGetAppInfoResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SimpleHealthCheck operation middleware
+func (sh *strictHandler) SimpleHealthCheck(w http.ResponseWriter, r *http.Request) {
+	var request SimpleHealthCheckRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SimpleHealthCheck(ctx, request.(SimpleHealthCheckRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SimpleHealthCheck")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SimpleHealthCheckResponseObject); ok {
+		if err := validResponse.VisitSimpleHealthCheckResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

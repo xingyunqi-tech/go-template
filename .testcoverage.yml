@@ -1,5 +1,5 @@
-# go-test-coverage：合并单元与集成覆盖率，校验 internal/ 与 pkg/ 的语句覆盖率
-profile: coverage/unit.out,coverage/integration.out
+# go-test-coverage：合并单元、集成与契约覆盖率，校验 internal/ 与 pkg/ 的语句覆盖率
+profile: coverage/unit.out,coverage/integration.out,coverage/contract.out
 threshold:
   total: 80
 exclude:

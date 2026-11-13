@@ -7,24 +7,54 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"strconv"
 
 	"github.com/xingyunqi-tech/go-template/internal/config"
 	httpapi "github.com/xingyunqi-tech/go-template/internal/controller/http"
 	v1 "github.com/xingyunqi-tech/go-template/internal/controller/http/v1"
+	"github.com/xingyunqi-tech/go-template/internal/i18n"
 	"github.com/xingyunqi-tech/go-template/openapi"
 	"github.com/xingyunqi-tech/go-template/pkg/httpserver"
+	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
 )
 
-// Serve runs the API server until ctx is canceled, then shuts down gracefully.
-func Serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
-	handler, err := httpapi.NewRouter(v1.New(cfg.App.Name), httpapi.Options{
+// NewHandler builds the HTTP handler of the API.
+func NewHandler(cfg *config.Config, log *slog.Logger) (http.Handler, error) {
+	translator, err := i18n.New(cfg.App.FallbackLanguage)
+	if err != nil {
+		return nil, fmt.Errorf("app: %w", err)
+	}
+
+	validator, err := validatorx.New(openapi.Validation)
+	if err != nil {
+		return nil, fmt.Errorf("app: validation.json: %w", err)
+	}
+
+	handler, err := httpapi.NewRouter(v1.New(cfg.App.Name), &httpapi.Options{
 		APIPrefix:      cfg.App.APIPrefix,
 		SwaggerEnabled: cfg.App.Docs(),
 		Docs:           openapi.Baseline,
+		Validator:      validator,
+		Translator:     translator,
+		Log:            log,
+		Production:     cfg.App.IsProduction(),
+		FrontendDomain: cfg.App.FrontendDomain,
+		Guards:         nil,
+		Permission:     nil,
 	})
 	if err != nil {
-		return fmt.Errorf("app: %w", err)
+		return nil, fmt.Errorf("app: %w", err)
+	}
+
+	return handler, nil
+}
+
+// Serve runs the API server until ctx is canceled, then shuts down gracefully.
+func Serve(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
+	handler, err := NewHandler(cfg, log)
+	if err != nil {
+		return err
 	}
 
 	var lc net.ListenConfig

@@ -30,6 +30,7 @@ type App struct {
 	Port             int           `env:"APP_PORT"              envDefault:"3000"        validate:"min=1,max=65535"`
 	APIPrefix        string        `env:"API_PREFIX"            envDefault:"api"         validate:"required,excludesall=/"`
 	FallbackLanguage string        `env:"APP_FALLBACK_LANGUAGE" envDefault:"en"          validate:"oneof=en zh"`
+	FrontendDomain   string        `env:"FRONTEND_DOMAIN"`
 	SwaggerEnabled   OptionalBool  `env:"SWAGGER_ENABLED"`
 	ShutdownTimeout  time.Duration `env:"SHUTDOWN_TIMEOUT"      envDefault:"30s"         validate:"gt=0"`
 }

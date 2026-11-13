@@ -7,3 +7,8 @@ import _ "embed"
 //
 //go:embed nestjs-baseline.json
 var Baseline []byte
+
+// Validation is validation.json exported by nestjs scripts/export-validation.ts.
+//
+//go:embed validation.json
+var Validation []byte
