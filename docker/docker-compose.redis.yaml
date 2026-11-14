@@ -29,5 +29,11 @@ services:
       redis:
         condition: service_healthy
 
+  worker:
+    environment: *redis-env
+    depends_on:
+      redis:
+        condition: service_healthy
+
 volumes:
   redis-data:

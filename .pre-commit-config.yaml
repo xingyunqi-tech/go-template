@@ -10,9 +10,9 @@ repos:
         args: [--allow-multiple-documents]
       - id: check-toml
       - id: end-of-file-fixer
-        exclude: ^(openapi/.*\.json|tests/contract/fixtures/|LICENSE$)
+        exclude: ^(openapi/.*\.json|tests/contract/fixtures/|tests/fixtures/nestjs_mail/|templates/mail/|LICENSE$)
       - id: trailing-whitespace
-        exclude: ^(openapi/.*\.json|tests/contract/fixtures/|LICENSE$)
+        exclude: ^(openapi/.*\.json|tests/contract/fixtures/|tests/fixtures/nestjs_mail/|templates/mail/|LICENSE$)
 
   - repo: local
     hooks:

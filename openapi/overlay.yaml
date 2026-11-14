@@ -53,3 +53,25 @@ actions:
   - target: $.components.schemas.AuthDeleteAccountDto
     update:
       x-go-type: any
+  - target: $.paths['/api/v1/health'].get.responses['200'].content['application/json'].schema
+    update:
+      x-go-type: view.Health
+      x-go-type-import:
+        path: github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view
+  - target: $.paths['/api/v1/health/live'].get.responses['200'].content['application/json'].schema
+    update:
+      x-go-type: view.Health
+      x-go-type-import:
+        path: github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view
+  - target: $.paths['/api/v1/health/ready'].get.responses['200'].content['application/json'].schema
+    update:
+      x-go-type: view.Health
+      x-go-type-import:
+        path: github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view
+  - target: $.paths['/api/v1/files/upload'].post.requestBody
+    remove: true
+  - target: $.paths['/api/v1/files/upload'].post.responses['201'].content['application/json'].schema
+    update:
+      x-go-type: view.Upload
+      x-go-type-import:
+        path: github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view

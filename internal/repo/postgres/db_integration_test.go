@@ -126,12 +126,12 @@ func TestAcquireTimesOut(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
-	db := postgres.NewDB(pool, 100*time.Millisecond, slog.New(slog.DiscardHandler))
-
-	ctx, tx, err := db.Begin(t.Context())
+	held, err := pool.Acquire(t.Context())
 	require.NoError(t, err)
 
-	defer tx.Rollback(ctx)
+	defer held.Release()
+
+	db := postgres.NewDB(pool, 100*time.Millisecond, slog.New(slog.DiscardHandler))
 
 	start := time.Now()
 	_, err = postgres.NewUsers(db).Get(t.Context(), repo.UserQuery{ID: ptr(1)})

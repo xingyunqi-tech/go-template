@@ -4,13 +4,18 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"mime"
+	"net"
 	"net/http"
+	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -65,21 +70,28 @@ func securityHeaders() [][2]string {
 type errorWriter struct {
 	translator *i18n.Translator
 	log        *slog.Logger
+	report     func(ctx context.Context, err error)
 }
 
 func (e *errorWriter) write(w http.ResponseWriter, r *http.Request, err error) {
 	ctx := r.Context()
 	lang := i18n.Language(ctx)
 
+	setError(ctx, err)
+
 	body := httperr.Build(err, func(key string) (string, bool) {
 		return e.translator.Translate(lang, key)
 	})
 
-	attrs := []any{"path", r.URL.Path, "request_id", reqctx.RequestID(ctx), "status", body.Status, "cause", body.Cause}
+	attrs := []any{"path", r.URL.Path, "status", body.Status, "cause", body.Cause}
 
 	switch {
 	case body.Status >= http.StatusInternalServerError:
 		e.log.ErrorContext(ctx, "request failed", append(attrs, "error", err.Error())...)
+
+		if e.report != nil {
+			e.report(ctx, err)
+		}
 	case body.Status >= http.StatusBadRequest:
 		e.log.WarnContext(ctx, "request rejected", attrs...)
 	}
@@ -286,31 +298,119 @@ func (e *errorWriter) recovered(rec *statusRecorder, r *http.Request, p any) {
 	e.write(rec, r, fmt.Errorf("%w: %v", errPanic, p))
 }
 
-// accessLog logs each request and turns panics that happen before the response starts into a
-// 500 error body.
+// accessLog writes the pino-http request log and turns panics that happen before the response
+// starts into a 500 error body.
 func accessLog(log *slog.Logger, errs *errorWriter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: 0}
+			panicked := false
 
-			defer func() { //nolint:contextcheck // r carries the request context
+			defer func() {
 				if p := recover(); p != nil {
+					panicked = true
+
 					errs.recovered(rec, r, p)
 				}
 
-				log.InfoContext(r.Context(), "request completed",
-					"method", r.Method,
-					"path", r.URL.Path,
-					"status", rec.status,
-					"duration_ms", time.Since(start).Milliseconds(),
-					"request_id", reqctx.RequestID(r.Context()),
-				)
+				logRequest(log, r, rec.status, start, panicked)
 			}()
 
 			next.ServeHTTP(rec, r)
 		})
 	}
+}
+
+const (
+	_redacted        = "[REDACTED]"
+	_millisPerSecond = 1000
+)
+
+func requestLevel(status int, panicked bool) slog.Level {
+	switch {
+	case status >= http.StatusInternalServerError || panicked:
+		return slog.LevelError
+	case status >= http.StatusBadRequest:
+		return slog.LevelWarn
+	default:
+		return slog.LevelInfo
+	}
+}
+
+func logRequest(log *slog.Logger, r *http.Request, status int, start time.Time, panicked bool) {
+	ctx := r.Context()
+
+	if status == 0 {
+		status = http.StatusInternalServerError
+	}
+
+	message := r.Method + " " + r.RequestURI + " " + strconv.Itoa(status)
+
+	ex := exchangeOf(ctx)
+	if ex != nil && ex.err != nil && (panicked || status >= http.StatusInternalServerError) {
+		message += " - " + ex.err.Error()
+	}
+
+	args := []any{
+		"context", "HTTP",
+		"req",
+		map[string]any{
+			"id": reqctx.RequestID(ctx), "method": r.Method, "url": r.RequestURI,
+			"query": logQuery(r.URL.RawQuery), "headers": logHeaders(r.Header), "remoteAddress": remoteAddress(r.RemoteAddr),
+		},
+		"res",
+		map[string]any{"statusCode": status},
+		"responseTime", math.Round(float64(time.Since(start).Microseconds()) / _millisPerSecond),
+	}
+
+	if ex != nil && ex.userID != "" {
+		args = append(args, "user_id", ex.userID)
+	}
+
+	log.Log(ctx, requestLevel(status, panicked), message, args...) //nolint:sloglint // pino-http field names
+}
+
+func logHeaders(h http.Header) map[string]string {
+	out := make(map[string]string, len(h))
+
+	for k, v := range h {
+		name := strings.ToLower(k)
+		if name == "authorization" || name == "cookie" {
+			out[name] = _redacted
+
+			continue
+		}
+
+		out[name] = strings.Join(v, ", ")
+	}
+
+	return out
+}
+
+func logQuery(raw string) map[string]string {
+	out := map[string]string{}
+
+	values, _ := url.ParseQuery(raw)
+	for k, v := range values {
+		switch {
+		case k == "hash" || k == "token":
+			out[k] = _redacted
+		case len(v) > 0:
+			out[k] = v[len(v)-1]
+		}
+	}
+
+	return out
+}
+
+func remoteAddress(addr string) string {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+
+	return host
 }
 
 func isJSONContentType(contentType string) bool {

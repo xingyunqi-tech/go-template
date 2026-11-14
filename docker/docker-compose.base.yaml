@@ -1,4 +1,4 @@
-# 各环境共用的服务：migrate（一次性）、api；按环境叠加 docker-compose.<env>.yaml
+# 各环境共用的服务：migrate（一次性）、api、worker；按环境叠加 docker-compose.<env>.yaml
 #
 # 用法：
 #   docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.postgres.yaml -f docker/docker-compose.redis.yaml up
@@ -28,6 +28,13 @@ services:
     command: ['serve']
     ports:
       - '${APP_PORT:-3000}:3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *app
+    command: ['worker']
     depends_on:
       migrate:
         condition: service_completed_successfully

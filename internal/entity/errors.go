@@ -91,3 +91,11 @@ func NotFoundKey(key string) *Error {
 func NotFound(message string) *Error {
 	return &Error{Status: StatusNotFound, Message: message, ErrorKey: "", Fields: nil}
 }
+
+// StatusPayloadTooLarge is the status of fileTooLarge.
+const StatusPayloadTooLarge = 413
+
+// FileTooLarge is nestjs fileTooLargeError: 413 {file: fileTooLarge}.
+func FileTooLarge() *Error {
+	return &Error{Status: StatusPayloadTooLarge, Message: "", ErrorKey: "", Fields: []Detail{{Name: "file", Value: "fileTooLarge"}}}
+}

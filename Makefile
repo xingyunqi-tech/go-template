@@ -67,6 +67,10 @@ seed: ## 写入种子数据（读取 .env）
 dev: ## 本地启动 API（读取 .env；端口 APP_PORT，默认 3000）
 	$(ENV_RUN) $(GO) run ./cmd/app serve
 
+.PHONY: worker
+worker: ## 本地启动队列 worker 与周期任务（读取 .env）
+	$(ENV_RUN) $(GO) run ./cmd/app worker
+
 .PHONY: generate
 generate: $(OPENAPIGEN) $(SQLC) ## 生成代码：oapi-codegen（scope.yaml 范围内）、sqlc
 	$(OPENAPIGEN)

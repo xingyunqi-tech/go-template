@@ -18,6 +18,7 @@ import (
 
 const (
 	_namespace      = "cache"
+	_cacheName      = "default"
 	_memoryMaxItems = 10_000
 	_commandTimeout = 500 * time.Millisecond
 )
@@ -29,15 +30,16 @@ type envelope struct {
 
 // Cache stores values in Redis, falling back to process memory when Redis is disabled or fails.
 type Cache struct {
-	client *goredis.Client
-	memory *Memory
-	log    *slog.Logger
-	now    func() time.Time
+	client  *goredis.Client
+	memory  *Memory
+	log     *slog.Logger
+	now     func() time.Time
+	counter Counter
 }
 
 // NewCache returns a Cache; client may be nil to use memory only.
 func NewCache(client *goredis.Client, log *slog.Logger) *Cache {
-	return &Cache{client: client, memory: NewMemory(), log: log, now: time.Now}
+	return &Cache{client: client, memory: NewMemory(), log: log, now: time.Now, counter: nil}
 }
 
 var _ repo.Cache = (*Cache)(nil)
@@ -50,8 +52,35 @@ func (c *Cache) fallback(ctx context.Context, op string, err error) {
 	c.log.WarnContext(ctx, "redis cache unavailable, using memory", "op", op, "error", err.Error())
 }
 
+// Counter counts cache lookups.
+type Counter interface {
+	Hit(cacheName string)
+	Miss(cacheName string)
+}
+
+// WithCounter makes Get count hits and misses of the "default" cache.
+func (c *Cache) WithCounter(counter Counter) *Cache {
+	c.counter = counter
+
+	return c
+}
+
 // Get decodes the cached value into dst and reports whether it was present.
 func (c *Cache) Get(ctx context.Context, k string, dst any) (bool, error) {
+	found, err := c.get(ctx, k, dst)
+
+	if c.counter != nil && err == nil {
+		if found {
+			c.counter.Hit(_cacheName)
+		} else {
+			c.counter.Miss(_cacheName)
+		}
+	}
+
+	return found, err
+}
+
+func (c *Cache) get(ctx context.Context, k string, dst any) (bool, error) {
 	if c.client == nil {
 		return c.memory.Get(ctx, k, dst)
 	}

@@ -73,13 +73,26 @@ type testApp struct {
 func newApp(t *testing.T, maxConns int32) *testApp {
 	t.Helper()
 
+	return newAppWith(t, maxConns, nil, nil)
+}
+
+func newAppWith(t *testing.T, maxConns int32, mutate func(*config.Config), log *slog.Logger) *testApp {
+	t.Helper()
+
 	cfg := loadConfig(t, _db.Clone(t))
+	if mutate != nil {
+		mutate(cfg)
+	}
+
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
 
 	infra, err := app.OpenInfra(t.Context(), cfg, maxConns)
 	require.NoError(t, err)
 	t.Cleanup(infra.Close)
 
-	handler, err := app.NewHandler(cfg, slog.New(slog.DiscardHandler), infra)
+	handler, err := app.NewHandler(cfg, log, infra)
 	require.NoError(t, err)
 
 	srv := httptest.NewServer(handler)
@@ -90,6 +103,7 @@ func newApp(t *testing.T, maxConns int32) *testApp {
 
 type result struct {
 	Status int
+	Header http.Header
 	Raw    string
 	Body   map[string]any
 }
@@ -135,7 +149,7 @@ func (a *testApp) do(method, path, token string, body any, headers ...string) *r
 	raw, err := io.ReadAll(res.Body)
 	require.NoError(a.t, err)
 
-	out := &result{Status: res.StatusCode, Raw: string(raw), Body: map[string]any{}}
+	out := &result{Status: res.StatusCode, Header: res.Header, Raw: string(raw), Body: map[string]any{}}
 	_ = json.Unmarshal(raw, &out.Body)
 
 	return out

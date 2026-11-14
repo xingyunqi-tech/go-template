@@ -33,6 +33,10 @@ func TestMain(m *testing.M) {
 	_db = db
 	code := m.Run()
 
+	if _minio != nil {
+		_ = _minio.Terminate()
+	}
+
 	db.Close()
 	os.Exit(code)
 }

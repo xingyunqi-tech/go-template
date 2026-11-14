@@ -21,7 +21,9 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view"
 	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/i18n"
+	"github.com/xingyunqi-tech/go-template/internal/repo/webapi/storage"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/file"
 	"github.com/xingyunqi-tech/go-template/openapi"
 	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
 )
@@ -47,7 +49,12 @@ func options(t *testing.T) *httpapi.Options {
 		Guards:         httpapi.AuthGuards(rejectAll{}),
 		Permission:     httpapi.RequirePermissions(noPermissions{}),
 		Transactor:     nil,
-		TrustProxy:     0,
+		Uploads: httpapi.UploadOptions{
+			Files: file.New(file.Config{APIPrefix: "api", BackendDomain: "", MaxSizes: nil}, nil,
+				storage.NewLocal(t.TempDir()), nil, slog.New(slog.DiscardHandler)),
+			Permissions: noPermissions{}, Presigned: false,
+		},
+		TrustProxy: 0,
 	}
 }
 
@@ -57,7 +64,7 @@ func newRouter(t *testing.T, swagger bool) http.Handler {
 	opts := options(t)
 	opts.SwaggerEnabled = swagger
 
-	h, err := httpapi.NewRouter(v1.New(v1.Deps{AppName: "demo", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}}), opts)
+	h, err := httpapi.NewRouter(v1.New(&v1.Deps{AppName: "demo", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}}), opts)
 	require.NoError(t, err)
 
 	return h
@@ -107,7 +114,7 @@ func TestSimpleHealthCheck(t *testing.T) {
 func TestAcceptLanguageSelectsErrorLanguage(t *testing.T) {
 	t.Parallel()
 
-	h, err := httpapi.NewRouter(panicServer{v1.New(v1.Deps{AppName: "demo", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}})}, options(t))
+	h, err := httpapi.NewRouter(panicServer{v1.New(&v1.Deps{AppName: "demo", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}})}, options(t))
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -250,7 +257,7 @@ func TestCORS(t *testing.T) {
 	opts.Production = true
 	opts.FrontendDomain = "https://a.example, https://b.example"
 
-	prod, err := httpapi.NewRouter(v1.New(v1.Deps{AppName: "demo", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}}), opts)
+	prod, err := httpapi.NewRouter(v1.New(&v1.Deps{AppName: "demo", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}}), opts)
 	require.NoError(t, err)
 
 	rec = do(t, prod, http.MethodOptions, "/", http.NoBody, map[string]string{"Origin": "https://b.example"})
@@ -301,7 +308,7 @@ func (panicServer) GetAppInfo(context.Context, gen.GetAppInfoRequestObject) (gen
 func TestPanicBecomesInternalServerError(t *testing.T) {
 	t.Parallel()
 
-	h, err := httpapi.NewRouter(panicServer{v1.New(v1.Deps{AppName: "demo", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}})}, options(t))
+	h, err := httpapi.NewRouter(panicServer{v1.New(&v1.Deps{AppName: "demo", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}})}, options(t))
 	require.NoError(t, err)
 
 	rec := do(t, h, http.MethodGet, "/", http.NoBody, map[string]string{"Accept-Language": "zh"})

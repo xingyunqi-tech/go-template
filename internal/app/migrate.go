@@ -14,6 +14,7 @@ import (
 
 	"github.com/xingyunqi-tech/go-template/db"
 	"github.com/xingyunqi-tech/go-template/internal/config"
+	"github.com/xingyunqi-tech/go-template/internal/repo/postgres"
 	"github.com/xingyunqi-tech/go-template/migrations"
 )
 
@@ -22,8 +23,8 @@ var ErrSchemaMismatch = errors.New("database schema is missing")
 
 const _migrateConnections = 2
 
-// Migrate applies the goose migrations, or with DB_SCHEMA_OWNER=external only checks that the
-// shared database has every column of the nestjs schema.
+// Migrate applies the goose and River migrations; with DB_SCHEMA_OWNER=external it only checks
+// that the shared database has every column of the nestjs schema and migrates the river schema.
 func Migrate(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	infra, err := OpenInfra(ctx, cfg, _migrateConnections)
 	if err != nil {
@@ -32,13 +33,17 @@ func Migrate(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	defer infra.Close()
 
 	if cfg.Database.SchemaOwner == config.SchemaOwnerExternal {
-		return CheckSchema(ctx, infra.Pool)
+		if err := CheckSchema(ctx, infra.Pool); err != nil {
+			return err
+		}
+
+		return postgres.MigrateRiver(ctx, infra.Pool, log) //nolint:wrapcheck // wrapped by postgres
 	}
 
 	return MigrateUp(ctx, infra.Pool, log)
 }
 
-// MigrateUp applies all pending goose migrations.
+// MigrateUp applies all pending goose migrations and then the River migrations.
 func MigrateUp(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) error {
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	defer sqlDB.Close()
@@ -57,7 +62,7 @@ func MigrateUp(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) error 
 		log.InfoContext(ctx, "migration applied", "version", r.Source.Version, "path", r.Source.Path, "duration_ms", r.Duration.Milliseconds())
 	}
 
-	return nil
+	return postgres.MigrateRiver(ctx, pool, log) //nolint:wrapcheck // wrapped by postgres
 }
 
 // requiredColumns lists "table.column" from the nestjs schema snapshot.

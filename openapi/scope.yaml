@@ -2,6 +2,10 @@
 operations:
   - getAppInfo
   - simpleHealthCheck
+  - healthCheck
+  - livenessProbe
+  - readinessProbe
+  - uploadFile
   - loginWithEmail
   - registerWithEmail
   - confirmEmail

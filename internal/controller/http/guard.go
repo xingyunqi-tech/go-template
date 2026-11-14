@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"crypto/subtle"
 	"net"
 	"net/http"
 	"regexp"
@@ -13,7 +14,11 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
 )
 
-const _userAgentMaxLength = 512
+const (
+	_userAgentMaxLength  = 512
+	_forbiddenResource   = "Forbidden resource"
+	_authorizationFields = 3
+)
 
 var _authHeader = regexp.MustCompile(`^(\S+)\s+(\S+)`)
 
@@ -81,6 +86,38 @@ func AuthGuards(a Authenticator) map[Auth]Guard {
 			return r.WithContext(reqctx.WithRefresh(r.Context(), p)), nil
 		},
 	}
+}
+
+// MonitorGuard is nestjs MonitoringTokenGuard: with a token configured the request must carry
+// Authorization: Bearer <token>; without one only non-production environments are open.
+func MonitorGuard(token string, production bool) Guard {
+	return func(r *http.Request) (*http.Request, error) {
+		if monitorAllowed(r.Header.Get("Authorization"), token, production) {
+			return r, nil
+		}
+
+		return r, entity.Forbidden(_forbiddenResource)
+	}
+}
+
+func monitorAllowed(authorization, token string, production bool) bool {
+	if token == "" {
+		return !production
+	}
+
+	scheme, credentials := authorizationParts(authorization)
+
+	return strings.EqualFold(scheme, "bearer") && subtle.ConstantTimeCompare([]byte(credentials), []byte(token)) == 1
+}
+
+// authorizationParts splits Authorization like `header.trim().split(/\s+/)`.
+func authorizationParts(authorization string) (scheme, credentials string) {
+	parts := _whitespace.Split(strings.TrimSpace(authorization), _authorizationFields)
+	if len(parts) > 1 {
+		credentials = parts[1]
+	}
+
+	return parts[0], credentials
 }
 
 // RequirePermissions is the nestjs PermissionsGuard.

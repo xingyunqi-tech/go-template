@@ -37,6 +37,18 @@ type Throttle struct {
 	TTL   int
 }
 
+// Audit is nestjs @Auditable: the entity id comes from the IDParams path parameters (joined with
+// ":", default "id") or, with FromResponse first, from the response id; the recorded value is the
+// validated body unless OmitBody, or the response with IncludeResponse.
+type Audit struct {
+	Action          string
+	EntityType      string
+	IDParams        []string
+	FromResponse    bool
+	OmitBody        bool
+	IncludeResponse bool
+}
+
 // Policy is the per-operation behavior that nestjs declares with decorators.
 type Policy struct {
 	Auth Auth
@@ -48,10 +60,14 @@ type Policy struct {
 	// Query is the nestjs DTO validating the query string.
 	Query    string
 	Throttle *Throttle
-	Audit    string
+	Audit    *Audit
 	Tx       bool
 	// Raw responses skip the envelope.
 	Raw bool
+	// Upload runs the upload purpose guard and receives the file before the query DTO.
+	Upload bool
+	// NoCache adds Cache-Control: no-cache, no-store, must-revalidate to 2xx responses.
+	NoCache bool
 }
 
 // Policies returns the policy of every implemented operation, keyed by operationId.
@@ -63,6 +79,13 @@ func Policies() map[string]Policy {
 	return map[string]Policy{
 		"getAppInfo":          {Auth: AuthNone},
 		"simpleHealthCheck":   {Auth: AuthNone},
+		"healthCheck":         {Auth: AuthMonitor, NoCache: true},
+		"livenessProbe":       {Auth: AuthNone, NoCache: true},
+		"readinessProbe":      {Auth: AuthNone, NoCache: true},
+		"getMetrics":          {Auth: AuthMonitor, Raw: true},
+		"uploadFile":          {Auth: AuthJWT, Query: "UploadFileQueryDto", Upload: true},
+		"readPrivateFile":     {Auth: AuthJWT, Raw: true},
+		"downloadFile":        {Auth: AuthNone, Raw: true},
 		"loginWithEmail":      {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 60_000}, Tx: true},
 		"registerWithEmail":   {Auth: AuthNone, Tx: true},
 		"confirmEmail":        {Auth: AuthNone, Tx: true},
@@ -84,4 +107,9 @@ func Policies() map[string]Policy {
 		"updateUser":          users(entity.PermUserUpdate, true),
 		"deleteUser":          users(entity.PermUserDelete, true),
 	}
+}
+
+// Undocumented lists the operations nestjs excludes from the OpenAPI document.
+func Undocumented() []string {
+	return []string{"getMetrics", "readPrivateFile", "downloadFile"}
 }

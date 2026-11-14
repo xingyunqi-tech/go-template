@@ -52,19 +52,3 @@ func TestRequiredColumnsComeFromTheNestjsSnapshot(t *testing.T) {
 	assert.Contains(t, cols, "session.lastActiveAt")
 	assert.Len(t, cols, 153)
 }
-
-func TestMaskEmailFollowsNestjs(t *testing.T) {
-	t.Parallel()
-
-	cases := map[string]string{
-		"john.doe@example.com": "jo***@example.com",
-		"ab@example.com":       "a***@example.com",
-		"a@example.com":        "a***@example.com",
-		"@example.com":         "[invalid]",
-		"nope":                 "[invalid]",
-	}
-
-	for in, want := range cases {
-		assert.Equal(t, want, maskEmail(in), in)
-	}
-}

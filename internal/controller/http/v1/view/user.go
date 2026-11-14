@@ -14,15 +14,21 @@ const (
 	_dateLayout   = "2006-01-02"
 )
 
-// FileURLs builds the public URL of a file like nestjs buildFileUrl for the local driver.
+// FileURLs builds file URLs like nestjs buildFileUrl.
 type FileURLs struct {
 	BackendDomain string
 	APIPrefix     string
+	// Sign returns the URL of every file of the S3 drivers; nil is the local driver.
+	Sign func(f *entity.File) string
 }
 
-// URL returns the file's URL: BACKEND_DOMAIN + path for public files, the private download route
-// otherwise.
+// URL returns the file's URL: for the local driver BACKEND_DOMAIN + path for public files and
+// the private download route otherwise.
 func (u FileURLs) URL(f *entity.File) string {
+	if u.Sign != nil {
+		return u.Sign(f)
+	}
+
 	if f.Visibility == entity.VisibilityPrivate {
 		return u.BackendDomain + "/" + u.APIPrefix + "/v1/files/private/" + f.ID.String()
 	}
@@ -47,6 +53,12 @@ func NewFile(f *entity.File, urls FileURLs) *File {
 	}
 
 	return &File{ID: f.ID.String(), Path: urls.URL(f), Visibility: visibility, MimeType: f.MimeType, Size: f.Size}
+}
+
+// Upload is the upload response: {file}, plus uploadSignedUrl for the s3-presigned driver.
+type Upload struct {
+	File            *File  `json:"file"`
+	UploadSignedURL string `json:"uploadSignedUrl,omitempty"`
 }
 
 // Relation is a role or status key that may be absent, null, {id} or {id, name, __entity}.

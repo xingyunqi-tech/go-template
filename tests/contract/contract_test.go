@@ -28,7 +28,9 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view"
 	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/i18n"
+	"github.com/xingyunqi-tech/go-template/internal/repo/webapi/storage"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/file"
 	"github.com/xingyunqi-tech/go-template/openapi"
 	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
 )
@@ -77,7 +79,7 @@ func newRouter(t *testing.T) *httpapi.Router {
 	validator, err := validatorx.New(openapi.Validation)
 	require.NoError(t, err)
 
-	r, err := httpapi.NewRouter(v1.New(v1.Deps{AppName: "app", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}}), &httpapi.Options{
+	r, err := httpapi.NewRouter(v1.New(&v1.Deps{AppName: "app", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}}), &httpapi.Options{
 		APIPrefix:      "api",
 		SwaggerEnabled: true,
 		Docs:           openapi.Baseline,
@@ -89,7 +91,12 @@ func newRouter(t *testing.T) *httpapi.Router {
 		Guards:         httpapi.AuthGuards(rejectAll{}),
 		Permission:     httpapi.RequirePermissions(noPermissions{}),
 		Transactor:     nil,
-		TrustProxy:     0,
+		Uploads: httpapi.UploadOptions{
+			Files: file.New(file.Config{APIPrefix: "api", BackendDomain: "", MaxSizes: nil}, nil,
+				storage.NewLocal(t.TempDir()), nil, slog.New(slog.DiscardHandler)),
+			Permissions: noPermissions{}, Presigned: false,
+		},
+		TrustProxy: 0,
 	})
 	require.NoError(t, err)
 
@@ -270,6 +277,12 @@ func TestPoliciesMatchScopeAndDocumentedSecurity(t *testing.T) {
 	}
 
 	for id := range policies {
+		if slices.Contains(httpapi.Undocumented(), id) {
+			assert.NotContains(t, ops, id, "%s is documented", id)
+
+			continue
+		}
+
 		assert.Contains(t, scope, id, "policy %s is not in scope.yaml", id)
 	}
 }

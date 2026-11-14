@@ -4,7 +4,9 @@ package reqctx
 import (
 	"context"
 
+	"github.com/xingyunqi-tech/go-template/internal/repo"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/file"
 	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
 )
 
@@ -97,4 +99,25 @@ func Body(ctx context.Context) validatorx.Value {
 	}
 
 	return validatorx.Undefined{}
+}
+
+type uploadKey struct{}
+
+// Upload is the file received by the upload endpoint; Received is nil when the request had none.
+type Upload struct {
+	Purpose  file.Purpose
+	Received *file.Received
+	Sink     repo.Sink
+}
+
+// WithUpload stores the received upload.
+func WithUpload(ctx context.Context, u *Upload) context.Context {
+	return context.WithValue(ctx, uploadKey{}, u)
+}
+
+// UploadOf returns the received upload.
+func UploadOf(ctx context.Context) *Upload {
+	u, _ := ctx.Value(uploadKey{}).(*Upload)
+
+	return u
 }

@@ -45,6 +45,9 @@ type pipeline struct {
 	permission PermissionGuard
 	validator  *validatorx.Validator
 	errs       *errorWriter
+	throttle   *throttler
+	uploads    UploadOptions
+	auditing   bool
 }
 
 // check reports operations that are registered but cannot run: missing policy, missing guard,
@@ -67,12 +70,8 @@ func (p *pipeline) checkOperation(op *operation) []error {
 
 	var errs []error
 
-	if policy.Auth != AuthNone && p.guards[policy.Auth] == nil {
-		errs = append(errs, fmt.Errorf("%w: %s needs a %s guard", errPolicy, op.id, policy.Auth))
-	}
-
-	if needsPermission(&policy) && p.permission == nil {
-		errs = append(errs, fmt.Errorf("%w: %s needs the permission guard", errPolicy, op.id))
+	for _, what := range p.missingDependencies(&policy) {
+		errs = append(errs, fmt.Errorf("%w: %s needs %s", errPolicy, op.id, what))
 	}
 
 	for _, dto := range []string{op.bodyDTO, policy.Query} {
@@ -82,6 +81,27 @@ func (p *pipeline) checkOperation(op *operation) []error {
 	}
 
 	return errs
+}
+
+// missingDependencies names what the policy uses but the router was not given.
+func (p *pipeline) missingDependencies(policy *Policy) []string {
+	var missing []string
+
+	for _, dep := range []struct {
+		lacks bool
+		what  string
+	}{
+		{policy.Auth != AuthNone && p.guards[policy.Auth] == nil, "a " + policy.Auth.String() + " guard"},
+		{policy.Audit != nil && !p.auditing, "the auditor"},
+		{policy.Upload && (p.uploads.Files == nil || p.uploads.Permissions == nil), "the upload options"},
+		{needsPermission(policy) && p.permission == nil, "the permission guard"},
+	} {
+		if dep.lacks {
+			missing = append(missing, dep.what)
+		}
+	}
+
+	return missing
 }
 
 func needsPermission(policy *Policy) bool {
@@ -110,24 +130,32 @@ func (p *pipeline) middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		prepared, err := p.prepare(r, op, match) //nolint:contextcheck // r carries the request context
+		prepared, err := p.prepare(w, r, op, match)
 		if err != nil {
 			p.errs.write(w, r, err)
 
 			return
 		}
 
+		if p.policies[op.id].NoCache {
+			w = &noCacheWriter{ResponseWriter: w, started: false}
+		}
+
 		next.ServeHTTP(w, prepared)
 	})
 }
 
-func (p *pipeline) prepare(r *http.Request, op *operation, match *routeMatch) (*http.Request, error) {
+func (p *pipeline) prepare(w http.ResponseWriter, r *http.Request, op *operation, match *routeMatch) (*http.Request, error) {
 	params, err := decodeParams(op, match)
 	if err != nil {
 		return r, err
 	}
 
 	policy := p.policies[op.id]
+
+	if err := p.throttle.check(w, r, op.id, &policy); err != nil {
+		return r, err
+	}
 
 	if r, err = p.guard(r, &policy); err != nil {
 		return r, err
@@ -139,16 +167,27 @@ func (p *pipeline) prepare(r *http.Request, op *operation, match *routeMatch) (*
 		}
 	}
 
+	if policy.Upload {
+		return p.prepareUpload(r, &policy)
+	}
+
+	return p.validate(r, op.bodyDTO, policy.Query)
+}
+
+// validate runs the global ValidationPipe on the body and the query string.
+func (p *pipeline) validate(r *http.Request, bodyDTO, queryDTO string) (*http.Request, error) {
 	validated := &reqctx.Validated{Body: validatorx.Undefined{}, Query: validatorx.Undefined{}}
 
-	if op.bodyDTO != "" {
-		if validated.Body, err = p.validateBody(r, op.bodyDTO); err != nil {
+	var err error
+
+	if bodyDTO != "" {
+		if validated.Body, err = p.validateBody(r, bodyDTO); err != nil {
 			return r, err
 		}
 	}
 
-	if policy.Query != "" {
-		if validated.Query, err = p.validateQuery(r, policy.Query); err != nil {
+	if queryDTO != "" {
+		if validated.Query, err = p.validateQuery(r, queryDTO); err != nil {
 			return r, err
 		}
 	}
@@ -180,10 +219,16 @@ func paramDecodeError(raw string) error {
 
 // guard runs the authentication guard and then the permission guard of the policy.
 func (p *pipeline) guard(r *http.Request, policy *Policy) (*http.Request, error) {
+	outer := r.Context()
+
 	if policy.Auth != AuthNone {
 		authed, err := p.guards[policy.Auth](r)
 		if err != nil {
 			return r, err
+		}
+
+		if principal := reqctx.Principal(authed.Context()); principal != nil { //nolint:contextcheck // reads the identity the guard stored
+			setUserID(outer, strconv.Itoa(principal.UserID))
 		}
 
 		r = authed

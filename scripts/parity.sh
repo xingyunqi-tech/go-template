@@ -6,17 +6,17 @@
 #   NESTJS_PORT              nestjs 映射到宿主的端口（默认 3001）
 #   PARITY_PORT              本服务映射到宿主的端口（默认 3000）
 #   PARITY_NESTJS_URL        已在运行的 nestjs 地址；设置后不启动参照服务
-#   PARITY_THROTTLE_ENABLED  两侧的 THROTTLE_ENABLED（默认 false）
+#   PARITY_THROTTLE_ENABLED  两侧的 THROTTLE_ENABLED（默认 true）
 #   PARITY_KEEP              设为 1 时测试结束后保留两侧服务；再次运行时按本次配置更新
 #   PARITY_APP_NAME          本服务的 APP_NAME（默认取 nestjs env-example-relational 中的值）
-#   PARITY_NESTJS_SPEC       设为 0 时跳过 nestjs test/user/auth.e2e-spec.ts（默认指向本服务运行）
+#   PARITY_NESTJS_SPEC       设为 0 时跳过 nestjs test/user/auth.e2e-spec.ts（默认指向本服务运行，运行前本服务改为限流关闭）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NESTJS_DIR="${NESTJS_DIR:-$ROOT/../nestjs-template}"
 export NESTJS_PORT="${NESTJS_PORT:-3001}"
 export PARITY_PORT="${PARITY_PORT:-3000}"
-export PARITY_THROTTLE_ENABLED="${PARITY_THROTTLE_ENABLED:-false}"
+export PARITY_THROTTLE_ENABLED="${PARITY_THROTTLE_ENABLED:-true}"
 NESTJS=(docker compose -p go-template-parity-nestjs -f "$ROOT/scripts/nestjs/nestjs.compose.yaml")
 SERVICE=(docker compose -p go-template-parity
   -f "$ROOT/docker/docker-compose.base.yaml"
@@ -96,6 +96,8 @@ PARITY_GO_URL="http://localhost:${PARITY_PORT}" PARITY_NESTJS_URL="$PARITY_NESTJ
   go tool -modfile="$ROOT/tools/go.mod" gotestsum -- -count=1 -tags parity "$ROOT/tests/parity/..."
 
 if [[ "${PARITY_NESTJS_SPEC:-1}" == 1 ]]; then
+  # nestjs 的 auth spec 按其 CI 配置在限流关闭时运行
+  PARITY_THROTTLE_ENABLED=false "${SERVICE[@]}" up -d --wait api
   docker run --rm --network host -e APP_PORT="$PARITY_PORT" "${NESTJS_IMAGE}-builder" \
     pnpm exec vitest run --config vitest.e2e.config.mts test/user/auth.e2e-spec.ts
 fi

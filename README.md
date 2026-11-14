@@ -17,6 +17,7 @@ make infra        # 启动 Postgres 与 Redis
 make migrate      # 建表（goose）
 make seed         # 角色、权限、行政区划、配置与演示账号（admin@example.com / john.doe@example.com，密码 Secret00）
 make dev          # http://localhost:3000
+make worker       # 队列 worker 与周期任务（邮件、账号清理）
 ```
 
 - `GET /`：应用信息
@@ -44,7 +45,7 @@ make image             # 构建生产镜像
 
 ## 镜像
 
-`Dockerfile` 多阶段构建，运行时为 `gcr.io/distroless/static-debian13:nonroot`，镜像只含一个静态二进制（子命令 `serve` / `migrate` / `seed`）；compose 先运行一次性的 migrate，再启动 api：
+`Dockerfile` 多阶段构建，运行时为 `gcr.io/distroless/static-debian13:nonroot`，镜像只含一个静态二进制（子命令 `serve` / `worker` / `migrate` / `seed`）；compose 先运行一次性的 migrate，再启动 api 与 worker：
 
 ```bash
 docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.postgres.yaml -f docker/docker-compose.redis.yaml up --build

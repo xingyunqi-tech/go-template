@@ -119,6 +119,13 @@ type Sessions interface {
 // Files reads uploaded files.
 type Files interface {
 	GetMany(ctx context.Context, ids []uuid.UUID) ([]entity.File, error)
+	Create(ctx context.Context, f *entity.File) (*entity.File, error)
+	// Get and GetByPath return nil when the file does not exist.
+	Get(ctx context.Context, id uuid.UUID) (*entity.File, error)
+	GetByPath(ctx context.Context, path string) (*entity.File, error)
+	// ListByOwner returns up to limit files of the owner after afterID, by id.
+	ListByOwner(ctx context.Context, ownerID int, afterID *uuid.UUID, limit int) ([]entity.File, error)
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 // Permissions reads role_permission.
@@ -136,4 +143,94 @@ type Cache interface {
 	Get(ctx context.Context, key string, dst any) (bool, error)
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
 	Delete(ctx context.Context, key string) error
+}
+
+// DatabaseHealth reports PostgreSQL reachability and server connection usage.
+type DatabaseHealth interface {
+	Ping(ctx context.Context) error
+	ConnectionStats(ctx context.Context) (active, maximum int, err error)
+}
+
+// Pinger checks that a dependency answers.
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// Locks are expiring mutual-exclusion claims shared by every instance when Redis is enabled.
+type Locks interface {
+	// TryAcquire claims key for ttl and returns the release token; ok is false when it is taken.
+	TryAcquire(ctx context.Context, key string, ttl time.Duration) (token string, ok bool)
+	Release(ctx context.Context, key, token string)
+}
+
+// Jobs enqueues background jobs, inside the request transaction when there is one.
+type Jobs interface {
+	EnqueueMail(ctx context.Context, job entity.MailJob) error
+	// EnqueueAccountCleanup is a no-op while a cleanup of the same user is pending or running.
+	EnqueueAccountCleanup(ctx context.Context, userID int) error
+}
+
+// Alerts stores admin alerts outside any request transaction.
+type Alerts interface {
+	// CreateIfNoOpen inserts the alert unless one with the same dedup key is unacknowledged.
+	CreateIfNoOpen(ctx context.Context, a *entity.Alert) (id int, created bool, err error)
+	// AdminIDs lists up to limit admin users.
+	AdminIDs(ctx context.Context, limit int) ([]int, error)
+	// Notify creates an in-app notification unless the user turned in-app off for its category.
+	Notify(ctx context.Context, n *entity.Notification) error
+}
+
+// AccountCleanups tracks the cleanup of removed accounts.
+type AccountCleanups interface {
+	MarkCompleted(ctx context.Context, userID int) error
+	// PendingUserIDs lists users removed before deletedBefore without a completed cleanup, by id.
+	PendingUserIDs(ctx context.Context, deletedBefore time.Time, limit int) ([]int, error)
+	// DetachPhoto clears the avatar reference of a user, removed or not.
+	DetachPhoto(ctx context.Context, userID int) error
+}
+
+// Maintenance runs the periodic cleanup statements.
+type Maintenance interface {
+	// PurgeDeletedSessions hard-deletes sessions soft-deleted more than retention ago.
+	PurgeDeletedSessions(ctx context.Context, retentionDays int) (int64, error)
+	// SoftDeleteReadNotifications soft-deletes notifications read more than retention ago.
+	SoftDeleteReadNotifications(ctx context.Context, retentionDays int) (int64, error)
+}
+
+// Sink receives one uploaded file under a random key.
+type Sink interface {
+	Key() string
+	Write(p []byte) (int, error)
+	// Commit stores the received bytes; Discard removes whatever was stored.
+	Commit(ctx context.Context) error
+	Discard(ctx context.Context)
+}
+
+// FileStorage keeps file contents on local disk or in an S3 bucket; path is the file row path.
+type FileStorage interface {
+	Local() bool
+	NewSink(key, contentType string) (Sink, error)
+	Delete(ctx context.Context, path string) error
+	// LocalFile is the disk path of a local file.
+	LocalFile(path string) string
+	PresignGet(ctx context.Context, key string) (string, error)
+	PresignPut(ctx context.Context, key string, length int64) (string, error)
+}
+
+// AuditLog is an audit_logs row.
+type AuditLog struct {
+	UserID     *string
+	Action     string
+	EntityType string
+	EntityID   string
+	OldValue   map[string]any
+	NewValue   map[string]any
+	IPAddress  *string
+	UserAgent  *string
+	RequestID  *string
+}
+
+// Audits stores audit logs outside any request transaction.
+type Audits interface {
+	Create(ctx context.Context, l *AuditLog) error
 }

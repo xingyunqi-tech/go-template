@@ -33,7 +33,15 @@ services:
     environment:
       APP_NAME: ${PARITY_APP_NAME:-app}
       TRUST_PROXY: '1'
-      THROTTLE_ENABLED: ${PARITY_THROTTLE_ENABLED:-false}
+      THROTTLE_ENABLED: ${PARITY_THROTTLE_ENABLED:-true}
+      LOG_LEVEL: warn
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  worker:
+    environment:
+      APP_NAME: ${PARITY_APP_NAME:-app}
       LOG_LEVEL: warn
     depends_on:
       seed:

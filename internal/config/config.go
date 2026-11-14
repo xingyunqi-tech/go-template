@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,17 +20,29 @@ const (
 	EnvProduction  = "production"
 )
 
-// ErrProduction reports settings that production refuses.
-var ErrProduction = errors.New("invalid production settings")
+// ErrProduction reports settings that production refuses or that contradict each other.
+var ErrProduction = errors.New("invalid settings")
+
+func sortedCopy(s []string) []string {
+	out := slices.Clone(s)
+	slices.Sort(out)
+
+	return out
+}
 
 // Config is the whole application configuration.
 type Config struct {
-	App      App
-	Log      Log
-	Database Database
-	Redis    Redis
-	Auth     Auth
-	Seed     Seed
+	App           App
+	Log           Log
+	Database      Database
+	Redis         Redis
+	Auth          Auth
+	Seed          Seed
+	Throttle      Throttle
+	Metrics       Metrics
+	File          File
+	Mail          Mail
+	Observability Observability
 }
 
 // App holds settings shared with nestjs-template under the same variable names.
@@ -44,6 +57,7 @@ type App struct {
 	TrustProxy       int           `env:"TRUST_PROXY"           envDefault:"0"           validate:"min=0"`
 	SwaggerEnabled   OptionalBool  `env:"SWAGGER_ENABLED"`
 	ShutdownTimeout  time.Duration `env:"SHUTDOWN_TIMEOUT"      envDefault:"30s"         validate:"gt=0"`
+	DrainPeriod      time.Duration `env:"SHUTDOWN_DRAIN_PERIOD" envDefault:"0s"          validate:"gte=0"`
 }
 
 // Log configures the slog handler.
@@ -96,7 +110,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 
-	if problems := cfg.productionProblems(); len(problems) > 0 {
+	if problems := append(cfg.productionProblems(), cfg.infraProblems()...); len(problems) > 0 {
 		return nil, fmt.Errorf("config: %w: %s", ErrProduction, strings.Join(problems, "; "))
 	}
 

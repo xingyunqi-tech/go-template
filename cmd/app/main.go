@@ -28,6 +28,7 @@ const usage = `Usage: app <command>
 
 Commands:
   serve     run the HTTP API server
+  worker    run the queue workers and periodic jobs
   migrate   apply the database migrations
   seed      insert reference data and seed accounts
   version   print the build version
@@ -49,6 +50,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	switch fs.Arg(0) {
 	case "serve":
 		return command(stderr, "serve", app.Serve)
+	case "worker":
+		return command(stderr, "worker", app.Work)
 	case "migrate":
 		return command(stderr, "migrate", app.Migrate)
 	case "seed":
@@ -72,10 +75,27 @@ func command(stderr io.Writer, name string, run func(context.Context, *config.Co
 		return exitError
 	}
 
-	log := logger.New(stderr, cfg.Log.LevelOr(cfg.App.IsProduction()), cfg.Log.PrettyPrint.Or(!cfg.App.IsProduction()))
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	obs, err := app.SetupObservability(ctx, cfg, version)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+
+		return exitError
+	}
+
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.App.ShutdownTimeout)
+		defer cancel()
+
+		if err := obs.Shutdown(shutdownCtx); err != nil {
+			_, _ = fmt.Fprintln(stderr, err)
+		}
+	}()
+
+	log := obs.Logger(logger.New(stderr, cfg.Log.LevelOr(cfg.App.IsProduction()), cfg.Log.PrettyPrint.Or(!cfg.App.IsProduction()), app.LogAttrs))
+	app.RouteLibraryLogs(log)
 
 	if err := run(ctx, cfg, log); err != nil {
 		log.ErrorContext(ctx, "command failed", "command", name, "error", err)

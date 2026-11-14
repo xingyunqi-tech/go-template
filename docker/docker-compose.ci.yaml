@@ -11,6 +11,10 @@ x-ci-env: &ci-env
   SWAGGER_ENABLED: 'true'
   REDIS_ENABLED: 'true'
   TRUST_PROXY: '1'
+  MAIL_HOST: localhost
+  MAIL_PORT: '1025'
+  MAIL_DEFAULT_EMAIL: noreply@example.com
+  MAIL_DEFAULT_NAME: API
 
 services:
   postgres:
@@ -40,6 +44,12 @@ services:
   api:
     ports: !override
       - '127.0.0.1:${APP_PORT:-3000}:3000'
+    environment: *ci-env
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  worker:
     environment: *ci-env
     depends_on:
       seed:

@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -13,6 +14,7 @@ import (
 type Options struct {
 	MaxConns int32
 	TLS      *tls.Config
+	Tracer   pgx.QueryTracer
 }
 
 // New parses dsn, pins every connection to timezone UTC and verifies connectivity.
@@ -26,6 +28,10 @@ func New(ctx context.Context, dsn string, opts Options) (*pgxpool.Pool, error) {
 
 	if opts.MaxConns > 0 {
 		cfg.MaxConns = opts.MaxConns
+	}
+
+	if opts.Tracer != nil {
+		cfg.ConnConfig.Tracer = opts.Tracer
 	}
 
 	if opts.TLS != nil {

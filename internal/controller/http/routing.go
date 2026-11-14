@@ -24,6 +24,8 @@ type routeMatch struct {
 	pattern  string
 	segments []string
 	template []string
+	// label is the Express route path, like /api/v1/users/:id.
+	label string
 }
 
 type (
@@ -88,6 +90,7 @@ func (m *pathMatcher) middleware(next http.Handler) http.Handler {
 
 		if match != nil {
 			ctx = context.WithValue(ctx, routeMatchKey{}, match)
+			setRoute(ctx, match.label)
 		} else if raw, failed := m.undecodableParam(r.URL.EscapedPath()); failed {
 			ctx = context.WithValue(ctx, undecodableParam{}, raw)
 		}
@@ -133,7 +136,7 @@ func (m *pathMatcher) normalize(method, escaped string) (string, *routeMatch) {
 	}
 
 	return "/" + strings.Join(out, "/"), &routeMatch{
-		method: method, pattern: best.pattern, segments: segments, template: best.segments,
+		method: method, pattern: best.pattern, segments: segments, template: best.segments, label: m.label(best),
 	}
 }
 
@@ -206,6 +209,19 @@ func (m *pathMatcher) literal(tpl *routeTemplate, i int) string {
 	}
 
 	return tpl.segments[i]
+}
+
+func (m *pathMatcher) label(tpl *routeTemplate) string {
+	parts := make([]string, len(tpl.segments))
+	for i, seg := range tpl.segments {
+		if isParam(seg) {
+			parts[i] = ":" + seg[1:len(seg)-1]
+		} else {
+			parts[i] = m.literal(tpl, i)
+		}
+	}
+
+	return "/" + strings.Join(parts, "/")
 }
 
 func moreStatic(a, b []bool) bool {

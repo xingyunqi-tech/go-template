@@ -45,7 +45,7 @@ type Mail struct {
 	Data     map[string]any
 }
 
-// Mailer sends templated emails.
+// Mailer queues templated emails.
 type Mailer interface {
 	Send(ctx context.Context, m Mail) error
 }
@@ -333,12 +333,9 @@ func (s *Service) LoginWithEmail(ctx context.Context, email, password string, cl
 	return s.signIn(ctx, u, client)
 }
 
-func (s *Service) sendAfterCommit(ctx context.Context, m Mail) {
-	s.tx.AfterCommit(ctx, func(ctx context.Context) {
-		if err := s.mailer.Send(ctx, m); err != nil {
-			s.log.ErrorContext(ctx, "send mail failed", "template", m.Template, "error", err.Error())
-		}
-	})
+// sendMail queues m in the request transaction, so it is sent only once the transaction commits.
+func (s *Service) sendMail(ctx context.Context, m Mail) error {
+	return s.mailer.Send(ctx, m) //nolint:wrapcheck // queue errors are wrapped
 }
 
 func (s *Service) sign(payload map[string]any, secret Secret) (string, error) {
@@ -365,9 +362,7 @@ func (s *Service) Register(ctx context.Context, in *user.Input) error {
 		return err
 	}
 
-	s.sendAfterCommit(ctx, Mail{Template: "activation", To: deref(in.Email.Value), Data: map[string]any{"hash": hash}})
-
-	return nil
+	return s.sendMail(ctx, Mail{Template: "activation", To: deref(in.Email.Value), Data: map[string]any{"hash": hash}})
 }
 
 func deref(p *string) string {
@@ -481,9 +476,7 @@ func (s *Service) ForgotPassword(ctx context.Context, email string) error {
 		return err
 	}
 
-	s.sendAfterCommit(ctx, Mail{Template: "reset-password", To: email, Data: map[string]any{"hash": hash, "tokenExpires": expires}})
-
-	return nil
+	return s.sendMail(ctx, Mail{Template: "reset-password", To: email, Data: map[string]any{"hash": hash, "tokenExpires": expires}})
 }
 
 // ResetPassword is POST auth/reset/password.
@@ -639,9 +632,7 @@ func (s *Service) requestEmailChange(ctx context.Context, u *entity.User, email 
 		return err
 	}
 
-	s.sendAfterCommit(ctx, Mail{Template: "confirm-new-email", To: email, Data: map[string]any{"hash": hash}})
-
-	return nil
+	return s.sendMail(ctx, Mail{Template: "confirm-new-email", To: email, Data: map[string]any{"hash": hash}})
 }
 
 // Refresh is POST auth/refresh.

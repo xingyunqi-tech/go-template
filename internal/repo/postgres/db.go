@@ -155,3 +155,23 @@ func IsDatabaseError(err error) bool {
 func notFound(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
 }
+
+// InTx runs fn in a transaction of its own, committed when fn succeeds.
+func (d *DB) InTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	txCtx, tx, err := d.Begin(WithoutTx(ctx))
+	if err != nil {
+		return err
+	}
+
+	if err := fn(txCtx); err != nil {
+		tx.Rollback(ctx)
+
+		return err
+	}
+
+	if _, err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}

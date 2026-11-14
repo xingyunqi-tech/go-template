@@ -3,6 +3,9 @@ package http
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -83,4 +86,19 @@ func TestTransactionFailures(t *testing.T) {
 		_, _ = runInTx(t.Context(), fakeTransactor{tx: tx, err: nil}, func(context.Context) (any, error) { panic("boom") })
 	})
 	assert.True(t, tx.rolledBack)
+}
+
+func TestTxPoliciesMatchGeneratedOperationNames(t *testing.T) {
+	t.Parallel()
+
+	for id, policy := range Policies() {
+		generated := strings.ToUpper(id[:1]) + id[1:]
+		tx := &fakeTx{commitResult: true}
+		handler := transactional(fakeTransactor{tx: tx}, Policies())(
+			func(context.Context, http.ResponseWriter, *http.Request, any) (any, error) { return nil, nil }, generated)
+
+		_, err := handler(t.Context(), httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", http.NoBody), nil)
+		require.NoError(t, err)
+		assert.Equal(t, policy.Tx, tx.committed, id)
+	}
 }

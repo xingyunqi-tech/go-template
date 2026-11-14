@@ -12,3 +12,8 @@ var Baseline []byte
 //
 //go:embed validation.json
 var Validation []byte
+
+// NestHandlers is nest_handlers.json: operationId → nestjs "Controller-handler", used in rate limit keys.
+//
+//go:embed nest_handlers.json
+var NestHandlers []byte

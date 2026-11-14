@@ -80,7 +80,44 @@ func TestProductionRejectsWeakSettings(t *testing.T) {
 	t.Setenv("REDIS_ENABLED", "true")
 
 	_, err = config.Load()
+	require.ErrorIs(t, err, config.ErrProduction)
+	assert.Contains(t, err.Error(), "MAIL_HOST: required in production")
+
+	t.Setenv("MAIL_HOST", "smtp.example.com")
+	t.Setenv("MAIL_DEFAULT_EMAIL", "noreply@example.com")
+	t.Setenv("MAIL_DEFAULT_NAME", "App")
+
+	_, err = config.Load()
 	require.NoError(t, err)
+}
+
+func TestInfrastructureSettings(t *testing.T) {
+	setSecrets(t)
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	assert.True(t, cfg.Throttle.Disabled.On())
+	assert.True(t, cfg.Metrics.Disabled.On())
+	assert.Equal(t, "metrics", cfg.Metrics.Path)
+	assert.Equal(t, config.FileDriverLocal, cfg.File.Driver)
+	assert.True(t, cfg.File.PathStyleDisabled.On())
+	assert.Equal(t, 587, cfg.Mail.Port)
+
+	t.Setenv("THROTTLE_ENABLED", "0")
+	t.Setenv("METRICS_ENABLED", "false")
+
+	cfg, err = config.Load()
+	require.NoError(t, err)
+	assert.True(t, cfg.Throttle.Disabled.On())
+	assert.False(t, cfg.Metrics.Disabled.On())
+
+	t.Setenv("METRICS_TOKEN", "short")
+	t.Setenv("FILE_DRIVER", "s3")
+
+	_, err = config.Load()
+	require.ErrorIs(t, err, config.ErrProduction)
+	assert.Contains(t, err.Error(), "METRICS_TOKEN: must be at least 16 characters")
+	assert.Contains(t, err.Error(), "ACCESS_KEY_ID, AWS_DEFAULT_S3_BUCKET, AWS_S3_REGION, SECRET_ACCESS_KEY: required when FILE_DRIVER=s3")
 }
 
 func TestInvalidDurationIsRejected(t *testing.T) {

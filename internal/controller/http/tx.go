@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/gen"
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/httperr"
@@ -22,6 +23,16 @@ type Transactor interface {
 	Begin(ctx context.Context) (context.Context, Tx, error)
 }
 
+// policyOf finds the policy of a strict middleware operation name, which the generated code
+// passes with an upper-case first letter.
+func policyOf(policies map[string]Policy, name string) Policy {
+	if name == "" {
+		return Policy{}
+	}
+
+	return policies[strings.ToLower(name[:1])+name[1:]]
+}
+
 // commitsOnError reports whether the writes before err are kept: 4xx business and HTTP errors
 // commit, server errors and errors raised by SQL statements roll back.
 func commitsOnError(err error) bool {
@@ -34,7 +45,7 @@ func commitsOnError(err error) bool {
 // is written.
 func transactional(db Transactor, policies map[string]Policy) gen.StrictMiddlewareFunc {
 	return func(f gen.StrictHandlerFunc, operationID string) gen.StrictHandlerFunc {
-		if !policies[operationID].Tx || db == nil {
+		if !policyOf(policies, operationID).Tx || db == nil {
 			return f
 		}
 

@@ -1445,6 +1445,36 @@ func (e WrongQuestionStatus) Valid() bool {
 	}
 }
 
+// Defines values for UploadFileParamsPurpose.
+const (
+	Audio        UploadFileParamsPurpose = "audio"
+	ContentImage UploadFileParamsPurpose = "content-image"
+	Export       UploadFileParamsPurpose = "export"
+	Image        UploadFileParamsPurpose = "image"
+	Import       UploadFileParamsPurpose = "import"
+	PrivateImage UploadFileParamsPurpose = "private-image"
+)
+
+// Valid indicates whether the value is a known member of the UploadFileParamsPurpose enum.
+func (e UploadFileParamsPurpose) Valid() bool {
+	switch e {
+	case Audio:
+		return true
+	case ContentImage:
+		return true
+	case Export:
+		return true
+	case Image:
+		return true
+	case Import:
+		return true
+	case PrivateImage:
+		return true
+	default:
+		return false
+	}
+}
+
 // Address defines model for Address.
 type Address struct {
 	// Address Example: 建国路88号SOHO现代城
@@ -5568,6 +5598,15 @@ type WrongQuestionStateDto struct {
 // WrongQuestionStatus defines model for WrongQuestionStatus.
 type WrongQuestionStatus string
 
+// UploadFileParams defines parameters for UploadFile.
+type UploadFileParams struct {
+	// Purpose 上传用途，决定允许的文件类型、大小上限与可见性
+	Purpose *UploadFileParamsPurpose `form:"purpose,omitempty" json:"purpose,omitempty"`
+}
+
+// UploadFileParamsPurpose defines parameters for UploadFile.
+type UploadFileParamsPurpose string
+
 // GetUsersParams defines parameters for GetUsers.
 type GetUsersParams struct {
 	Page    *float64 `form:"page,omitempty" json:"page,omitempty"`
@@ -5662,6 +5701,18 @@ type ServerInterface interface {
 	// RevokeMySession 下线指定设备
 	// (DELETE /api/v1/auth/sessions/{id})
 	RevokeMySession(w http.ResponseWriter, r *http.Request, id int32)
+	// UploadFile 上传文件
+	// (POST /api/v1/files/upload)
+	UploadFile(w http.ResponseWriter, r *http.Request, params UploadFileParams)
+	// HealthCheck 完整健康检查（需监控令牌）
+	// (GET /api/v1/health)
+	HealthCheck(w http.ResponseWriter, r *http.Request)
+	// LivenessProbe 存活探针（Kubernetes）
+	// (GET /api/v1/health/live)
+	LivenessProbe(w http.ResponseWriter, r *http.Request)
+	// ReadinessProbe 就绪探针（Kubernetes）
+	// (GET /api/v1/health/ready)
+	ReadinessProbe(w http.ResponseWriter, r *http.Request)
 	// GetUsers 获取用户列表（管理员）
 	// (GET /api/v1/users)
 	GetUsers(w http.ResponseWriter, r *http.Request, params GetUsersParams)
@@ -5782,6 +5833,30 @@ func (_ Unimplemented) RevokeOtherSessions(w http.ResponseWriter, r *http.Reques
 // RevokeMySession 下线指定设备
 // (DELETE /api/v1/auth/sessions/{id})
 func (_ Unimplemented) RevokeMySession(w http.ResponseWriter, r *http.Request, id int32) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UploadFile 上传文件
+// (POST /api/v1/files/upload)
+func (_ Unimplemented) UploadFile(w http.ResponseWriter, r *http.Request, params UploadFileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// HealthCheck 完整健康检查（需监控令牌）
+// (GET /api/v1/health)
+func (_ Unimplemented) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// LivenessProbe 存活探针（Kubernetes）
+// (GET /api/v1/health/live)
+func (_ Unimplemented) LivenessProbe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ReadinessProbe 就绪探针（Kubernetes）
+// (GET /api/v1/health/ready)
+func (_ Unimplemented) ReadinessProbe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6065,6 +6140,81 @@ func (siw *ServerInterfaceWrapper) RevokeMySession(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RevokeMySession(w, r, id)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadFile operation middleware
+func (siw *ServerInterfaceWrapper) UploadFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UploadFileParams
+
+	// ------------- Optional query parameter "purpose" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "purpose", r.URL.Query(), &params.Purpose, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "purpose"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "purpose", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadFile(w, r, params)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// HealthCheck operation middleware
+func (siw *ServerInterfaceWrapper) HealthCheck(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.HealthCheck(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LivenessProbe operation middleware
+func (siw *ServerInterfaceWrapper) LivenessProbe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LivenessProbe(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReadinessProbe operation middleware
+func (siw *ServerInterfaceWrapper) ReadinessProbe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReadinessProbe(w, r)
 	}))
 
 	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
@@ -6403,6 +6553,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/auth/sessions/revoke-others", wrapper.RevokeOtherSessions)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/files/upload", wrapper.UploadFile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/health", wrapper.HealthCheck)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/health/live", wrapper.LivenessProbe)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/health/ready", wrapper.ReadinessProbe)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/users", wrapper.GetUsers)
 	})
 	r.Group(func(r chi.Router) {
@@ -6707,6 +6869,59 @@ func (resp RevokeMySession200Response) VisitRevokeMySessionResponse(w http.Respo
 	return response.WriteData(w, http.StatusOK, resp.Body)
 }
 
+type UploadFileRequestObject struct {
+	Params UploadFileParams
+}
+
+type UploadFileResponseObject interface {
+	VisitUploadFileResponse(w http.ResponseWriter) error
+}
+
+type UploadFile201JSONResponse view.Upload
+
+func (resp UploadFile201JSONResponse) VisitUploadFileResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusCreated, view.Upload(resp))
+}
+
+type HealthCheckRequestObject struct {
+}
+
+type HealthCheckResponseObject interface {
+	VisitHealthCheckResponse(w http.ResponseWriter) error
+}
+
+type HealthCheck200JSONResponse view.Health
+
+func (resp HealthCheck200JSONResponse) VisitHealthCheckResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, view.Health(resp))
+}
+
+type LivenessProbeRequestObject struct {
+}
+
+type LivenessProbeResponseObject interface {
+	VisitLivenessProbeResponse(w http.ResponseWriter) error
+}
+
+type LivenessProbe200JSONResponse view.Health
+
+func (resp LivenessProbe200JSONResponse) VisitLivenessProbeResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, view.Health(resp))
+}
+
+type ReadinessProbeRequestObject struct {
+}
+
+type ReadinessProbeResponseObject interface {
+	VisitReadinessProbeResponse(w http.ResponseWriter) error
+}
+
+type ReadinessProbe200JSONResponse view.Health
+
+func (resp ReadinessProbe200JSONResponse) VisitReadinessProbeResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, view.Health(resp))
+}
+
 type GetUsersRequestObject struct {
 	Params GetUsersParams
 }
@@ -6836,6 +7051,18 @@ type StrictServerInterface interface {
 	// RevokeMySession 下线指定设备
 	// (DELETE /api/v1/auth/sessions/{id})
 	RevokeMySession(ctx context.Context, request RevokeMySessionRequestObject) (RevokeMySessionResponseObject, error)
+	// UploadFile 上传文件
+	// (POST /api/v1/files/upload)
+	UploadFile(ctx context.Context, request UploadFileRequestObject) (UploadFileResponseObject, error)
+	// HealthCheck 完整健康检查（需监控令牌）
+	// (GET /api/v1/health)
+	HealthCheck(ctx context.Context, request HealthCheckRequestObject) (HealthCheckResponseObject, error)
+	// LivenessProbe 存活探针（Kubernetes）
+	// (GET /api/v1/health/live)
+	LivenessProbe(ctx context.Context, request LivenessProbeRequestObject) (LivenessProbeResponseObject, error)
+	// ReadinessProbe 就绪探针（Kubernetes）
+	// (GET /api/v1/health/ready)
+	ReadinessProbe(ctx context.Context, request ReadinessProbeRequestObject) (ReadinessProbeResponseObject, error)
 	// GetUsers 获取用户列表（管理员）
 	// (GET /api/v1/users)
 	GetUsers(ctx context.Context, request GetUsersRequestObject) (GetUsersResponseObject, error)
@@ -7358,6 +7585,104 @@ func (sh *strictHandler) RevokeMySession(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RevokeMySessionResponseObject); ok {
 		if err := validResponse.VisitRevokeMySessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadFile operation middleware
+func (sh *strictHandler) UploadFile(w http.ResponseWriter, r *http.Request, params UploadFileParams) {
+	var request UploadFileRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadFile(ctx, request.(UploadFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadFileResponseObject); ok {
+		if err := validResponse.VisitUploadFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// HealthCheck operation middleware
+func (sh *strictHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	var request HealthCheckRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.HealthCheck(ctx, request.(HealthCheckRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "HealthCheck")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(HealthCheckResponseObject); ok {
+		if err := validResponse.VisitHealthCheckResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LivenessProbe operation middleware
+func (sh *strictHandler) LivenessProbe(w http.ResponseWriter, r *http.Request) {
+	var request LivenessProbeRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LivenessProbe(ctx, request.(LivenessProbeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LivenessProbe")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LivenessProbeResponseObject); ok {
+		if err := validResponse.VisitLivenessProbeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReadinessProbe operation middleware
+func (sh *strictHandler) ReadinessProbe(w http.ResponseWriter, r *http.Request) {
+	var request ReadinessProbeRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReadinessProbe(ctx, request.(ReadinessProbeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReadinessProbe")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReadinessProbeResponseObject); ok {
+		if err := validResponse.VisitReadinessProbeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -2,6 +2,7 @@ package logger_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"testing"
@@ -60,4 +61,33 @@ func TestNewPretty(t *testing.T) {
 
 	logger.New(&buf, "debug", true).Debug("hello")
 	assert.Contains(t, buf.String(), "msg=hello")
+}
+
+type ctxKey struct{}
+
+func TestContextAttributesAreAdded(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	log := logger.New(&buf, "info", false, func(ctx context.Context) []slog.Attr {
+		if v, ok := ctx.Value(ctxKey{}).(string); ok {
+			return []slog.Attr{slog.String("request_id", v)}
+		}
+
+		return nil
+	})
+
+	log.With("a", 1).InfoContext(context.WithValue(t.Context(), ctxKey{}, "r-1"), "hello")
+	log.Info("plain")
+
+	lines := bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n"))
+	require.Len(t, lines, 2)
+
+	var first, second map[string]any
+	require.NoError(t, json.Unmarshal(lines[0], &first))
+	require.NoError(t, json.Unmarshal(lines[1], &second))
+	assert.Equal(t, "r-1", first["request_id"])
+	assert.InDelta(t, 1, first["a"], 0)
+	assert.NotContains(t, second, "request_id")
 }
