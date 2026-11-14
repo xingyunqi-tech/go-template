@@ -2,8 +2,10 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
@@ -17,10 +19,17 @@ const (
 	EnvProduction  = "production"
 )
 
+// ErrProduction reports settings that production refuses.
+var ErrProduction = errors.New("invalid production settings")
+
 // Config is the whole application configuration.
 type Config struct {
-	App App
-	Log Log
+	App      App
+	Log      Log
+	Database Database
+	Redis    Redis
+	Auth     Auth
+	Seed     Seed
 }
 
 // App holds settings shared with nestjs-template under the same variable names.
@@ -31,6 +40,8 @@ type App struct {
 	APIPrefix        string        `env:"API_PREFIX"            envDefault:"api"         validate:"required,excludesall=/"`
 	FallbackLanguage string        `env:"APP_FALLBACK_LANGUAGE" envDefault:"en"          validate:"oneof=en zh"`
 	FrontendDomain   string        `env:"FRONTEND_DOMAIN"`
+	BackendDomain    string        `env:"BACKEND_DOMAIN"        envDefault:"http://localhost"`
+	TrustProxy       int           `env:"TRUST_PROXY"           envDefault:"0"           validate:"min=0"`
 	SwaggerEnabled   OptionalBool  `env:"SWAGGER_ENABLED"`
 	ShutdownTimeout  time.Duration `env:"SHUTDOWN_TIMEOUT"      envDefault:"30s"         validate:"gt=0"`
 }
@@ -83,6 +94,10 @@ func Load() (*Config, error) {
 
 	if err := validate.Struct(&cfg); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
+	}
+
+	if problems := cfg.productionProblems(); len(problems) > 0 {
+		return nil, fmt.Errorf("config: %w: %s", ErrProduction, strings.Join(problems, "; "))
 	}
 
 	return &cfg, nil

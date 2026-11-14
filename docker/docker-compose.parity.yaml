@@ -1,0 +1,40 @@
+# parity：本服务以开发配置启动（与 nestjs 参照服务相同的 APP_NAME、TRUST_PROXY），宿主只暴露 api
+#
+# 用法：make test-parity
+
+services:
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  migrate:
+    environment:
+      REDIS_ENABLED: 'true'
+      REDIS_HOST: redis
+
+  seed:
+    image: go-template:local
+    pull_policy: never
+    env_file:
+      - ../.env.example
+    command: ['seed']
+    restart: 'no'
+    environment:
+      DATABASE_HOST: postgres
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    ports: !override
+      - '127.0.0.1:${PARITY_PORT:-3000}:3000'
+    environment:
+      APP_NAME: ${PARITY_APP_NAME:-app}
+      TRUST_PROXY: '1'
+      THROTTLE_ENABLED: ${PARITY_THROTTLE_ENABLED:-false}
+      LOG_LEVEL: warn
+    depends_on:
+      seed:
+        condition: service_completed_successfully

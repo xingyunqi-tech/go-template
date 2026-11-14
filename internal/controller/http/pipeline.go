@@ -110,7 +110,7 @@ func (p *pipeline) middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		prepared, err := p.prepare(r, op, match)
+		prepared, err := p.prepare(r, op, match) //nolint:contextcheck // r carries the request context
 		if err != nil {
 			p.errs.write(w, r, err)
 
@@ -139,19 +139,21 @@ func (p *pipeline) prepare(r *http.Request, op *operation, match *routeMatch) (*
 		}
 	}
 
+	validated := &reqctx.Validated{Body: validatorx.Undefined{}, Query: validatorx.Undefined{}}
+
 	if op.bodyDTO != "" {
-		if err := p.validateBody(r, op.bodyDTO); err != nil {
+		if validated.Body, err = p.validateBody(r, op.bodyDTO); err != nil {
 			return r, err
 		}
 	}
 
 	if policy.Query != "" {
-		if err := p.validateQuery(r, policy.Query); err != nil {
+		if validated.Query, err = p.validateQuery(r, policy.Query); err != nil {
 			return r, err
 		}
 	}
 
-	return r, nil
+	return r.WithContext(reqctx.WithValidated(r.Context(), validated)), nil
 }
 
 // decodeParams decodes path parameters like Express does while routing.
@@ -196,10 +198,10 @@ func (p *pipeline) guard(r *http.Request, policy *Policy) (*http.Request, error)
 	return r, nil
 }
 
-func (p *pipeline) validateBody(r *http.Request, dto string) error {
+func (p *pipeline) validateBody(r *http.Request, dto string) (validatorx.Value, error) {
 	value, err := p.validator.Run(dto, "body", reqctx.Body(r.Context()))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	body, _ := validatorx.Stringify(value)
@@ -207,18 +209,18 @@ func (p *pipeline) validateBody(r *http.Request, dto string) error {
 	r.ContentLength = int64(len(body))
 	r.Header.Set("Content-Type", _jsonMediaType)
 
-	return nil
+	return value, nil
 }
 
-func (p *pipeline) validateQuery(r *http.Request, dto string) error {
+func (p *pipeline) validateQuery(r *http.Request, dto string) (validatorx.Value, error) {
 	value, err := p.validator.Run(dto, "query", parseQueryString(r.URL.RawQuery))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	r.URL.RawQuery = encodeQuery(value)
 
-	return nil
+	return value, nil
 }
 
 // validID is nestjs ParseIdPipe: digits only, 1 <= id <= 2147483647.

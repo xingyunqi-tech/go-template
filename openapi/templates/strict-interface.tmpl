@@ -65,7 +65,7 @@
                     {{end -}}
                 {{end -}}
                 {{if .IsJSON -}}
-                    return response.WriteData(w, {{$status}}, resp{{if $hasBodyVar}}.Body{{end}})
+                    return response.WriteData(w, {{$status}}, {{if $hasBodyVar}}resp.Body{{else}}{{.Schema.TypeDecl}}(resp){{end}})
                 {{else if eq .NameTag "Multipart" -}}
                     writer := multipart.NewWriter(w)
                     w.Header().Set("Content-Type", writer.FormDataContentType())

@@ -29,6 +29,8 @@ type Options struct {
 	FrontendDomain string
 	Guards         map[Auth]Guard
 	Permission     PermissionGuard
+	Transactor     Transactor
+	TrustProxy     int
 }
 
 // Router is the root handler: the global middleware chain, Express-style path matching and the
@@ -57,7 +59,8 @@ func NewRouter(server gen.StrictServerInterface, opts *Options) (*Router, error)
 	mux.NotFound(notFound)
 	mux.MethodNotAllowed(notFound)
 
-	strict := gen.NewStrictHandlerWithOptions(server, nil, gen.StrictHTTPServerOptions{
+	middlewares := []gen.StrictMiddlewareFunc{transactional(opts.Transactor, Policies())}
+	strict := gen.NewStrictHandlerWithOptions(server, middlewares, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, _ error) {
 			errs.write(w, r, httperr.Status(http.StatusBadRequest))
 		},
@@ -89,6 +92,7 @@ func NewRouter(server gen.StrictServerInterface, opts *Options) (*Router, error)
 	handler = pipe.middleware(handler)
 	handler = matcher.middleware(handler)
 	handler = jsonBody(errs)(handler)
+	handler = clientInfo(opts.TrustProxy)(handler)
 	handler = secureHeaders(handler)
 	handler = accessLog(opts.Log, errs)(handler)
 	handler = cors(newCORSOptions(opts.Production, opts.FrontendDomain))(handler)

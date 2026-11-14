@@ -4,13 +4,74 @@ package reqctx
 import (
 	"context"
 
+	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
 	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
 )
 
 type (
 	requestIDKey struct{}
 	bodyKey      struct{}
+	validKey     struct{}
+	principalKey struct{}
+	refreshKey   struct{}
+	clientKey    struct{}
 )
+
+// Validated is the transformed request body and query after ValidationPipe.
+type Validated struct {
+	Body  validatorx.Value
+	Query validatorx.Value
+}
+
+// WithValidated stores the validated request values.
+func WithValidated(ctx context.Context, v *Validated) context.Context {
+	return context.WithValue(ctx, validKey{}, v)
+}
+
+// ValidatedValues returns the validated request values, or empty ones.
+func ValidatedValues(ctx context.Context) *Validated {
+	if v, ok := ctx.Value(validKey{}).(*Validated); ok {
+		return v
+	}
+
+	return &Validated{Body: validatorx.Undefined{}, Query: validatorx.Undefined{}}
+}
+
+// WithPrincipal stores the access-token caller.
+func WithPrincipal(ctx context.Context, p *auth.Principal) context.Context {
+	return context.WithValue(ctx, principalKey{}, p)
+}
+
+// Principal returns the access-token caller, or nil.
+func Principal(ctx context.Context) *auth.Principal {
+	p, _ := ctx.Value(principalKey{}).(*auth.Principal)
+
+	return p
+}
+
+// WithRefresh stores the refresh-token caller.
+func WithRefresh(ctx context.Context, p *auth.RefreshPrincipal) context.Context {
+	return context.WithValue(ctx, refreshKey{}, p)
+}
+
+// Refresh returns the refresh-token caller, or nil.
+func Refresh(ctx context.Context) *auth.RefreshPrincipal {
+	p, _ := ctx.Value(refreshKey{}).(*auth.RefreshPrincipal)
+
+	return p
+}
+
+// WithClient stores the client user agent and IP.
+func WithClient(ctx context.Context, c auth.Client) context.Context {
+	return context.WithValue(ctx, clientKey{}, c)
+}
+
+// Client returns the client user agent and IP.
+func Client(ctx context.Context) auth.Client {
+	c, _ := ctx.Value(clientKey{}).(auth.Client)
+
+	return c
+}
 
 // WithRequestID stores the request id.
 func WithRequestID(ctx context.Context, id string) context.Context {

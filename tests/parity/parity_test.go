@@ -67,12 +67,46 @@ type pair struct {
 type requestOptions struct {
 	headers map[string]string
 	body    []byte
+	// sides holds per-service headers and targets: index 0 is Go, 1 nestjs.
+	sides [2]side
+}
+
+type side struct {
+	headers map[string]string
+	target  string
 }
 
 type option func(*requestOptions)
 
 func withHeader(name, value string) option {
 	return func(o *requestOptions) { o.headers[name] = value }
+}
+
+// withTokens authenticates each side with its own access token.
+func withTokens(tokens [2]string) option {
+	return func(o *requestOptions) {
+		for i := range o.sides {
+			o.sides[i].headers["Authorization"] = "Bearer " + tokens[i]
+		}
+	}
+}
+
+// withTargets sends each side to its own path.
+func withTargets(targets [2]string) option {
+	return func(o *requestOptions) {
+		for i := range o.sides {
+			o.sides[i].target = targets[i]
+		}
+	}
+}
+
+func withJSON(t *testing.T, v any) option {
+	t.Helper()
+
+	raw, err := json.Marshal(v)
+	require.NoError(t, err)
+
+	return withBody("application/json", raw)
 }
 
 func withBody(contentType string, body []byte) option {
@@ -82,7 +116,7 @@ func withBody(contentType string, body []byte) option {
 	}
 }
 
-func send(t *testing.T, base, method, target string, opts *requestOptions) *response {
+func send(t *testing.T, base, method, target string, opts *requestOptions, s side) *response {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(t.Context(), _requestTimeout)
@@ -93,6 +127,10 @@ func send(t *testing.T, base, method, target string, opts *requestOptions) *resp
 		body = bytes.NewReader(opts.body)
 	}
 
+	if s.target != "" {
+		target = s.target
+	}
+
 	req, err := http.NewRequestWithContext(ctx, method, base+target, body)
 	require.NoError(t, err)
 
@@ -100,6 +138,10 @@ func send(t *testing.T, base, method, target string, opts *requestOptions) *resp
 	req.Header.Set("X-Forwarded-For", fmt.Sprintf("10.%d.%d.%d", n>>16, (n>>8)&0xFF, n&0xFF))
 
 	for k, v := range opts.headers {
+		req.Header.Set(k, v)
+	}
+
+	for k, v := range s.headers {
 		req.Header.Set(k, v)
 	}
 
@@ -119,14 +161,17 @@ func send(t *testing.T, base, method, target string, opts *requestOptions) *resp
 func do(t *testing.T, method, target string, options ...option) pair {
 	t.Helper()
 
-	opts := &requestOptions{headers: map[string]string{}, body: nil}
+	opts := &requestOptions{
+		headers: map[string]string{}, body: nil,
+		sides: [2]side{{headers: map[string]string{}, target: ""}, {headers: map[string]string{}, target: ""}},
+	}
 	for _, o := range options {
 		o(opts)
 	}
 
 	p := pair{
-		Go:     send(t, baseURL("PARITY_GO_URL", "http://localhost:3000"), method, target, opts),
-		Nestjs: send(t, baseURL("PARITY_NESTJS_URL", "http://localhost:3001"), method, target, opts),
+		Go:     send(t, baseURL("PARITY_GO_URL", "http://localhost:3000"), method, target, opts, opts.sides[0]),
+		Nestjs: send(t, baseURL("PARITY_NESTJS_URL", "http://localhost:3001"), method, target, opts, opts.sides[1]),
 	}
 
 	for _, r := range []*response{p.Go, p.Nestjs} {

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -27,6 +28,8 @@ const usage = `Usage: app <command>
 
 Commands:
   serve     run the HTTP API server
+  migrate   apply the database migrations
+  seed      insert reference data and seed accounts
   version   print the build version
 `
 
@@ -45,7 +48,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	switch fs.Arg(0) {
 	case "serve":
-		return serve(stderr)
+		return command(stderr, "serve", app.Serve)
+	case "migrate":
+		return command(stderr, "migrate", app.Migrate)
+	case "seed":
+		return command(stderr, "seed", app.Seed)
 	case "version":
 		_, _ = fmt.Fprintln(stdout, version)
 
@@ -57,7 +64,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-func serve(stderr io.Writer) int {
+func command(stderr io.Writer, name string, run func(context.Context, *config.Config, *slog.Logger) error) int {
 	cfg, err := config.Load()
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
@@ -70,8 +77,8 @@ func serve(stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := app.Serve(ctx, cfg, log); err != nil {
-		log.Error("serve failed", "error", err)
+	if err := run(ctx, cfg, log); err != nil {
+		log.ErrorContext(ctx, "command failed", "command", name, "error", err)
 
 		return exitError
 	}

@@ -3,10 +3,18 @@ extend-exclude = [
   "openapi/*.json",
   "tests/contract/fixtures/",
   "db/nestjs-schema.sql",
+  "migrations/*.sql",
+  "seeds/*.json",
   "internal/controller/http/gen/",
   "go.mod",
   "go.sum",
   "tools/go.mod",
   "tools/go.sum",
   "LICENSE",
+]
+
+[default]
+extend-ignore-re = [
+  "\\$argon2id\\$[^\"]+",
+  "\\$2[aby]\\$\\d\\d\\$[./A-Za-z0-9]+",
 ]

@@ -2,3 +2,23 @@
 operations:
   - getAppInfo
   - simpleHealthCheck
+  - loginWithEmail
+  - registerWithEmail
+  - confirmEmail
+  - confirmNewEmail
+  - forgotPassword
+  - resetPassword
+  - getCurrentUser
+  - updateCurrentUser
+  - deleteCurrentUser
+  - refreshToken
+  - logout
+  - changePassword
+  - getMySessions
+  - revokeMySession
+  - revokeOtherSessions
+  - createUser
+  - getUsers
+  - getUser
+  - updateUser
+  - deleteUser

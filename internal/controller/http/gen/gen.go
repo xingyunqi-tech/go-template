@@ -5,10 +5,12 @@ package gen
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/response"
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view"
@@ -519,30 +521,6 @@ func (e CreateShareDtoTargetType) Valid() bool {
 	}
 }
 
-// Defines values for CreateUserDtoProvider.
-const (
-	CreateUserDtoProviderAlipay CreateUserDtoProvider = "alipay"
-	CreateUserDtoProviderEmail  CreateUserDtoProvider = "email"
-	CreateUserDtoProviderPhone  CreateUserDtoProvider = "phone"
-	CreateUserDtoProviderWechat CreateUserDtoProvider = "wechat"
-)
-
-// Valid indicates whether the value is a known member of the CreateUserDtoProvider enum.
-func (e CreateUserDtoProvider) Valid() bool {
-	switch e {
-	case CreateUserDtoProviderAlipay:
-		return true
-	case CreateUserDtoProviderEmail:
-		return true
-	case CreateUserDtoProviderPhone:
-		return true
-	case CreateUserDtoProviderWechat:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ErrataStatus.
 const (
 	ErrataStatusDONE    ErrataStatus = "DONE"
@@ -728,13 +706,13 @@ func (e FileTypeVisibility) Valid() bool {
 
 // Defines values for GameLoginDtoPlatform.
 const (
-	GameLoginDtoPlatformWechat GameLoginDtoPlatform = "wechat"
+	Wechat GameLoginDtoPlatform = "wechat"
 )
 
 // Valid indicates whether the value is a known member of the GameLoginDtoPlatform enum.
 func (e GameLoginDtoPlatform) Valid() bool {
 	switch e {
-	case GameLoginDtoPlatformWechat:
+	case Wechat:
 		return true
 	default:
 		return false
@@ -1422,30 +1400,6 @@ func (e UpdateQuestionReportDtoStatus) Valid() bool {
 	case UpdateQuestionReportDtoStatusProcessing:
 		return true
 	case UpdateQuestionReportDtoStatusResolved:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for UpdateUserDtoProvider.
-const (
-	UpdateUserDtoProviderAlipay UpdateUserDtoProvider = "alipay"
-	UpdateUserDtoProviderEmail  UpdateUserDtoProvider = "email"
-	UpdateUserDtoProviderPhone  UpdateUserDtoProvider = "phone"
-	UpdateUserDtoProviderWechat UpdateUserDtoProvider = "wechat"
-)
-
-// Valid indicates whether the value is a known member of the UpdateUserDtoProvider enum.
-func (e UpdateUserDtoProvider) Valid() bool {
-	switch e {
-	case UpdateUserDtoProviderAlipay:
-		return true
-	case UpdateUserDtoProviderEmail:
-		return true
-	case UpdateUserDtoProviderPhone:
-		return true
-	case UpdateUserDtoProviderWechat:
 		return true
 	default:
 		return false
@@ -2144,17 +2098,7 @@ type AuthConfirmEmailDto struct {
 }
 
 // AuthDeleteAccountDto defines model for AuthDeleteAccountDto.
-type AuthDeleteAccountDto struct {
-	// OldPassword MD5 encrypted current password, required when the user has a password
-	//
-	// Example: 5f4dcc3b5aa765d61d8327deb882cf99
-	OldPassword *string `json:"oldPassword,omitempty"`
-
-	// SmsCode verify_identity SMS code sent to the bound phone, required when the user has no password
-	//
-	// Example: 123456
-	SmsCode *string `json:"smsCode,omitempty"`
-}
+type AuthDeleteAccountDto = any
 
 // AuthEmailLoginDto defines model for AuthEmailLoginDto.
 type AuthEmailLoginDto struct {
@@ -2231,21 +2175,7 @@ type AuthPhoneSmsLoginDto struct {
 }
 
 // AuthRegisterLoginDto defines model for AuthRegisterLoginDto.
-type AuthRegisterLoginDto struct {
-	// Email Example: test1@example.com
-	Email string `json:"email"`
-
-	// FirstName Example: John
-	FirstName string `json:"firstName"`
-
-	// LastName Example: Doe
-	LastName string `json:"lastName"`
-
-	// Password MD5 encrypted password
-	//
-	// Example: 5f4dcc3b5aa765d61d8327deb882cf99
-	Password string `json:"password"`
-}
+type AuthRegisterLoginDto = any
 
 // AuthResetPasswordDto defines model for AuthResetPasswordDto.
 type AuthResetPasswordDto struct {
@@ -2274,43 +2204,7 @@ type AuthSendCodeDto struct {
 type AuthSendCodeDtoType string
 
 // AuthUpdateDto defines model for AuthUpdateDto.
-type AuthUpdateDto struct {
-	// Birthday Example: 1990-01-01
-	Birthday *string `json:"birthday,omitempty"`
-
-	// Email Example: new.email@example.com
-	Email *string `json:"email,omitempty"`
-
-	// FirstName Example: John
-	FirstName *string `json:"firstName,omitempty"`
-
-	// Gender 0: unknown, 1: male, 2: female
-	//
-	// Example: 0
-	Gender *float64 `json:"gender,omitempty"`
-
-	// LastName Example: Doe
-	LastName *string `json:"lastName,omitempty"`
-
-	// Nickname Example: Johnny
-	Nickname *string `json:"nickname,omitempty"`
-
-	// OldPassword MD5 encrypted old password, required when changing password, or changing email for users with a password
-	//
-	// Example: 5f4dcc3b5aa765d61d8327deb882cf99
-	OldPassword *string `json:"oldPassword,omitempty"`
-
-	// Password MD5 encrypted new password
-	//
-	// Example: 5f4dcc3b5aa765d61d8327deb882cf99
-	Password *string  `json:"password,omitempty"`
-	Photo    *FileDto `json:"photo,omitempty"`
-
-	// SmsCode verify_identity SMS code, required when changing email for users without a password
-	//
-	// Example: 123456
-	SmsCode *string `json:"smsCode,omitempty"`
-}
+type AuthUpdateDto = any
 
 // AuthWechatLoginDto defines model for AuthWechatLoginDto.
 type AuthWechatLoginDto struct {
@@ -2926,49 +2820,7 @@ type CreateSubjectDto struct {
 }
 
 // CreateUserDto defines model for CreateUserDto.
-type CreateUserDto struct {
-	// AlipayOpenId Example: 074a1CcTG1LelxKe4xQC0zgNdId0nxi95b5lsNpazWYoCo5
-	AlipayOpenId *string `json:"alipayOpenId,omitempty"`
-
-	// Birthday Example: 1990-01-01
-	Birthday *string `json:"birthday,omitempty"`
-
-	// Email Example: test1@example.com
-	Email *string `json:"email,omitempty"`
-
-	// FirstName Example: John
-	FirstName *string `json:"firstName,omitempty"`
-
-	// Gender 0: unknown, 1: male, 2: female
-	//
-	// Example: 0
-	Gender *float64 `json:"gender,omitempty"`
-
-	// LastName Example: Doe
-	LastName *string `json:"lastName,omitempty"`
-
-	// Nickname Example: Johnny
-	Nickname *string `json:"nickname,omitempty"`
-
-	// Password 前端 MD5 后的密码（32 位十六进制）
-	Password *string `json:"password,omitempty"`
-
-	// Phone Example: 13800138000
-	Phone    *string                `json:"phone,omitempty"`
-	Photo    *FileDto               `json:"photo,omitempty"`
-	Provider *CreateUserDtoProvider `json:"provider,omitempty"`
-	Role     *RoleDto               `json:"role,omitempty"`
-	Status   *StatusDto             `json:"status,omitempty"`
-
-	// WechatOpenId Example: oXXXX
-	WechatOpenId *string `json:"wechatOpenId,omitempty"`
-
-	// WechatUnionId Example: uXXXX
-	WechatUnionId *string `json:"wechatUnionId,omitempty"`
-}
-
-// CreateUserDtoProvider defines model for CreateUserDto.Provider.
-type CreateUserDtoProvider string
+type CreateUserDto = any
 
 // CreateWechatAppPaymentDto defines model for CreateWechatAppPaymentDto.
 type CreateWechatAppPaymentDto struct {
@@ -3424,12 +3276,7 @@ type ImportRowErrorDto struct {
 type ImportRowErrorDtoSheet string
 
 // InfinityPaginationUserResponseDto defines model for InfinityPaginationUserResponseDto.
-type InfinityPaginationUserResponseDto struct {
-	Data []User `json:"data"`
-
-	// HasNextPage Example: true
-	HasNextPage bool `json:"hasNextPage"`
-}
+type InfinityPaginationUserResponseDto = view.UserPage
 
 // KnowledgePoint defines model for KnowledgePoint.
 type KnowledgePoint struct {
@@ -3511,12 +3358,7 @@ type KnowledgePointTreeNodeDto struct {
 type KnowledgePointUpdateMode string
 
 // LoginResponseDto defines model for LoginResponseDto.
-type LoginResponseDto struct {
-	RefreshToken string  `json:"refreshToken"`
-	Token        string  `json:"token"`
-	TokenExpires float64 `json:"tokenExpires"`
-	User         User    `json:"user"`
-}
+type LoginResponseDto = view.Login
 
 // MigrateKnowledgePointQuestionsDto defines model for MigrateKnowledgePointQuestionsDto.
 type MigrateKnowledgePointQuestionsDto struct {
@@ -4894,11 +4736,7 @@ type QueuesOverviewDto struct {
 }
 
 // RefreshResponseDto defines model for RefreshResponseDto.
-type RefreshResponseDto struct {
-	RefreshToken string  `json:"refreshToken"`
-	Token        string  `json:"token"`
-	TokenExpires float64 `json:"tokenExpires"`
-}
+type RefreshResponseDto = view.Refresh
 
 // RefundDto defines model for RefundDto.
 type RefundDto struct {
@@ -5094,22 +4932,7 @@ type SessionQuestionsDto struct {
 }
 
 // SessionResponseDto defines model for SessionResponseDto.
-type SessionResponseDto struct {
-	CreatedAt jsontime.Time `json:"createdAt"`
-
-	// Current 是否为发起本次请求的会话
-	Current bool `json:"current"`
-
-	// Id Example: 12
-	Id float64 `json:"id"`
-
-	// Ip Example: 203.0.113.7
-	Ip           *string        `json:"ip"`
-	LastActiveAt *jsontime.Time `json:"lastActiveAt"`
-
-	// UserAgent Example: Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)
-	UserAgent *string `json:"userAgent"`
-}
+type SessionResponseDto = view.Session
 
 // SetAiMessageFeedbackDto defines model for SetAiMessageFeedbackDto.
 type SetAiMessageFeedbackDto struct {
@@ -5505,49 +5328,7 @@ type UpdateSubjectDto struct {
 }
 
 // UpdateUserDto defines model for UpdateUserDto.
-type UpdateUserDto struct {
-	// AlipayOpenId Example: 074a1CcTG1LelxKe4xQC0zgNdId0nxi95b5lsNpazWYoCo5
-	AlipayOpenId *string `json:"alipayOpenId,omitempty"`
-
-	// Birthday Example: 1990-01-01
-	Birthday *string `json:"birthday,omitempty"`
-
-	// Email Example: test1@example.com
-	Email *string `json:"email,omitempty"`
-
-	// FirstName Example: John
-	FirstName *string `json:"firstName,omitempty"`
-
-	// Gender 0: unknown, 1: male, 2: female
-	//
-	// Example: 0
-	Gender *float64 `json:"gender,omitempty"`
-
-	// LastName Example: Doe
-	LastName *string `json:"lastName,omitempty"`
-
-	// Nickname Example: Johnny
-	Nickname *string `json:"nickname,omitempty"`
-
-	// Password 前端 MD5 后的密码（32 位十六进制）
-	Password *string `json:"password,omitempty"`
-
-	// Phone Example: 13800138000
-	Phone    *string                `json:"phone,omitempty"`
-	Photo    *FileDto               `json:"photo,omitempty"`
-	Provider *UpdateUserDtoProvider `json:"provider,omitempty"`
-	Role     *RoleDto               `json:"role,omitempty"`
-	Status   *StatusDto             `json:"status,omitempty"`
-
-	// WechatOpenId Example: oXXXX
-	WechatOpenId *string `json:"wechatOpenId,omitempty"`
-
-	// WechatUnionId Example: uXXXX
-	WechatUnionId *string `json:"wechatUnionId,omitempty"`
-}
-
-// UpdateUserDtoProvider defines model for UpdateUserDto.Provider.
-type UpdateUserDtoProvider string
+type UpdateUserDto = any
 
 // UpsertConfigDto defines model for UpsertConfigDto.
 type UpsertConfigDto struct {
@@ -5567,55 +5348,7 @@ type UpsertExamProfileDto struct {
 }
 
 // User defines model for User.
-type User struct {
-	// AlipayOpenId Alipay OpenID
-	//
-	// Example: 074a1CcTG1LelxKe4xQC0zgNdId0nxi95b5lsNpazWYoCo5
-	AlipayOpenId string `json:"alipayOpenId"`
-
-	// Birthday Example: 1990-01-01
-	Birthday  string        `json:"birthday"`
-	CreatedAt jsontime.Time `json:"createdAt"`
-	DeletedAt jsontime.Time `json:"deletedAt"`
-
-	// Email Example: john.doe@example.com
-	Email string `json:"email"`
-
-	// FirstName Example: John
-	FirstName string `json:"firstName"`
-
-	// Gender 0: unknown, 1: male, 2: female
-	//
-	// Example: 0
-	Gender float64 `json:"gender"`
-	Id     float64 `json:"id"`
-
-	// LastName Example: Doe
-	LastName string `json:"lastName"`
-
-	// Nickname Example: Johnny
-	Nickname string `json:"nickname"`
-
-	// Phone Example: 13800138000
-	Phone string   `json:"phone"`
-	Photo FileType `json:"photo"`
-
-	// Provider Example: email
-	Provider  string        `json:"provider"`
-	Role      Role          `json:"role"`
-	Status    Status        `json:"status"`
-	UpdatedAt jsontime.Time `json:"updatedAt"`
-
-	// WechatOpenId WeChat OpenID
-	//
-	// Example: oXXXX
-	WechatOpenId string `json:"wechatOpenId"`
-
-	// WechatUnionId WeChat UnionID
-	//
-	// Example: uXXXX
-	WechatUnionId string `json:"wechatUnionId"`
-}
+type User = view.User
 
 // UserExamProfile defines model for UserExamProfile.
 type UserExamProfile struct {
@@ -5835,6 +5568,47 @@ type WrongQuestionStateDto struct {
 // WrongQuestionStatus defines model for WrongQuestionStatus.
 type WrongQuestionStatus string
 
+// GetUsersParams defines parameters for GetUsers.
+type GetUsersParams struct {
+	Page    *float64 `form:"page,omitempty" json:"page,omitempty"`
+	Limit   *float64 `form:"limit,omitempty" json:"limit,omitempty"`
+	Filters *string  `form:"filters,omitempty" json:"filters,omitempty"`
+	Sort    *string  `form:"sort,omitempty" json:"sort,omitempty"`
+}
+
+// ConfirmEmailJSONRequestBody defines body for ConfirmEmail for application/json ContentType.
+type ConfirmEmailJSONRequestBody = AuthConfirmEmailDto
+
+// ConfirmNewEmailJSONRequestBody defines body for ConfirmNewEmail for application/json ContentType.
+type ConfirmNewEmailJSONRequestBody = AuthConfirmEmailDto
+
+// LoginWithEmailJSONRequestBody defines body for LoginWithEmail for application/json ContentType.
+type LoginWithEmailJSONRequestBody = AuthEmailLoginDto
+
+// RegisterWithEmailJSONRequestBody defines body for RegisterWithEmail for application/json ContentType.
+type RegisterWithEmailJSONRequestBody = AuthRegisterLoginDto
+
+// ForgotPasswordJSONRequestBody defines body for ForgotPassword for application/json ContentType.
+type ForgotPasswordJSONRequestBody = AuthForgotPasswordDto
+
+// DeleteCurrentUserJSONRequestBody defines body for DeleteCurrentUser for application/json ContentType.
+type DeleteCurrentUserJSONRequestBody = AuthDeleteAccountDto
+
+// UpdateCurrentUserJSONRequestBody defines body for UpdateCurrentUser for application/json ContentType.
+type UpdateCurrentUserJSONRequestBody = AuthUpdateDto
+
+// ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
+type ChangePasswordJSONRequestBody = AuthChangePasswordDto
+
+// ResetPasswordJSONRequestBody defines body for ResetPassword for application/json ContentType.
+type ResetPasswordJSONRequestBody = AuthResetPasswordDto
+
+// CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
+type CreateUserJSONRequestBody = CreateUserDto
+
+// UpdateUserJSONRequestBody defines body for UpdateUser for application/json ContentType.
+type UpdateUserJSONRequestBody = UpdateUserDto
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// GetAppInfo 获取应用信息
@@ -5843,6 +5617,66 @@ type ServerInterface interface {
 	// SimpleHealthCheck 简单健康检查
 	// (GET /api/health)
 	SimpleHealthCheck(w http.ResponseWriter, r *http.Request)
+	// ConfirmEmail 确认邮箱
+	// (POST /api/v1/auth/email/confirm)
+	ConfirmEmail(w http.ResponseWriter, r *http.Request)
+	// ConfirmNewEmail 确认新邮箱
+	// (POST /api/v1/auth/email/confirm/new)
+	ConfirmNewEmail(w http.ResponseWriter, r *http.Request)
+	// LoginWithEmail 邮箱登录
+	// (POST /api/v1/auth/email/login)
+	LoginWithEmail(w http.ResponseWriter, r *http.Request)
+	// RegisterWithEmail 邮箱注册
+	// (POST /api/v1/auth/email/register)
+	RegisterWithEmail(w http.ResponseWriter, r *http.Request)
+	// ForgotPassword 忘记密码
+	// (POST /api/v1/auth/forgot/password)
+	ForgotPassword(w http.ResponseWriter, r *http.Request)
+	// Logout 退出登录
+	// (POST /api/v1/auth/logout)
+	Logout(w http.ResponseWriter, r *http.Request)
+	// DeleteCurrentUser 删除当前用户账号
+	// (DELETE /api/v1/auth/me)
+	DeleteCurrentUser(w http.ResponseWriter, r *http.Request)
+	// GetCurrentUser 获取当前用户信息
+	// (GET /api/v1/auth/me)
+	GetCurrentUser(w http.ResponseWriter, r *http.Request)
+	// UpdateCurrentUser 更新当前用户信息
+	// (PUT /api/v1/auth/me)
+	UpdateCurrentUser(w http.ResponseWriter, r *http.Request)
+	// ChangePassword 修改密码
+	// (PUT /api/v1/auth/password)
+	ChangePassword(w http.ResponseWriter, r *http.Request)
+	// RefreshToken 刷新令牌
+	// (POST /api/v1/auth/refresh)
+	RefreshToken(w http.ResponseWriter, r *http.Request)
+	// ResetPassword 重置密码
+	// (POST /api/v1/auth/reset/password)
+	ResetPassword(w http.ResponseWriter, r *http.Request)
+	// GetMySessions 当前用户的登录设备
+	// (GET /api/v1/auth/sessions)
+	GetMySessions(w http.ResponseWriter, r *http.Request)
+	// RevokeOtherSessions 下线其他设备
+	// (POST /api/v1/auth/sessions/revoke-others)
+	RevokeOtherSessions(w http.ResponseWriter, r *http.Request)
+	// RevokeMySession 下线指定设备
+	// (DELETE /api/v1/auth/sessions/{id})
+	RevokeMySession(w http.ResponseWriter, r *http.Request, id int32)
+	// GetUsers 获取用户列表（管理员）
+	// (GET /api/v1/users)
+	GetUsers(w http.ResponseWriter, r *http.Request, params GetUsersParams)
+	// CreateUser 创建用户（管理员）
+	// (POST /api/v1/users)
+	CreateUser(w http.ResponseWriter, r *http.Request)
+	// DeleteUser 删除用户（管理员）
+	// (DELETE /api/v1/users/{id})
+	DeleteUser(w http.ResponseWriter, r *http.Request, id int32)
+	// GetUser 获取用户详情（管理员）
+	// (GET /api/v1/users/{id})
+	GetUser(w http.ResponseWriter, r *http.Request, id int32)
+	// UpdateUser 更新用户（管理员）
+	// (PUT /api/v1/users/{id})
+	UpdateUser(w http.ResponseWriter, r *http.Request, id int32)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -5858,6 +5692,126 @@ func (_ Unimplemented) GetAppInfo(w http.ResponseWriter, r *http.Request) {
 // SimpleHealthCheck 简单健康检查
 // (GET /api/health)
 func (_ Unimplemented) SimpleHealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ConfirmEmail 确认邮箱
+// (POST /api/v1/auth/email/confirm)
+func (_ Unimplemented) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ConfirmNewEmail 确认新邮箱
+// (POST /api/v1/auth/email/confirm/new)
+func (_ Unimplemented) ConfirmNewEmail(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// LoginWithEmail 邮箱登录
+// (POST /api/v1/auth/email/login)
+func (_ Unimplemented) LoginWithEmail(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RegisterWithEmail 邮箱注册
+// (POST /api/v1/auth/email/register)
+func (_ Unimplemented) RegisterWithEmail(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ForgotPassword 忘记密码
+// (POST /api/v1/auth/forgot/password)
+func (_ Unimplemented) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Logout 退出登录
+// (POST /api/v1/auth/logout)
+func (_ Unimplemented) Logout(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteCurrentUser 删除当前用户账号
+// (DELETE /api/v1/auth/me)
+func (_ Unimplemented) DeleteCurrentUser(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetCurrentUser 获取当前用户信息
+// (GET /api/v1/auth/me)
+func (_ Unimplemented) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateCurrentUser 更新当前用户信息
+// (PUT /api/v1/auth/me)
+func (_ Unimplemented) UpdateCurrentUser(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ChangePassword 修改密码
+// (PUT /api/v1/auth/password)
+func (_ Unimplemented) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RefreshToken 刷新令牌
+// (POST /api/v1/auth/refresh)
+func (_ Unimplemented) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ResetPassword 重置密码
+// (POST /api/v1/auth/reset/password)
+func (_ Unimplemented) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMySessions 当前用户的登录设备
+// (GET /api/v1/auth/sessions)
+func (_ Unimplemented) GetMySessions(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RevokeOtherSessions 下线其他设备
+// (POST /api/v1/auth/sessions/revoke-others)
+func (_ Unimplemented) RevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RevokeMySession 下线指定设备
+// (DELETE /api/v1/auth/sessions/{id})
+func (_ Unimplemented) RevokeMySession(w http.ResponseWriter, r *http.Request, id int32) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetUsers 获取用户列表（管理员）
+// (GET /api/v1/users)
+func (_ Unimplemented) GetUsers(w http.ResponseWriter, r *http.Request, params GetUsersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateUser 创建用户（管理员）
+// (POST /api/v1/users)
+func (_ Unimplemented) CreateUser(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteUser 删除用户（管理员）
+// (DELETE /api/v1/users/{id})
+func (_ Unimplemented) DeleteUser(w http.ResponseWriter, r *http.Request, id int32) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetUser 获取用户详情（管理员）
+// (GET /api/v1/users/{id})
+func (_ Unimplemented) GetUser(w http.ResponseWriter, r *http.Request, id int32) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateUser 更新用户（管理员）
+// (PUT /api/v1/users/{id})
+func (_ Unimplemented) UpdateUser(w http.ResponseWriter, r *http.Request, id int32) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5889,6 +5843,392 @@ func (siw *ServerInterfaceWrapper) SimpleHealthCheck(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SimpleHealthCheck(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmEmail operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmEmail(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmNewEmail operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmNewEmail(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmNewEmail(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LoginWithEmail operation middleware
+func (siw *ServerInterfaceWrapper) LoginWithEmail(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LoginWithEmail(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RegisterWithEmail operation middleware
+func (siw *ServerInterfaceWrapper) RegisterWithEmail(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RegisterWithEmail(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ForgotPassword operation middleware
+func (siw *ServerInterfaceWrapper) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ForgotPassword(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// Logout operation middleware
+func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Logout(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCurrentUser operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCurrentUser(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCurrentUser(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCurrentUser operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCurrentUser(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCurrentUser operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCurrentUser(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCurrentUser(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ChangePassword operation middleware
+func (siw *ServerInterfaceWrapper) ChangePassword(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ChangePassword(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RefreshToken operation middleware
+func (siw *ServerInterfaceWrapper) RefreshToken(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RefreshToken(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResetPassword operation middleware
+func (siw *ServerInterfaceWrapper) ResetPassword(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResetPassword(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMySessions operation middleware
+func (siw *ServerInterfaceWrapper) GetMySessions(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMySessions(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeOtherSessions operation middleware
+func (siw *ServerInterfaceWrapper) RevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeOtherSessions(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeMySession operation middleware
+func (siw *ServerInterfaceWrapper) RevokeMySession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int32
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "number", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeMySession(w, r, id)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUsers operation middleware
+func (siw *ServerInterfaceWrapper) GetUsers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetUsersParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "filters" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "filters", r.URL.Query(), &params.Filters, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "filters"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "filters", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUsers(w, r, params)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateUser operation middleware
+func (siw *ServerInterfaceWrapper) CreateUser(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateUser(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteUser operation middleware
+func (siw *ServerInterfaceWrapper) DeleteUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int32
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "number", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteUser(w, r, id)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUser operation middleware
+func (siw *ServerInterfaceWrapper) GetUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int32
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "number", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUser(w, r, id)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateUser operation middleware
+func (siw *ServerInterfaceWrapper) UpdateUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int32
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "number", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateUser(w, r, id)
 	}))
 
 	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
@@ -6017,6 +6357,66 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/health", wrapper.SimpleHealthCheck)
 	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/email/confirm", wrapper.ConfirmEmail)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/email/confirm/new", wrapper.ConfirmNewEmail)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/email/login", wrapper.LoginWithEmail)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/email/register", wrapper.RegisterWithEmail)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/forgot/password", wrapper.ForgotPassword)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/logout", wrapper.Logout)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/auth/me", wrapper.DeleteCurrentUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/auth/me", wrapper.GetCurrentUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/auth/me", wrapper.UpdateCurrentUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/auth/password", wrapper.ChangePassword)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/refresh", wrapper.RefreshToken)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/reset/password", wrapper.ResetPassword)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/auth/sessions", wrapper.GetMySessions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/auth/sessions/{id}", wrapper.RevokeMySession)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/sessions/revoke-others", wrapper.RevokeOtherSessions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/users", wrapper.GetUsers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/users", wrapper.CreateUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/users/{id}", wrapper.DeleteUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/users/{id}", wrapper.GetUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/users/{id}", wrapper.UpdateUser)
+	})
 
 	return r
 }
@@ -6049,7 +6449,338 @@ type SimpleHealthCheckResponseObject interface {
 type SimpleHealthCheck200JSONResponse view.HealthCheck
 
 func (resp SimpleHealthCheck200JSONResponse) VisitSimpleHealthCheckResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, resp)
+	return response.WriteData(w, http.StatusOK, view.HealthCheck(resp))
+}
+
+type ConfirmEmailRequestObject struct {
+	Body *ConfirmEmailJSONRequestBody
+}
+
+type ConfirmEmailResponseObject interface {
+	VisitConfirmEmailResponse(w http.ResponseWriter) error
+}
+
+type ConfirmEmail200Response struct {
+	Body any
+}
+
+func (resp ConfirmEmail200Response) VisitConfirmEmailResponse(w http.ResponseWriter) error {
+	if resp.Body == nil {
+		return response.WriteOK(w, http.StatusOK)
+	}
+	return response.WriteData(w, http.StatusOK, resp.Body)
+}
+
+type ConfirmNewEmailRequestObject struct {
+	Body *ConfirmNewEmailJSONRequestBody
+}
+
+type ConfirmNewEmailResponseObject interface {
+	VisitConfirmNewEmailResponse(w http.ResponseWriter) error
+}
+
+type ConfirmNewEmail200Response struct {
+	Body any
+}
+
+func (resp ConfirmNewEmail200Response) VisitConfirmNewEmailResponse(w http.ResponseWriter) error {
+	if resp.Body == nil {
+		return response.WriteOK(w, http.StatusOK)
+	}
+	return response.WriteData(w, http.StatusOK, resp.Body)
+}
+
+type LoginWithEmailRequestObject struct {
+	Body *LoginWithEmailJSONRequestBody
+}
+
+type LoginWithEmailResponseObject interface {
+	VisitLoginWithEmailResponse(w http.ResponseWriter) error
+}
+
+type LoginWithEmail200JSONResponse LoginResponseDto
+
+func (resp LoginWithEmail200JSONResponse) VisitLoginWithEmailResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, LoginResponseDto(resp))
+}
+
+type RegisterWithEmailRequestObject struct {
+	Body *RegisterWithEmailJSONRequestBody
+}
+
+type RegisterWithEmailResponseObject interface {
+	VisitRegisterWithEmailResponse(w http.ResponseWriter) error
+}
+
+type RegisterWithEmail200Response struct {
+	Body any
+}
+
+func (resp RegisterWithEmail200Response) VisitRegisterWithEmailResponse(w http.ResponseWriter) error {
+	if resp.Body == nil {
+		return response.WriteOK(w, http.StatusOK)
+	}
+	return response.WriteData(w, http.StatusOK, resp.Body)
+}
+
+type ForgotPasswordRequestObject struct {
+	Body *ForgotPasswordJSONRequestBody
+}
+
+type ForgotPasswordResponseObject interface {
+	VisitForgotPasswordResponse(w http.ResponseWriter) error
+}
+
+type ForgotPassword200Response struct {
+	Body any
+}
+
+func (resp ForgotPassword200Response) VisitForgotPasswordResponse(w http.ResponseWriter) error {
+	if resp.Body == nil {
+		return response.WriteOK(w, http.StatusOK)
+	}
+	return response.WriteData(w, http.StatusOK, resp.Body)
+}
+
+type LogoutRequestObject struct {
+}
+
+type LogoutResponseObject interface {
+	VisitLogoutResponse(w http.ResponseWriter) error
+}
+
+type Logout200Response struct {
+	Body any
+}
+
+func (resp Logout200Response) VisitLogoutResponse(w http.ResponseWriter) error {
+	if resp.Body == nil {
+		return response.WriteOK(w, http.StatusOK)
+	}
+	return response.WriteData(w, http.StatusOK, resp.Body)
+}
+
+type DeleteCurrentUserRequestObject struct {
+	Body *DeleteCurrentUserJSONRequestBody
+}
+
+type DeleteCurrentUserResponseObject interface {
+	VisitDeleteCurrentUserResponse(w http.ResponseWriter) error
+}
+
+type DeleteCurrentUser200Response struct {
+	Body any
+}
+
+func (resp DeleteCurrentUser200Response) VisitDeleteCurrentUserResponse(w http.ResponseWriter) error {
+	if resp.Body == nil {
+		return response.WriteOK(w, http.StatusOK)
+	}
+	return response.WriteData(w, http.StatusOK, resp.Body)
+}
+
+type GetCurrentUserRequestObject struct {
+}
+
+type GetCurrentUserResponseObject interface {
+	VisitGetCurrentUserResponse(w http.ResponseWriter) error
+}
+
+type GetCurrentUser200JSONResponse User
+
+func (resp GetCurrentUser200JSONResponse) VisitGetCurrentUserResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, User(resp))
+}
+
+type UpdateCurrentUserRequestObject struct {
+	Body *UpdateCurrentUserJSONRequestBody
+}
+
+type UpdateCurrentUserResponseObject interface {
+	VisitUpdateCurrentUserResponse(w http.ResponseWriter) error
+}
+
+type UpdateCurrentUser200JSONResponse User
+
+func (resp UpdateCurrentUser200JSONResponse) VisitUpdateCurrentUserResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, User(resp))
+}
+
+type ChangePasswordRequestObject struct {
+	Body *ChangePasswordJSONRequestBody
+}
+
+type ChangePasswordResponseObject interface {
+	VisitChangePasswordResponse(w http.ResponseWriter) error
+}
+
+type ChangePassword200Response struct {
+	Body any
+}
+
+func (resp ChangePassword200Response) VisitChangePasswordResponse(w http.ResponseWriter) error {
+	if resp.Body == nil {
+		return response.WriteOK(w, http.StatusOK)
+	}
+	return response.WriteData(w, http.StatusOK, resp.Body)
+}
+
+type RefreshTokenRequestObject struct {
+}
+
+type RefreshTokenResponseObject interface {
+	VisitRefreshTokenResponse(w http.ResponseWriter) error
+}
+
+type RefreshToken200JSONResponse RefreshResponseDto
+
+func (resp RefreshToken200JSONResponse) VisitRefreshTokenResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, RefreshResponseDto(resp))
+}
+
+type ResetPasswordRequestObject struct {
+	Body *ResetPasswordJSONRequestBody
+}
+
+type ResetPasswordResponseObject interface {
+	VisitResetPasswordResponse(w http.ResponseWriter) error
+}
+
+type ResetPassword200Response struct {
+	Body any
+}
+
+func (resp ResetPassword200Response) VisitResetPasswordResponse(w http.ResponseWriter) error {
+	if resp.Body == nil {
+		return response.WriteOK(w, http.StatusOK)
+	}
+	return response.WriteData(w, http.StatusOK, resp.Body)
+}
+
+type GetMySessionsRequestObject struct {
+}
+
+type GetMySessionsResponseObject interface {
+	VisitGetMySessionsResponse(w http.ResponseWriter) error
+}
+
+type GetMySessions200JSONResponse []SessionResponseDto
+
+func (resp GetMySessions200JSONResponse) VisitGetMySessionsResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, []SessionResponseDto(resp))
+}
+
+type RevokeOtherSessionsRequestObject struct {
+}
+
+type RevokeOtherSessionsResponseObject interface {
+	VisitRevokeOtherSessionsResponse(w http.ResponseWriter) error
+}
+
+type RevokeOtherSessions200Response struct {
+	Body any
+}
+
+func (resp RevokeOtherSessions200Response) VisitRevokeOtherSessionsResponse(w http.ResponseWriter) error {
+	if resp.Body == nil {
+		return response.WriteOK(w, http.StatusOK)
+	}
+	return response.WriteData(w, http.StatusOK, resp.Body)
+}
+
+type RevokeMySessionRequestObject struct {
+	Id int32 `json:"id"`
+}
+
+type RevokeMySessionResponseObject interface {
+	VisitRevokeMySessionResponse(w http.ResponseWriter) error
+}
+
+type RevokeMySession200Response struct {
+	Body any
+}
+
+func (resp RevokeMySession200Response) VisitRevokeMySessionResponse(w http.ResponseWriter) error {
+	if resp.Body == nil {
+		return response.WriteOK(w, http.StatusOK)
+	}
+	return response.WriteData(w, http.StatusOK, resp.Body)
+}
+
+type GetUsersRequestObject struct {
+	Params GetUsersParams
+}
+
+type GetUsersResponseObject interface {
+	VisitGetUsersResponse(w http.ResponseWriter) error
+}
+
+type GetUsers200JSONResponse InfinityPaginationUserResponseDto
+
+func (resp GetUsers200JSONResponse) VisitGetUsersResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, InfinityPaginationUserResponseDto(resp))
+}
+
+type CreateUserRequestObject struct {
+	Body *CreateUserJSONRequestBody
+}
+
+type CreateUserResponseObject interface {
+	VisitCreateUserResponse(w http.ResponseWriter) error
+}
+
+type CreateUser201JSONResponse User
+
+func (resp CreateUser201JSONResponse) VisitCreateUserResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, User(resp))
+}
+
+type DeleteUserRequestObject struct {
+	Id int32 `json:"id"`
+}
+
+type DeleteUserResponseObject interface {
+	VisitDeleteUserResponse(w http.ResponseWriter) error
+}
+
+type DeleteUser200Response struct {
+	Body any
+}
+
+func (resp DeleteUser200Response) VisitDeleteUserResponse(w http.ResponseWriter) error {
+	if resp.Body == nil {
+		return response.WriteOK(w, http.StatusOK)
+	}
+	return response.WriteData(w, http.StatusOK, resp.Body)
+}
+
+type GetUserRequestObject struct {
+	Id int32 `json:"id"`
+}
+
+type GetUserResponseObject interface {
+	VisitGetUserResponse(w http.ResponseWriter) error
+}
+
+type GetUser200JSONResponse User
+
+func (resp GetUser200JSONResponse) VisitGetUserResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, User(resp))
+}
+
+type UpdateUserRequestObject struct {
+	Id   int32 `json:"id"`
+	Body *UpdateUserJSONRequestBody
+}
+
+type UpdateUserResponseObject interface {
+	VisitUpdateUserResponse(w http.ResponseWriter) error
+}
+
+type UpdateUser200JSONResponse User
+
+func (resp UpdateUser200JSONResponse) VisitUpdateUserResponse(w http.ResponseWriter) error {
+	return response.WriteData(w, http.StatusOK, User(resp))
 }
 
 // StrictServerInterface represents all server handlers.
@@ -6060,6 +6791,66 @@ type StrictServerInterface interface {
 	// SimpleHealthCheck 简单健康检查
 	// (GET /api/health)
 	SimpleHealthCheck(ctx context.Context, request SimpleHealthCheckRequestObject) (SimpleHealthCheckResponseObject, error)
+	// ConfirmEmail 确认邮箱
+	// (POST /api/v1/auth/email/confirm)
+	ConfirmEmail(ctx context.Context, request ConfirmEmailRequestObject) (ConfirmEmailResponseObject, error)
+	// ConfirmNewEmail 确认新邮箱
+	// (POST /api/v1/auth/email/confirm/new)
+	ConfirmNewEmail(ctx context.Context, request ConfirmNewEmailRequestObject) (ConfirmNewEmailResponseObject, error)
+	// LoginWithEmail 邮箱登录
+	// (POST /api/v1/auth/email/login)
+	LoginWithEmail(ctx context.Context, request LoginWithEmailRequestObject) (LoginWithEmailResponseObject, error)
+	// RegisterWithEmail 邮箱注册
+	// (POST /api/v1/auth/email/register)
+	RegisterWithEmail(ctx context.Context, request RegisterWithEmailRequestObject) (RegisterWithEmailResponseObject, error)
+	// ForgotPassword 忘记密码
+	// (POST /api/v1/auth/forgot/password)
+	ForgotPassword(ctx context.Context, request ForgotPasswordRequestObject) (ForgotPasswordResponseObject, error)
+	// Logout 退出登录
+	// (POST /api/v1/auth/logout)
+	Logout(ctx context.Context, request LogoutRequestObject) (LogoutResponseObject, error)
+	// DeleteCurrentUser 删除当前用户账号
+	// (DELETE /api/v1/auth/me)
+	DeleteCurrentUser(ctx context.Context, request DeleteCurrentUserRequestObject) (DeleteCurrentUserResponseObject, error)
+	// GetCurrentUser 获取当前用户信息
+	// (GET /api/v1/auth/me)
+	GetCurrentUser(ctx context.Context, request GetCurrentUserRequestObject) (GetCurrentUserResponseObject, error)
+	// UpdateCurrentUser 更新当前用户信息
+	// (PUT /api/v1/auth/me)
+	UpdateCurrentUser(ctx context.Context, request UpdateCurrentUserRequestObject) (UpdateCurrentUserResponseObject, error)
+	// ChangePassword 修改密码
+	// (PUT /api/v1/auth/password)
+	ChangePassword(ctx context.Context, request ChangePasswordRequestObject) (ChangePasswordResponseObject, error)
+	// RefreshToken 刷新令牌
+	// (POST /api/v1/auth/refresh)
+	RefreshToken(ctx context.Context, request RefreshTokenRequestObject) (RefreshTokenResponseObject, error)
+	// ResetPassword 重置密码
+	// (POST /api/v1/auth/reset/password)
+	ResetPassword(ctx context.Context, request ResetPasswordRequestObject) (ResetPasswordResponseObject, error)
+	// GetMySessions 当前用户的登录设备
+	// (GET /api/v1/auth/sessions)
+	GetMySessions(ctx context.Context, request GetMySessionsRequestObject) (GetMySessionsResponseObject, error)
+	// RevokeOtherSessions 下线其他设备
+	// (POST /api/v1/auth/sessions/revoke-others)
+	RevokeOtherSessions(ctx context.Context, request RevokeOtherSessionsRequestObject) (RevokeOtherSessionsResponseObject, error)
+	// RevokeMySession 下线指定设备
+	// (DELETE /api/v1/auth/sessions/{id})
+	RevokeMySession(ctx context.Context, request RevokeMySessionRequestObject) (RevokeMySessionResponseObject, error)
+	// GetUsers 获取用户列表（管理员）
+	// (GET /api/v1/users)
+	GetUsers(ctx context.Context, request GetUsersRequestObject) (GetUsersResponseObject, error)
+	// CreateUser 创建用户（管理员）
+	// (POST /api/v1/users)
+	CreateUser(ctx context.Context, request CreateUserRequestObject) (CreateUserResponseObject, error)
+	// DeleteUser 删除用户（管理员）
+	// (DELETE /api/v1/users/{id})
+	DeleteUser(ctx context.Context, request DeleteUserRequestObject) (DeleteUserResponseObject, error)
+	// GetUser 获取用户详情（管理员）
+	// (GET /api/v1/users/{id})
+	GetUser(ctx context.Context, request GetUserRequestObject) (GetUserResponseObject, error)
+	// UpdateUser 更新用户（管理员）
+	// (PUT /api/v1/users/{id})
+	UpdateUser(ctx context.Context, request UpdateUserRequestObject) (UpdateUserResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -6142,6 +6933,573 @@ func (sh *strictHandler) SimpleHealthCheck(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SimpleHealthCheckResponseObject); ok {
 		if err := validResponse.VisitSimpleHealthCheckResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ConfirmEmail operation middleware
+func (sh *strictHandler) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
+	var request ConfirmEmailRequestObject
+
+	var body ConfirmEmailJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ConfirmEmail(ctx, request.(ConfirmEmailRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ConfirmEmail")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ConfirmEmailResponseObject); ok {
+		if err := validResponse.VisitConfirmEmailResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ConfirmNewEmail operation middleware
+func (sh *strictHandler) ConfirmNewEmail(w http.ResponseWriter, r *http.Request) {
+	var request ConfirmNewEmailRequestObject
+
+	var body ConfirmNewEmailJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ConfirmNewEmail(ctx, request.(ConfirmNewEmailRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ConfirmNewEmail")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ConfirmNewEmailResponseObject); ok {
+		if err := validResponse.VisitConfirmNewEmailResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LoginWithEmail operation middleware
+func (sh *strictHandler) LoginWithEmail(w http.ResponseWriter, r *http.Request) {
+	var request LoginWithEmailRequestObject
+
+	var body LoginWithEmailJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LoginWithEmail(ctx, request.(LoginWithEmailRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LoginWithEmail")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LoginWithEmailResponseObject); ok {
+		if err := validResponse.VisitLoginWithEmailResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RegisterWithEmail operation middleware
+func (sh *strictHandler) RegisterWithEmail(w http.ResponseWriter, r *http.Request) {
+	var request RegisterWithEmailRequestObject
+
+	var body RegisterWithEmailJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RegisterWithEmail(ctx, request.(RegisterWithEmailRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RegisterWithEmail")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RegisterWithEmailResponseObject); ok {
+		if err := validResponse.VisitRegisterWithEmailResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ForgotPassword operation middleware
+func (sh *strictHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var request ForgotPasswordRequestObject
+
+	var body ForgotPasswordJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ForgotPassword(ctx, request.(ForgotPasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ForgotPassword")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ForgotPasswordResponseObject); ok {
+		if err := validResponse.VisitForgotPasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// Logout operation middleware
+func (sh *strictHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	var request LogoutRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.Logout(ctx, request.(LogoutRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "Logout")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LogoutResponseObject); ok {
+		if err := validResponse.VisitLogoutResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteCurrentUser operation middleware
+func (sh *strictHandler) DeleteCurrentUser(w http.ResponseWriter, r *http.Request) {
+	var request DeleteCurrentUserRequestObject
+
+	var body DeleteCurrentUserJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteCurrentUser(ctx, request.(DeleteCurrentUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteCurrentUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteCurrentUserResponseObject); ok {
+		if err := validResponse.VisitDeleteCurrentUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCurrentUser operation middleware
+func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	var request GetCurrentUserRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCurrentUser(ctx, request.(GetCurrentUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCurrentUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCurrentUserResponseObject); ok {
+		if err := validResponse.VisitGetCurrentUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCurrentUser operation middleware
+func (sh *strictHandler) UpdateCurrentUser(w http.ResponseWriter, r *http.Request) {
+	var request UpdateCurrentUserRequestObject
+
+	var body UpdateCurrentUserJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCurrentUser(ctx, request.(UpdateCurrentUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCurrentUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateCurrentUserResponseObject); ok {
+		if err := validResponse.VisitUpdateCurrentUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ChangePassword operation middleware
+func (sh *strictHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	var request ChangePasswordRequestObject
+
+	var body ChangePasswordJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ChangePassword(ctx, request.(ChangePasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ChangePassword")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ChangePasswordResponseObject); ok {
+		if err := validResponse.VisitChangePasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RefreshToken operation middleware
+func (sh *strictHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var request RefreshTokenRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RefreshToken(ctx, request.(RefreshTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RefreshToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RefreshTokenResponseObject); ok {
+		if err := validResponse.VisitRefreshTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ResetPassword operation middleware
+func (sh *strictHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var request ResetPasswordRequestObject
+
+	var body ResetPasswordJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ResetPassword(ctx, request.(ResetPasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ResetPassword")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ResetPasswordResponseObject); ok {
+		if err := validResponse.VisitResetPasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMySessions operation middleware
+func (sh *strictHandler) GetMySessions(w http.ResponseWriter, r *http.Request) {
+	var request GetMySessionsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMySessions(ctx, request.(GetMySessionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMySessions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMySessionsResponseObject); ok {
+		if err := validResponse.VisitGetMySessionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeOtherSessions operation middleware
+func (sh *strictHandler) RevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
+	var request RevokeOtherSessionsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeOtherSessions(ctx, request.(RevokeOtherSessionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeOtherSessions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeOtherSessionsResponseObject); ok {
+		if err := validResponse.VisitRevokeOtherSessionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeMySession operation middleware
+func (sh *strictHandler) RevokeMySession(w http.ResponseWriter, r *http.Request, id int32) {
+	var request RevokeMySessionRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeMySession(ctx, request.(RevokeMySessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeMySession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeMySessionResponseObject); ok {
+		if err := validResponse.VisitRevokeMySessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetUsers operation middleware
+func (sh *strictHandler) GetUsers(w http.ResponseWriter, r *http.Request, params GetUsersParams) {
+	var request GetUsersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetUsers(ctx, request.(GetUsersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetUsers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetUsersResponseObject); ok {
+		if err := validResponse.VisitGetUsersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateUser operation middleware
+func (sh *strictHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var request CreateUserRequestObject
+
+	var body CreateUserJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateUser(ctx, request.(CreateUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateUserResponseObject); ok {
+		if err := validResponse.VisitCreateUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteUser operation middleware
+func (sh *strictHandler) DeleteUser(w http.ResponseWriter, r *http.Request, id int32) {
+	var request DeleteUserRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteUser(ctx, request.(DeleteUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteUserResponseObject); ok {
+		if err := validResponse.VisitDeleteUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetUser operation middleware
+func (sh *strictHandler) GetUser(w http.ResponseWriter, r *http.Request, id int32) {
+	var request GetUserRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetUser(ctx, request.(GetUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetUserResponseObject); ok {
+		if err := validResponse.VisitGetUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateUser operation middleware
+func (sh *strictHandler) UpdateUser(w http.ResponseWriter, r *http.Request, id int32) {
+	var request UpdateUserRequestObject
+
+	request.Id = id
+
+	var body UpdateUserJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateUser(ctx, request.(UpdateUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateUserResponseObject); ok {
+		if err := validResponse.VisitUpdateUserResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

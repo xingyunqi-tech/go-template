@@ -87,6 +87,7 @@ func Build(err error, translate Translate) Body {
 		business *entity.BusinessError
 		invalid  *validatorx.ValidationError
 		httpErr  *Error
+		domain   *entity.Error
 	)
 
 	switch {
@@ -106,6 +107,8 @@ func Build(err error, translate Translate) Body {
 		return tr.http(WithErrors(invalid.Status, invalid.Errors))
 	case errors.As(err, &httpErr):
 		return tr.http(httpErr)
+	case errors.As(err, &domain):
+		return tr.http(fromEntity(domain))
 	default:
 		return tr.internal("Internal Server Error")
 	}
@@ -272,4 +275,29 @@ func nestHTTPStatus() map[int]string {
 		503: "SERVICE_UNAVAILABLE", 504: "GATEWAY_TIMEOUT", 505: "HTTP_VERSION_NOT_SUPPORTED",
 		507: "INSUFFICIENT_STORAGE", 508: "LOOP_DETECTED",
 	}
+}
+
+func fromEntity(e *entity.Error) *Error {
+	var fields *validatorx.Object
+
+	if len(e.Fields) > 0 {
+		fields = validatorx.NewObject()
+		for _, f := range e.Fields {
+			fields.Set(f.Name, f.Value)
+		}
+	}
+
+	return &Error{Status: e.Status, Message: e.Message, ErrorKey: e.ErrorKey, Errors: fields, Headers: nil}
+}
+
+// StatusCode is the HTTP status Build would answer err with.
+func StatusCode(err error) int {
+	return Build(err, nil).Status
+}
+
+// IsDatabaseError reports an error raised by a PostgreSQL statement.
+func IsDatabaseError(err error) bool {
+	var pgErr *pgconn.PgError
+
+	return errors.As(err, &pgErr)
 }

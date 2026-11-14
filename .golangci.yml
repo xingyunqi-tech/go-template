@@ -168,6 +168,9 @@ linters:
       - path: tools/
         linters:
           - forbidigo
+      - path: internal/controller/http/policy\.go
+        linters:
+          - mnd
       - path: pkg/validatorx/
         linters:
           - cyclop

@@ -17,17 +17,20 @@ GOLANGCI_LINT_VERSION := 2.15.0
 PREK_VERSION := 0.5.10
 # renovate: datasource=github-releases depName=crate-ci/typos
 TYPOS_VERSION := 1.52.2
+# renovate: datasource=github-releases depName=sqlc-dev/sqlc
+SQLC_VERSION := 1.31.1
 
 GOLANGCI_LINT := $(BIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 PREK := $(BIN)/prek-$(PREK_VERSION)
 TYPOS := $(BIN)/typos-$(TYPOS_VERSION)
+SQLC := $(BIN)/sqlc-$(SQLC_VERSION)
 OPENAPIGEN := $(BIN)/openapigen
 
 PKGS := ./...
 TEST_FLAGS := -race -shuffle=on
 COVERAGE_DIR := $(CURDIR)/coverage
 FASTAPI_DIR ?= $(CURDIR)/../fastapi-temp
-E2E_COMPOSE := docker compose -p go-template-e2e -f docker/docker-compose.base.yaml -f docker/docker-compose.ci.yaml
+E2E_COMPOSE := docker compose -p go-template-e2e -f docker/docker-compose.base.yaml -f docker/docker-compose.postgres.yaml -f docker/docker-compose.redis.yaml -f docker/docker-compose.ci.yaml
 
 ##@ 帮助
 
@@ -42,16 +45,32 @@ install: tools ## 安装工具二进制与 Git 钩子
 	$(PREK) install
 
 .PHONY: tools
-tools: $(GOLANGCI_LINT) $(PREK) $(TYPOS) ## 下载 golangci-lint、prek、typos 官方二进制到 bin/
+tools: $(GOLANGCI_LINT) $(PREK) $(TYPOS) $(SQLC) ## 下载 golangci-lint、prek、typos、sqlc 官方二进制到 bin/
 	$(GO) -C tools mod download
+
+INFRA_COMPOSE := docker compose -f docker/infra.compose.yaml
+ENV_RUN := set -a; [[ ! -f .env ]] || . ./.env; set +a;
+
+.PHONY: infra
+infra: ## 启动本地 Postgres 与 Redis（DATABASE_PORT / REDIS_PORT，默认 5432 / 6379）
+	$(INFRA_COMPOSE) up -d --wait
+
+.PHONY: migrate
+migrate: ## 执行数据库迁移（读取 .env；DB_SCHEMA_OWNER=external 时只校验表结构）
+	$(ENV_RUN) $(GO) run ./cmd/app migrate
+
+.PHONY: seed
+seed: ## 写入种子数据（读取 .env）
+	$(ENV_RUN) $(GO) run ./cmd/app seed
 
 .PHONY: dev
 dev: ## 本地启动 API（读取 .env；端口 APP_PORT，默认 3000）
-	set -a; [[ ! -f .env ]] || . ./.env; set +a; $(GO) run ./cmd/app serve
+	$(ENV_RUN) $(GO) run ./cmd/app serve
 
 .PHONY: generate
-generate: $(OPENAPIGEN) ## 生成代码：oapi-codegen（scope.yaml 范围内）
+generate: $(OPENAPIGEN) $(SQLC) ## 生成代码：oapi-codegen（scope.yaml 范围内）、sqlc
 	$(OPENAPIGEN)
+	$(SQLC) generate
 
 .PHONY: openapi-sync
 openapi-sync: ## 从 fastapi-temp 复制共享产物（FASTAPI_DIR）；OPENAPI_SYNC=run 时在 nestjs 上重新导出（需 Docker 与 uv）
@@ -156,6 +175,11 @@ $(PREK): | $(BIN)
 $(TYPOS): | $(BIN)
 	$(CURL) https://github.com/crate-ci/typos/releases/download/v$(TYPOS_VERSION)/typos-v$(TYPOS_VERSION)-$(RUST_ARCH)-$(RUST_OS).tar.gz \
 		| tar -xzO ./typos > $@
+	chmod +x $@
+
+$(SQLC): | $(BIN)
+	$(CURL) https://github.com/sqlc-dev/sqlc/releases/download/v$(SQLC_VERSION)/sqlc_$(SQLC_VERSION)_$(OS)_$(ARCH).tar.gz \
+		| tar -xzO sqlc > $@
 	chmod +x $@
 
 $(OPENAPIGEN): tools/go.mod tools/go.sum $(wildcard tools/openapigen/*.go) | $(BIN)

@@ -12,12 +12,17 @@ Go 后端模板，API 契约与 [nestjs-template](https://github.com/xingyunqi-t
 
 ```bash
 cp .env.example .env
-make install      # 下载 golangci-lint / prek / typos，安装 Git 钩子
+make install      # 下载 golangci-lint / prek / typos / sqlc，安装 Git 钩子
+make infra        # 启动 Postgres 与 Redis
+make migrate      # 建表（goose）
+make seed         # 角色、权限、行政区划、配置与演示账号（admin@example.com / john.doe@example.com，密码 Secret00）
 make dev          # http://localhost:3000
 ```
 
 - `GET /`：应用信息
 - `GET /api/health`：简单健康检查
+- `/api/v1/auth/*`：邮箱注册 / 登录 / 确认 / 找回密码、刷新令牌、个人资料、改密、注销、会话管理
+- `/api/v1/users`：用户管理（管理员）
 - `GET /docs-json`：OpenAPI 文档（与 nestjs-template 逐字节相同）
 - `GET /docs`：Scalar 文档页面
 
@@ -27,7 +32,7 @@ make dev          # http://localhost:3000
 
 ```bash
 make help              # 列出全部目标
-make generate          # 按 openapi/scope.yaml 生成接口代码
+make generate          # 按 openapi/scope.yaml 生成接口代码，并由 sqlc 生成查询代码
 make check             # lint + vet + 单元测试
 make test-integration  # 集成测试（需要 Docker）
 make test-contract     # 契约测试（含 4516 条 nestjs 校验 oracle 用例）
@@ -39,10 +44,10 @@ make image             # 构建生产镜像
 
 ## 镜像
 
-`Dockerfile` 多阶段构建，运行时为 `gcr.io/distroless/static-debian13:nonroot`，镜像只含一个静态二进制：
+`Dockerfile` 多阶段构建，运行时为 `gcr.io/distroless/static-debian13:nonroot`，镜像只含一个静态二进制（子命令 `serve` / `migrate` / `seed`）；compose 先运行一次性的 migrate，再启动 api：
 
 ```bash
-docker run --rm -p 3000:3000 go-template:local serve
+docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.postgres.yaml -f docker/docker-compose.redis.yaml up --build
 ```
 
 ## 许可证

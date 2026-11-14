@@ -5,6 +5,7 @@ package contract_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +25,10 @@ import (
 
 	httpapi "github.com/xingyunqi-tech/go-template/internal/controller/http"
 	v1 "github.com/xingyunqi-tech/go-template/internal/controller/http/v1"
+	"github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view"
+	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/i18n"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
 	"github.com/xingyunqi-tech/go-template/openapi"
 	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
 )
@@ -73,7 +77,7 @@ func newRouter(t *testing.T) *httpapi.Router {
 	validator, err := validatorx.New(openapi.Validation)
 	require.NoError(t, err)
 
-	r, err := httpapi.NewRouter(v1.New("app"), &httpapi.Options{
+	r, err := httpapi.NewRouter(v1.New(v1.Deps{AppName: "app", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}}), &httpapi.Options{
 		APIPrefix:      "api",
 		SwaggerEnabled: true,
 		Docs:           openapi.Baseline,
@@ -82,8 +86,10 @@ func newRouter(t *testing.T) *httpapi.Router {
 		Log:            slog.New(slog.DiscardHandler),
 		Production:     false,
 		FrontendDomain: "",
-		Guards:         nil,
-		Permission:     nil,
+		Guards:         httpapi.AuthGuards(rejectAll{}),
+		Permission:     httpapi.RequirePermissions(noPermissions{}),
+		Transactor:     nil,
+		TrustProxy:     0,
 	})
 	require.NoError(t, err)
 
@@ -273,4 +279,20 @@ func TestValidationMetadataIsFullyImplemented(t *testing.T) {
 
 	_, err := validatorx.New(openapi.Validation)
 	require.NoError(t, err)
+}
+
+type rejectAll struct{}
+
+func (rejectAll) Authenticate(context.Context, string) (*auth.Principal, error) {
+	return nil, entity.Unauthorized("")
+}
+
+func (rejectAll) AuthenticateRefresh(string) (*auth.RefreshPrincipal, error) {
+	return nil, entity.Unauthorized("")
+}
+
+type noPermissions struct{}
+
+func (noPermissions) ForRole(context.Context, int) ([]string, error) {
+	return nil, nil
 }

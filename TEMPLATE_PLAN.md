@@ -88,7 +88,7 @@ nestjs-template `src/modules` 里的考试刷题业务：exams、questions、pra
 | 请求校验（约束与消息） | `openapi/validation.json` + 自写执行器 `pkg/validatorx`（含 validator.js 语义移植） | — | nestjs 侧脚本导出 class-validator 元数据，按装饰器顺序执行并输出 class-validator 原文消息；以 `tests/contract/fixtures/validation-cases.json`（nestjs 实测结果）为门禁，见 §4.3 |
 | 配置校验 | go-playground/validator v10 | 10.30.6 | 仅用于配置结构体与少量内部校验 |
 | 数据库驱动 | pgx v5（pgxpool） | 5.13.0 | 2026-11-11 核对时为 5.12.0，M0 解析依赖时升至 5.13.0 |
-| SQL | **sqlc** | 1.31.1 | 写 SQL 生成类型安全代码（`sql_package: pgx/v5`）；动态筛选 / 排序的少数列表用 squirrel 1.5.4（仓库已有，2023 后无发布但功能稳定）。sqlc 的 PostgreSQL 解析器依赖 cgo，用官方发布的二进制 / 镜像运行，不放进 `tools/go.mod` |
+| SQL | **sqlc** | 1.31.1 | 写 SQL 生成类型安全代码（`sql_package: pgx/v5`）；动态筛选 / 排序的少数列表手写 SQL：排序列只取白名单映射的列名，值一律走占位参数，不引入 squirrel。sqlc 的 PostgreSQL 解析器依赖 cgo，用官方发布的二进制 / 镜像运行，不放进 `tools/go.mod` |
 | 迁移 | **goose v3** | 3.30.0 | 理由见 §2.1；库方式嵌入二进制，`migrate` 子命令一次性执行 |
 | 数据库 | PostgreSQL | 18（镜像 `18.6-alpine`） | 独立部署用 18；与 nestjs 共库、parity 对照时用 17（`17.11-alpine`，同 nestjs CI）。endoflife.date 已列出 18.7 / 17.12（2026-11-09），但 Docker Hub 上 `18.7-alpine` 查询为 404，镜像以 Docker Hub 实际可用标签为准，由 Renovate 跟进 |
 | 缓存 / 锁 / 限流 | Redis + go-redis v9 | 8.x / 9.23.0 | nestjs 现为 Redis 7.4，与其共用实例时按 7.x 兼容使用（Redis 服务端最新版本本次未复核） |
@@ -137,7 +137,7 @@ chi 与标准库 ServeMux 的差异不大：chi 提供 `Route` / `Group` / `With
 | 方案 | 版本 | 说明 | 结论 |
 |---|---|---|---|
 | **sqlc** | 1.31.1（2026-04-22） | 写原生 SQL，编译期生成类型安全代码；camelCase 列名在 SQL 中加引号（`"firstName"`），生成字段 `FirstName`；支持 pgx/v5；读 goose 迁移文件作为 schema | **采用** |
-| squirrel | 1.5.4（2023-03） | 字符串拼 SQL，无类型检查 | 仅用于动态筛选 / 排序 |
+| squirrel | 1.5.4（2023-03） | 字符串拼 SQL，无类型检查 | 不采用：少数动态排序列表手写白名单 SQL 即可 |
 | GORM | 1.31.2 | 反射 + 隐式行为（零值更新、自动关联），与「列名 / 约束名照抄 nestjs」的精确控制相冲突 | 不选 |
 | go-jet / bob | 2.16.1 / 0.50.0 | 类型安全构建器，动态查询更强；生态和资料少于 sqlc | 不选，列表筛选规模变大时再评估 |
 
@@ -560,11 +560,11 @@ nestjs 用 class-transformer + `JSON.stringify` 输出，Go `encoding/json` 默�
 | 5 | Request ID | 已同步到 nestjs（校验 + 回写） | 同 nestjs；日志另带 OTel `trace_id` / `span_id`，日志与链路可互相跳转 |
 | 6 | OpenAPI | 运行时生成，无版本管理 | 直接使用 nestjs 导出文件并入库，spec-first 生成代码，契约漂移在编译期暴露 |
 | 7 | 新表主键 | uuid v4 | **UUIDv7**（Go 1.27 标准库 `uuid.NewV7()`，按时间有序，索引友好）；已有 int 主键（user 等）保持不变 |
-| 8 | 事务 | 服务内手动管理 | policy 标记的写接口由 tx `StrictMiddlewareFunc` 开启事务，`pgx.Tx` 经 context 传给 repo；提交时机在响应写出前（strict 中间件拿到的是响应对象，尚未写入 `ResponseWriter`），提交失败返回 500。结束规则（与 fastapi-temp `src/app/infrastructure/database/session.py` 的 `Database.transaction` 相同，语言无关）：**handler 成功 → 提交；handler 返回 4xx 业务 / HTTP 错误（`BusinessError`、401、403、404、422 等）→ 提交已写入的内容后再输出错误；其它错误（含 panic）→ 回滚**。原因：nestjs 无请求级事务，抛 401 之前的写入（如 §6.3 刷新重放时吊销会话）已经落库，若按「出错即回滚」实现，吊销会被撤销。例外：错误来源于数据库语句本身（如唯一约束冲突被翻译为 422 / 409）时，事务已处于失败状态，**不得提交**，一律回滚（pgx 对失败事务 `Commit` 返回 `pgx.ErrTxCommitRollback`，tx 中间件按回滚处理，不当作 500）；需要无论成败都保留的写入也可放在独立事务中执行。跨请求副作用（发邮件、通知）用 River `InsertTx` 在同一事务入队，提交成功才可见；4xx 提交路径与 fastapi-temp 一致丢弃已登记的提交后回调，而 `InsertTx` 入队的任务会随提交可见，所以入队放在全部业务检查之后。测试要求见 §6.3 |
+| 8 | 事务 | 服务内手动管理 | policy 标记的写接口由 tx `StrictMiddlewareFunc` 开启事务，`pgx.Tx` 经 context 传给 repo；提交时机在响应写出前（strict 中间件拿到的是响应对象，尚未写入 `ResponseWriter`），提交失败返回 500。结束规则（与 fastapi-temp `src/app/infrastructure/database/session.py` 的 `Database.transaction` 相同，语言无关）：**handler 成功 → 提交；handler 返回 4xx 业务 / HTTP 错误（`BusinessError`、401、403、404、422 等）→ 提交已写入的内容后再输出错误；其它错误（含 panic）→ 回滚**。原因：nestjs 无请求级事务，抛 401 之前的写入（如 §6.3 刷新重放时吊销会话）已经落库，若按「出错即回滚」实现，吊销会被撤销。例外：错误来源于数据库语句本身（如唯一约束冲突被翻译为 422 / 409）时，事务已处于失败状态，**不得提交**，一律回滚（pgx 对失败事务 `Commit` 返回 `pgx.ErrTxCommitRollback`，tx 中间件按回滚处理，不当作 500）；需要无论成败都保留的写入也可放在独立事务中执行。跨请求副作用（发邮件、通知）用 River `InsertTx` 在同一事务入队，提交成功才可见；4xx 提交路径照常执行已登记的提交后回调（nestjs 无请求级事务，抛 4xx 之前的副作用都已发生；§6.2 的会话缓存在提交后再清一次也依赖这一点），`InsertTx` 入队的任务同样随提交可见，所以入队放在全部业务检查之后。回调在释放事务连接之后执行，回调的 context 不再携带已结束的事务。测试要求见 §6.3 |
 | 9 | 优雅停机 | 依赖 Nest 默认 | `signal.NotifyContext` 收到 SIGTERM → readiness 立即返回 503 → `http.Server.Shutdown(SHUTDOWN_TIMEOUT)` 等待在途请求 → River `Stop` 等待在途任务 → 关闭 pgxpool、Redis → flush OTel / Sentry |
 | 10 | 配置校验 | 运行时按模块校验 | 启动时一次性解析并校验全部配置（env + validator），缺必填项立即退出并列出全部缺失项 |
 | 11 | 语言头 | 已同步到 nestjs（`AcceptLanguageResolver`） | 标准头 `Accept-Language`，见 §4.2 |
-| 12 | 测试隔离 | e2e 连真实服务、串行执行 | 集成测试用 testcontainers-go 起 Postgres / Redis；大部分用例在外层事务内执行、应用内的事务转为 SAVEPOINT，结束后回滚；依赖真实提交的用例（刷新 CAS 并发、4xx 提交规则、提交后副作用、缓存与提交的先后）从已迁移 + seed 的模板库 `CREATE DATABASE … TEMPLATE` 克隆独立库；`t.Parallel()` 并行，见 §10.6 |
+| 12 | 测试隔离 | e2e 连真实服务、串行执行 | 集成测试用 testcontainers-go 起 Postgres / Redis；每个测试包迁移并写入种子到模板库一次，每个用例 `CREATE DATABASE … TEMPLATE` 克隆独立库（真实连接池、真实提交），`t.Parallel()` 并行，见 §10.6 |
 
 第 1 项与「两个后端共用同一个库」有冲突（nestjs 无法验证 argon2id）：共用期间设 `PASSWORD_HASHER=bcrypt`，独立部署时用默认 `argon2id`。第 2、5、11 项与限流响应头已在 nestjs 实现，属于共同契约。
 
@@ -693,7 +693,7 @@ nestjs 用 class-transformer + `JSON.stringify` 输出，Go `encoding/json` 默�
 | `DATABASE_TYPE`、`DATABASE_SYNCHRONIZE` | 不需要 |
 | — | `PASSWORD_HASHER`、`PASSWORD_HASH_CONCURRENCY`、`WORKER_DATABASE_MAX_CONNECTIONS`、`DB_SCHEMA_OWNER`、`OTEL_ENABLED`、`OTEL_EXPORTER_OTLP_ENDPOINT`、`SENTRY_DSN`、`SHUTDOWN_TIMEOUT` |
 
-与 nestjs 同名同义、契约相关的变量（必须支持，默认值与 nestjs 一致）：
+与 nestjs 同名同义、契约相关的变量（必须支持，默认值与 nestjs 一致；`DATABASE_MAX_CONNECTIONS` 的 80 与 `DATABASE_CONNECTION_TIMEOUT_MS` 对应 nestjs 05c3756，契约提交 02fdb4d 中前者为 100、后者不存在）：
 
 | 变量 | 默认 | 作用 |
 |---|---|---|
@@ -712,7 +712,8 @@ nestjs 用 class-transformer + `JSON.stringify` 输出，Go `encoding/json` 默�
 | `SWAGGER_ENABLED` | 非生产 `true`、生产 `false` | 控制 `/docs`、`/docs-json` |
 | `APP_FALLBACK_LANGUAGE` | `en` | 语言回落 |
 | `AUTH_JWT_TOKEN_EXPIRES_IN` 等 `*_EXPIRES_IN` | `15m` / `3650d` / `30m` / `1d` | 按 npm `ms` 规则解析（§6.1） |
-| `DATABASE_MAX_CONNECTIONS` | `80`（与 nestjs 不同，nestjs 为 100） | 所有 API 进程合计的连接上限；Go 为单进程，直接作为 `serve` 进程 pgxpool 的 `MaxConns`。须满足 API 合计 80 + worker 10 + 迁移 ≤ Postgres `max_connections`（默认 100）；多副本部署时按副本数分摊设置 |
+| `DATABASE_MAX_CONNECTIONS` | `80` | 所有 API 进程合计的连接上限；Go 为单进程，直接作为 `serve` 进程 pgxpool 的 `MaxConns`。须满足 API 合计 80 + worker 10 + 迁移 ≤ Postgres `max_connections`（默认 100）；多副本部署时按副本数分摊设置 |
+| `DATABASE_CONNECTION_TIMEOUT_MS` | `10000` | 从连接池获取连接的超时（毫秒，正整数）。pgxpool 没有获取超时选项，repo 层显式 `Acquire`，以该值作为获取阶段的 ctx 超时（语句执行不受此限），超时按未知异常返回 500 |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | 空 | 仅生产 seed 使用（§7「Seed」）；nestjs 侧生产判定变量为 `ENV_MODE=prod`，本服务为 `APP_ENV=production` |
 
 Go 独有变量的说明：
@@ -812,8 +813,8 @@ Go 中的对应（单独列出，不改动上面的原文）：
 | 场景 | 隔离 | 并行 |
 |---|---|---|
 | 公共准备 | 每个测试包的 `TestMain` 启动一组 Postgres / Redis 容器，`goose up` + seed 写入模板库 `app_template`；每个包从模板克隆一份工作库 | — |
-| 默认（repo 测试与大部分 HTTP 级测试） | repo 通过 `DBTX` 接口（`*pgxpool.Pool` 与 `pgx.Tx` 都满足，sqlc 生成代码即基于此接口）取连接；每个用例开一个外层 `pgx.Tx`，repo 与 HTTP 测试中的 tx 中间件都绑定到它，内部 `Begin` 转为 SAVEPOINT（「提交」只释放 SAVEPOINT），用例结束 `Rollback` | `t.Parallel()`（每个用例独占一条连接） |
-| 依赖真实提交的用例：并发刷新 CAS、§6.3 重放吊销在 401 后仍生效、§5 第 8 项 4xx 提交 / 数据库错误回滚、提交后清缓存、River 提交后可见、`lastActiveAt` 节流 | 每个用例 `CREATE DATABASE t_<随机> TEMPLATE app_template` 克隆独立库，使用真实连接池与 Redis，用完 `DROP` | `t.Parallel()` |
+| 默认（repo 测试与 HTTP 级测试） | 每个用例 `testutil.Database.Clone(t)` 从 `app_template` 克隆独立库（真实连接池、真实提交，tx 中间件与生产相同），用完 `DROP … WITH (FORCE)`；不用外层事务 + SAVEPOINT 的方式，克隆一次约几十毫秒，换来与生产一致的提交语义 | `t.Parallel()` |
+| 依赖真实提交的用例：并发刷新 CAS、§6.3 重放吊销在 401 后仍生效、§5 第 8 项 4xx 提交 / 数据库错误回滚、提交后清缓存、River 提交后可见、`lastActiveAt` 节流 | 同上，克隆库天然满足 | `t.Parallel()` |
 | Redis | 键名写死且与 nestjs 逐字相同（`throttle:`、`lock:`、`jwt:session:`、`session:rotated:` …），生产代码不接受键前缀，因此不能按前缀隔离。每个测试包一个 Redis 容器，用到 Redis 的用例从夹具的逻辑库池（DB 0–15，带缓冲 channel）独占借一个，`FLUSHDB` 后使用、归还前再 `FLUSHDB`；fastapi-temp 的做法是每个 xdist worker 一个容器、用例内 `flushdb` 后串行执行 | 同时最多 16 个 |
 | River | `rivertest` + `river.Config{TestOnly: true}`，用 `rivertest.RequireInserted` 断言入队，不启动 worker；重试 / 退避 / 最终失败告警用直接调用 worker 的 `Work` + 注入时钟测试；真正启动 `river.Client` 的端到端用例放在克隆库中 | — |
 | 文件 | local 驱动写 `./files`（相对工作目录，与 nestjs 相同）；`t.Chdir` 不能与 `t.Parallel()` 同用，存储根目录做成构造参数，测试注入 `t.TempDir()`；s3 / s3-presigned 用 testcontainers-go `modules/minio`（每包一个容器、每用例独立桶） | `t.Parallel()` |
@@ -919,7 +920,7 @@ parity job 是「前端无改动切换」最直接的证据。nestjs-template �
 | # | 问题 | 建议 |
 |---|---|---|
 | 1 | 路由：chi 还是标准库 ServeMux | chi（`Walk` 用于契约测试、子路由中间件、`StripSlashes`）；差异小，若追求零依赖可换 ServeMux，生成代码只改一个开关 |
-| 2 | SQL：sqlc 还是其它 | sqlc + 少量 squirrel 处理动态筛选；sqlc 最近发布 2026-04-22，若半年内无新版仍可用（生成代码不依赖其运行时） |
+| 2 | SQL：sqlc 还是其它 | sqlc + 少量手写白名单 SQL 处理动态排序；sqlc 最近发布 2026-04-22，若半年内无新版仍可用（生成代码不依赖其运行时） |
 | 3 | 队列：River 还是 Asynq | River（事务内入队、无需 scheduler 进程、活跃发布）；共库时其表放 `river` schema |
 | 4 | 是否与 nestjs 共用表结构（camelCase 列名）；默认密码哈希（`PASSWORD_HASHER`） | 共用，便于切换与对照测试；实际共库时 `DB_SCHEMA_OWNER=external`（表结构归 nestjs，§7）、`PASSWORD_HASHER=bcrypt`；独立部署默认 argon2id |
 | 5 | Go 版本策略 | 跟随最新 minor（当前 1.27），Renovate 自动 patch；minor 升级手动（新版发布满一个 patch 版本后）；保证与 Go 官方支持的两个版本兼容即可，不额外维护旧版本 |

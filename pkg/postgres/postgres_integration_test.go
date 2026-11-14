@@ -42,7 +42,7 @@ func runMain(m *testing.M) int {
 func newPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	pool, err := postgres.New(t.Context(), dsn)
+	pool, err := postgres.New(t.Context(), dsn, postgres.Options{MaxConns: 2, TLS: nil})
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
@@ -101,6 +101,6 @@ func TestNewRejectsUnreachableServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
-	_, err := postgres.New(ctx, "postgres://app:app@127.0.0.1:1/app?sslmode=disable")
+	_, err := postgres.New(ctx, "postgres://app:app@127.0.0.1:1/app?sslmode=disable", postgres.Options{MaxConns: 0, TLS: nil})
 	require.Error(t, err)
 }

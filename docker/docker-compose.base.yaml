@@ -1,11 +1,33 @@
-# 公共服务定义；按环境叠加 docker-compose.<env>.yaml
+# 各环境共用的服务：migrate（一次性）、api；按环境叠加 docker-compose.<env>.yaml
 #
-# 用法：docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.ci.yaml up -d
+# 用法：
+#   docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.postgres.yaml -f docker/docker-compose.redis.yaml up
+
+name: go-template-dev
+
+x-app: &app
+  image: go-template:local
+  pull_policy: never
+  env_file:
+    - ../.env.example
+  environment:
+    DATABASE_HOST: postgres
 
 services:
+  migrate:
+    <<: *app
+    command: ['migrate']
+    restart: 'no'
+
   api:
+    <<: *app
     build:
       context: ..
       dockerfile: Dockerfile
+    pull_policy: build
+    command: ['serve']
     ports:
       - '${APP_PORT:-3000}:3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

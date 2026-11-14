@@ -13,3 +13,43 @@ actions:
       x-go-type: view.HealthCheck
       x-go-type-import:
         path: github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view
+  - target: $.components.schemas.User
+    update:
+      x-go-type: view.User
+      x-go-type-import:
+        path: github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view
+  - target: $.components.schemas.LoginResponseDto
+    update:
+      x-go-type: view.Login
+      x-go-type-import:
+        path: github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view
+  - target: $.components.schemas.RefreshResponseDto
+    update:
+      x-go-type: view.Refresh
+      x-go-type-import:
+        path: github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view
+  - target: $.components.schemas.SessionResponseDto
+    update:
+      x-go-type: view.Session
+      x-go-type-import:
+        path: github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view
+  - target: $.components.schemas.InfinityPaginationUserResponseDto
+    update:
+      x-go-type: view.UserPage
+      x-go-type-import:
+        path: github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view
+  - target: $.components.schemas.AuthUpdateDto
+    update:
+      x-go-type: any
+  - target: $.components.schemas.AuthRegisterLoginDto
+    update:
+      x-go-type: any
+  - target: $.components.schemas.CreateUserDto
+    update:
+      x-go-type: any
+  - target: $.components.schemas.UpdateUserDto
+    update:
+      x-go-type: any
+  - target: $.components.schemas.AuthDeleteAccountDto
+    update:
+      x-go-type: any

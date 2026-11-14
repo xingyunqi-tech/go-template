@@ -1,0 +1,239 @@
+package postgres
+
+import (
+	"context"
+	"crypto/md5" //nolint:gosec // seed passwords are sent as MD5 like the clients do
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/xingyunqi-tech/go-template/internal/entity"
+	"github.com/xingyunqi-tech/go-template/internal/repo/postgres/sqlcgen"
+)
+
+const (
+	_regionCodeLength = 12
+	_demoPassword     = "Secret00"
+)
+
+// SeedData is seeds/seed.json.
+type SeedData struct {
+	Roles       []namedRow `json:"roles"`
+	Statuses    []namedRow `json:"statuses"`
+	Permissions []struct {
+		ID          string  `json:"id"`
+		Name        string  `json:"name"`
+		Description *string `json:"description"`
+		Resource    string  `json:"resource"`
+		Action      string  `json:"action"`
+	} `json:"permissions"`
+	RolePermissions []struct {
+		RoleID       int32  `json:"roleId"`
+		PermissionID string `json:"permissionId"`
+	} `json:"rolePermissions"`
+	Config []struct {
+		Key      string          `json:"key"`
+		Value    json.RawMessage `json:"value"`
+		IsPublic bool            `json:"isPublic"`
+	} `json:"config"`
+}
+
+type namedRow struct {
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
+}
+
+type regionNode struct {
+	Code     string       `json:"code"`
+	Name     string       `json:"name"`
+	Children []regionNode `json:"children"`
+}
+
+// SeedOptions selects the accounts created by Seed.
+type SeedOptions struct {
+	Production    bool
+	AdminEmail    string
+	AdminPassword string
+	Hash          func(ctx context.Context, md5 string) (string, error)
+}
+
+func md5Hex(s string) string {
+	sum := md5.Sum([]byte(s)) //nolint:gosec // see import
+
+	return hex.EncodeToString(sum[:])
+}
+
+func regionRows(tree []regionNode) []sqlcgen.SeedRegionsParams {
+	var rows []sqlcgen.SeedRegionsParams
+
+	var walk func(nodes []regionNode, level int32, parent *string)
+
+	walk = func(nodes []regionNode, level int32, parent *string) {
+		for _, n := range nodes {
+			code := n.Code + strings.Repeat("0", max(_regionCodeLength-len(n.Code), 0))
+			rows = append(rows, sqlcgen.SeedRegionsParams{
+				Code: code, Name: n.Name, Level: level, ParentCode: parent, Sort: int32(len(rows)), //nolint:gosec // a few thousand rows
+			})
+			walk(n.Children, level+1, &code)
+		}
+	}
+
+	walk(tree, 1, nil)
+
+	return rows
+}
+
+// Seed inserts the reference data and demo accounts like the nestjs seeds; existing rows stay.
+func (d *DB) Seed(ctx context.Context, data, regions []byte, opts SeedOptions) error {
+	var seed SeedData
+	if err := json.Unmarshal(data, &seed); err != nil {
+		return fmt.Errorf("seed: %w", err)
+	}
+
+	var tree []regionNode
+	if err := json.Unmarshal(regions, &tree); err != nil {
+		return fmt.Errorf("seed: regions: %w", err)
+	}
+
+	ctx, tx, err := d.Begin(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := d.seed(ctx, &seed, tree, opts); err != nil {
+		tx.Rollback(ctx)
+
+		return err
+	}
+
+	if _, err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (d *DB) seed(ctx context.Context, seed *SeedData, tree []regionNode, opts SeedOptions) error {
+	return d.queries(ctx, func(q *sqlcgen.Queries) error {
+		if err := seedReference(ctx, q, seed); err != nil {
+			return err
+		}
+
+		if err := seedRegions(ctx, q, tree); err != nil {
+			return err
+		}
+
+		if err := d.seedUsers(ctx, q, opts); err != nil {
+			return err
+		}
+
+		for _, c := range seed.Config {
+			if err := q.SeedConfig(ctx, sqlcgen.SeedConfigParams{Key: c.Key, Value: c.Value, IsPublic: c.IsPublic}); err != nil {
+				return fmt.Errorf("seed: config: %w", err)
+			}
+		}
+
+		return nil
+	})
+}
+
+func seedRegions(ctx context.Context, q *sqlcgen.Queries, tree []regionNode) error {
+	count, err := q.CountRegions(ctx)
+	if err != nil {
+		return fmt.Errorf("seed: regions: %w", err)
+	}
+
+	if count > 0 {
+		return nil
+	}
+
+	if _, err := q.SeedRegions(ctx, regionRows(tree)); err != nil {
+		return fmt.Errorf("seed: regions: %w", err)
+	}
+
+	return nil
+}
+
+func seedReference(ctx context.Context, q *sqlcgen.Queries, seed *SeedData) error {
+	for _, r := range seed.Roles {
+		if err := q.SeedRole(ctx, sqlcgen.SeedRoleParams{ID: r.ID, Name: r.Name}); err != nil {
+			return fmt.Errorf("seed: role: %w", err)
+		}
+	}
+
+	for _, s := range seed.Statuses {
+		if err := q.SeedStatus(ctx, sqlcgen.SeedStatusParams{ID: s.ID, Name: s.Name}); err != nil {
+			return fmt.Errorf("seed: status: %w", err)
+		}
+	}
+
+	for _, p := range seed.Permissions {
+		if err := q.SeedPermission(ctx, sqlcgen.SeedPermissionParams{
+			ID: p.ID, Name: p.Name, Description: p.Description, Resource: p.Resource, Action: p.Action,
+		}); err != nil {
+			return fmt.Errorf("seed: permission: %w", err)
+		}
+	}
+
+	for _, rp := range seed.RolePermissions {
+		if err := q.SeedRolePermission(ctx, sqlcgen.SeedRolePermissionParams{RoleID: rp.RoleID, PermissionID: rp.PermissionID}); err != nil {
+			return fmt.Errorf("seed: role permission: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (d *DB) seedUser(ctx context.Context, q *sqlcgen.Queries, opts SeedOptions, account [4]string, role int) error {
+	hash, err := opts.Hash(ctx, md5Hex(account[3]))
+	if err != nil {
+		return fmt.Errorf("seed: hash: %w", err)
+	}
+
+	roleID, statusID, gender := int32(role), int32(entity.StatusActive), int32(0) //nolint:gosec // small constants
+	first, last, email := account[0], account[1], account[2]
+
+	_, err = q.CreateUser(ctx, sqlcgen.CreateUserParams{
+		FirstName: &first, LastName: &last, Email: &email, Password: &hash, Provider: entity.ProviderEmail,
+		RoleID: &roleID, StatusID: &statusID, Gender: &gender, Phone: nil, Nickname: nil, Birthday: nil,
+		WechatOpenID: nil, WechatUnionID: nil, AlipayOpenID: nil, PhotoID: nil,
+	})
+	if err != nil {
+		return fmt.Errorf("seed: user: %w", err)
+	}
+
+	return nil
+}
+
+func (d *DB) seedUsers(ctx context.Context, q *sqlcgen.Queries, opts SeedOptions) error {
+	admin := int32(entity.RoleAdmin)
+	user := int32(entity.RoleUser)
+
+	admins, err := q.CountActiveUsersByRole(ctx, &admin)
+	if err != nil {
+		return fmt.Errorf("seed: users: %w", err)
+	}
+
+	email, pass := "admin@example.com", _demoPassword
+	if opts.Production {
+		email, pass = strings.ToLower(strings.TrimSpace(opts.AdminEmail)), opts.AdminPassword
+	}
+
+	if admins == 0 && email != "" && pass != "" {
+		if err := d.seedUser(ctx, q, opts, [4]string{"Super", "Admin", email, pass}, entity.RoleAdmin); err != nil {
+			return err
+		}
+	}
+
+	users, err := q.CountActiveUsersByRole(ctx, &user)
+	if err != nil {
+		return fmt.Errorf("seed: users: %w", err)
+	}
+
+	if users == 0 && !opts.Production {
+		return d.seedUser(ctx, q, opts, [4]string{"John", "Doe", "john.doe@example.com", _demoPassword}, entity.RoleUser)
+	}
+
+	return nil
+}

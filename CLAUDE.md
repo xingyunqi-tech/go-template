@@ -8,8 +8,10 @@ Go 后端模板，与 nestjs-template（`release/exam-prep`）**API 契约一致
 | 任务 | 命令 |
 |---|---|
 | 下载 golangci-lint / prek / typos 二进制，安装 Git 钩子 | `make install` |
+| 启动本地 Postgres、Redis | `make infra` |
+| 迁移 / 种子数据 | `make migrate` / `make seed` |
 | 本地启动 API | `make dev` |
-| 生成代码（oapi-codegen） | `make generate` |
+| 生成代码（oapi-codegen、sqlc） | `make generate` |
 | 格式化 | `make fmt` |
 | lint（golangci-lint、typos、`go mod tidy -diff`） | `make lint` |
 | vet + build | `make vet` |
@@ -24,7 +26,7 @@ Go 后端模板，与 nestjs-template（`release/exam-prep`）**API 契约一致
 
 `make check` = lint + vet + 单元测试，是 pre-push 钩子。宣称改动完成之前，`make check`、`make test-integration`、`make test-contract` 必须通过；涉及部署形态的改动再跑 `make test-e2e` 与 `make image`。
 
-工具版本：golangci-lint、prek、typos 写在 Makefile 变量里，下载官方二进制到 `bin/`；纯 Go 工具（oapi-codegen、goose、mockgen、govulncheck、gotestsum、go-test-coverage）在 `tools/go.mod`，用 `go tool -modfile=tools/go.mod <name>` 调用。主 `go.mod` 只放运行时依赖。
+工具版本：golangci-lint、prek、typos、sqlc 写在 Makefile 变量里，下载官方二进制到 `bin/`；纯 Go 工具（oapi-codegen、goose、mockgen、govulncheck、gotestsum、go-test-coverage）在 `tools/go.mod`，用 `go tool -modfile=tools/go.mod <name>` 调用。主 `go.mod` 只放运行时依赖。
 
 ## 契约：spec-first
 
@@ -50,6 +52,9 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 | `internal/controller/http/httperr` | nestjs HttpException 与 AllExceptionsFilter 翻译规则、业务错误键表、唯一约束表 |
 | `internal/i18n` | nestjs `src/i18n` 翻译文件与 `Accept-Language` 解析 |
 | `internal/config` | caarlos0/env 解析，变量名与 nestjs 一致，启动时一次性校验并列出全部问题 |
+| `internal/repo` | 端口在 `contracts.go`；`postgres/` 为 sqlc 查询与端口实现（请求事务经 context 传递，`AfterCommit` 登记提交后副作用），`redis/` 为与 nestjs Keyv 兼容的缓存（Redis 不可用时回落进程内） |
+| `internal/usecase` | `auth`、`user`、`session`、`permission`、`sms` 等业务流程，返回 `entity.Error` / `entity.BusinessError` |
+| `migrations/`、`seeds/` | goose 迁移（表结构与 `db/nestjs-schema.sql` 一致）、种子数据（与 nestjs seed 账号一致） |
 | `pkg/` | 与业务无关的封装，不引用 `internal/`；`pkg/validatorx` 按 `openapi/validation.json` 复刻 nestjs ValidationPipe（含 validator.js 移植） |
 
 - 配置只从 `config.Config` 读取，业务代码禁止 `os.Getenv`（forbidigo）。
@@ -77,11 +82,14 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 | parity | `tests/parity`，`make test-parity` 自动启动 nestjs 参照服务（compose 项目 `go-template-parity-nestjs`） | `parity` |
 
 - 用例调用 `t.Parallel()`（paralleltest）；使用 `t.Setenv` 的用例除外。
+- 集成测试每个包一个 Postgres 容器：`testutil.StartDatabase` 先迁移并写入种子到模板库，用例用 `Clone(t)` 得到独立库，可并行。
+- policy 中 `Tx: true` 的接口在事务内执行：成功或 4xx 业务错误提交，5xx 与 SQL 语句本身的错误回滚；鉴权守卫在事务开始前完成，同一请求不会同时持有两条连接。
 - testcontainers 起不来时测试失败，不跳过。Docker Desktop 的 socket 不在 `/var/run/docker.sock` 时，夹具自动使用 `~/.docker/run/docker.sock`。
 
 ## 生成文件（不手改）
 
-- `internal/controller/http/gen/gen.go` ← `make generate`
+- `internal/controller/http/gen/gen.go` ← `make generate`（oapi-codegen）
+- `internal/repo/postgres/sqlcgen/` ← `make generate`（sqlc，输入为 `migrations/` 与 `internal/repo/postgres/queries/`）
 
 ## 注释规范
 

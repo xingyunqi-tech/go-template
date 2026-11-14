@@ -1,9 +1,46 @@
-# CI / e2e 叠加层：生产构建、非生产配置
+# CI / e2e：生产镜像以 APP_ENV=production 起完整服务栈，演示账号由 seed 一次性写入
 #
 # 用法：make test-e2e
 
+x-ci-env: &ci-env
+  APP_ENV: production
+  AUTH_JWT_SECRET: ci_jwt_secret_0123456789abcdefghijklmnop
+  AUTH_REFRESH_SECRET: ci_refresh_secret_0123456789abcdefghijklmnop
+  AUTH_FORGOT_SECRET: ci_forgot_secret_0123456789abcdefghijklmnop
+  AUTH_CONFIRM_EMAIL_SECRET: ci_confirm_email_secret_0123456789abcdefghijklmnop
+  SWAGGER_ENABLED: 'true'
+  REDIS_ENABLED: 'true'
+  TRUST_PROXY: '1'
+
 services:
-  api:
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  migrate:
+    environment: *ci-env
+
+  seed:
+    image: go-template:local
+    pull_policy: never
+    env_file:
+      - ../.env.example
+    command: ['seed']
+    restart: 'no'
     environment:
+      <<: *ci-env
       APP_ENV: test
-      APP_PORT: '3000'
+      DATABASE_HOST: postgres
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    ports: !override
+      - '127.0.0.1:${APP_PORT:-3000}:3000'
+    environment: *ci-env
+    depends_on:
+      seed:
+        condition: service_completed_successfully
