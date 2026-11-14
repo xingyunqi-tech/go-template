@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -32,6 +33,8 @@ type Infra struct {
 	Pool    *pgxpool.Pool
 	Redis   *goredis.Client
 	Metrics *metrics.Metrics
+	// Outbound replaces http.DefaultTransport for the SMS, WeChat and Alipay clients.
+	Outbound http.RoundTripper
 }
 
 // Close releases the connections.

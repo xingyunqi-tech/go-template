@@ -1,0 +1,15 @@
+package v1
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/xingyunqi-tech/go-template/internal/controller/http/gen"
+	"github.com/xingyunqi-tech/go-template/internal/controller/http/httperr"
+)
+{{range .Operations}}
+// {{.Method}} handles {{.HTTPMethod}} {{.Path}}.
+func (s *Server) {{.Method}}(context.Context, gen.{{.Method}}RequestObject) (gen.{{.Method}}ResponseObject, error) {
+	return nil, httperr.Status(http.StatusNotImplemented)
+}
+{{end}}

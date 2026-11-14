@@ -27,7 +27,7 @@ func md5Hex(s string) string {
 func volatileKeys() map[string]bool {
 	return map[string]bool{
 		"token": true, "refreshToken": true, "tokenExpires": true, "createdAt": true,
-		"updatedAt": true, "lastActiveAt": true, "ip": true,
+		"updatedAt": true, "lastActiveAt": true, "ip": true, "responseTime": true,
 	}
 }
 
@@ -398,4 +398,24 @@ func TestAdminCreateUpdateDelete(t *testing.T) {
 	requireSameBody(t, user(http.MethodDelete))
 	requireSameBody(t, user(http.MethodGet))
 	requireSameBody(t, user(http.MethodPut, withJSON(t, map[string]any{"nickname": "after"})))
+}
+
+func TestRevokeOtherSessions(t *testing.T) {
+	t.Parallel()
+
+	current := tempUser(t, "revoke.others")
+	other := loginBoth(t, "parity.revoke.others."+_run+"@example.com")
+
+	requireSameBody(t, do(t, http.MethodPost, "/api/v1/auth/sessions/revoke-others", withTokens(current)))
+	requireSameBody(t, do(t, http.MethodGet, "/api/v1/auth/me", withTokens(other)))
+	requireSameBody(t, do(t, http.MethodPost, "/api/v1/auth/sessions/revoke-others", withTokens(current)))
+
+	p := do(t, http.MethodGet, "/api/v1/auth/sessions", withTokens(current))
+	count := func(r *response) int {
+		body, _ := r.JSON(t).(map[string]any)
+		list, _ := body["data"].([]any)
+
+		return len(list)
+	}
+	require.Equal(t, count(p.Nestjs), count(p.Go))
 }

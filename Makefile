@@ -76,6 +76,10 @@ generate: $(OPENAPIGEN) $(SQLC) ## 生成代码：oapi-codegen（scope.yaml 范�
 	$(OPENAPIGEN)
 	$(SQLC) generate
 
+.PHONY: module
+module: ## 按 OpenAPI 标签生成模块骨架（NAME=orders TAG=Orders）：写入 scope.yaml、处理器桩、用例、仓储与端口
+	$(GO) run ./cmd/modulegen -name $(NAME) -tag '$(TAG)'
+
 .PHONY: openapi-sync
 openapi-sync: ## 从 fastapi-temp 复制共享产物（FASTAPI_DIR）；OPENAPI_SYNC=run 时在 nestjs 上重新导出（需 Docker 与 uv）
 ifeq ($(OPENAPI_SYNC),run)

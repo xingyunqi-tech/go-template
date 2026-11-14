@@ -1,5 +1,5 @@
-// Package auth implements the nestjs AuthService flows that use email and password, token
-// refresh, profile updates, account deletion and session management.
+// Package auth implements the nestjs AuthService flows: email, phone, SMS, WeChat and Alipay
+// sign-in, token refresh, profile updates, account deletion and session management.
 package auth
 
 import (
@@ -48,6 +48,11 @@ type Mail struct {
 // Mailer queues templated emails.
 type Mailer interface {
 	Send(ctx context.Context, m Mail) error
+}
+
+// DefaultSettings creates the default notification settings of a new user.
+type DefaultSettings interface {
+	InitializeDefaultSettings(ctx context.Context, userID int) error
 }
 
 // Verifier checks passwords and reports when the stored hash should be replaced.
@@ -126,6 +131,11 @@ type Service struct {
 	sms      SMSCodes
 	log      *slog.Logger
 	now      func() time.Time
+	settings DefaultSettings
+	sender   SMSSender
+	wechat   Wechat
+	alipay   Alipay
+	bindings repo.UserBindings
 }
 
 // Deps are the Service dependencies.
@@ -141,6 +151,11 @@ type Deps struct {
 	Mailer   Mailer
 	SMS      SMSCodes
 	Log      *slog.Logger
+	Settings DefaultSettings
+	Sender   SMSSender
+	Wechat   Wechat
+	Alipay   Alipay
+	Bindings repo.UserBindings
 }
 
 // New returns a Service.
@@ -148,6 +163,8 @@ func New(d *Deps) *Service {
 	return &Service{
 		cfg: d.Config, users: d.Users, userRepo: d.UserRepo, sessions: d.Sessions, sessRepo: d.SessRepo,
 		cache: d.Cache, tx: d.Tx, hasher: d.Hasher, mailer: d.Mailer, sms: d.SMS, log: d.Log, now: time.Now,
+		settings: d.Settings,
+		sender:   d.Sender, wechat: d.Wechat, alipay: d.Alipay, bindings: d.Bindings,
 	}
 }
 
@@ -357,12 +374,25 @@ func (s *Service) Register(ctx context.Context, in *user.Input) error {
 		return err //nolint:wrapcheck // user errors are wrapped
 	}
 
+	s.initializeSettings(ctx, u.ID)
+
 	hash, err := s.sign(map[string]any{"confirmEmailUserId": u.ID}, s.cfg.ConfirmEmail)
 	if err != nil {
 		return err
 	}
 
 	return s.sendMail(ctx, Mail{Template: "activation", To: deref(in.Email.Value), Data: map[string]any{"hash": hash}})
+}
+
+// initializeSettings creates the default notification settings; a failure only logs.
+func (s *Service) initializeSettings(ctx context.Context, userID int) {
+	if s.settings == nil {
+		return
+	}
+
+	if err := s.settings.InitializeDefaultSettings(ctx, userID); err != nil {
+		s.log.WarnContext(ctx, "failed to initialize notification settings", "user_id", userID, "error", err.Error())
+	}
 }
 
 func deref(p *string) string {

@@ -17,7 +17,7 @@ make infra        # 启动 Postgres 与 Redis
 make migrate      # 建表（goose）
 make seed         # 角色、权限、行政区划、配置与演示账号（admin@example.com / john.doe@example.com，密码 Secret00）
 make dev          # http://localhost:3000
-make worker       # 队列 worker 与周期任务（邮件、账号清理）
+make worker       # 队列 worker 与周期任务（邮件、通知、账号清理）
 ```
 
 - `GET /`：应用信息
@@ -34,6 +34,7 @@ make worker       # 队列 worker 与周期任务（邮件、账号清理）
 ```bash
 make help              # 列出全部目标
 make generate          # 按 openapi/scope.yaml 生成接口代码，并由 sqlc 生成查询代码
+make module NAME=orders TAG=Orders  # 按 nestjs 文档中某个 tag 的接口生成处理器、usecase、repo 骨架并加入 scope.yaml
 make check             # lint + vet + 单元测试
 make test-integration  # 集成测试（需要 Docker）
 make test-contract     # 契约测试（含 4516 条 nestjs 校验 oracle 用例）

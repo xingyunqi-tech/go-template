@@ -12,6 +12,7 @@ Go 后端模板，与 nestjs-template（`release/exam-prep`）**API 契约一致
 | 迁移 / 种子数据 | `make migrate` / `make seed` |
 | 本地启动 API / 队列 worker | `make dev` / `make worker` |
 | 生成代码（oapi-codegen、sqlc） | `make generate` |
+| 按 nestjs tag 生成模块骨架（处理器、usecase、repo、端口，并加入 `scope.yaml`） | `make module NAME=<包名> TAG=<tag>` |
 | 格式化 | `make fmt` |
 | lint（golangci-lint、typos、`go mod tidy -diff`） | `make lint` |
 | vet + build | `make vet` |
@@ -52,9 +53,9 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 | `internal/controller/http/httperr` | nestjs HttpException 与 AllExceptionsFilter 翻译规则、业务错误键表、唯一约束表 |
 | `internal/i18n` | nestjs `src/i18n` 翻译文件与 `Accept-Language` 解析 |
 | `internal/config` | caarlos0/env 解析，变量名与 nestjs 一致，启动时一次性校验并列出全部问题 |
-| `internal/repo` | 端口在 `contracts.go`；`postgres/` 为 sqlc 查询与端口实现（请求事务经 context 传递，`AfterCommit` 登记提交后副作用；`jobs.go` 用 River `InsertTx` 在请求事务内入队，River 表在 `river` schema，由 `rivermigrate` 迁移），`redis/` 为与 nestjs Keyv 兼容的缓存与 `lock:<key>` 分布式锁（Redis 不可用时回落进程内），`webapi/mail` 为 nestjs 邮件模板渲染与 SMTP，`webapi/storage` 为 local / S3 文件存储 |
-| `internal/usecase` | `auth`、`user`、`session`、`permission`、`sms`、`file`、`health`、`alert`、`audit`、`accountcleanup` 等业务流程，返回 `entity.Error` / `entity.BusinessError` |
-| `internal/worker` | River workers（`mail`、`account-cleanup`）与周期任务（会话清理、已读通知清理、账号清理补偿），由 `worker` 子命令运行 |
+| `internal/repo` | 端口在 `contracts.go`；`postgres/` 为 sqlc 查询与端口实现（请求事务经 context 传递，`AfterCommit` 登记提交后副作用；`jobs.go` 用 River `InsertTx` 在请求事务内入队，River 表在 `river` schema，由 `rivermigrate` 迁移），`redis/` 为与 nestjs Keyv 兼容的缓存与 `lock:<key>` 分布式锁（Redis 不可用时回落进程内），`webapi/mail` 为 nestjs 邮件模板渲染与 SMTP，`webapi/storage` 为 local / S3 文件存储，`webapi/{sms,wechat,alipay}` 为阿里云短信、微信、支付宝开放平台客户端 |
+| `internal/usecase` | `auth`（邮箱、手机号、短信、微信、支付宝登录）、`user`、`session`、`permission`、`sms`、`file`、`health`、`alert`、`audit`、`accountcleanup`、`notification`、`appconfig`、`region`、`appprofile`、`consent`、`address`、`favorite`、`feedback` 等业务流程，返回 `entity.Error` / `entity.BusinessError` |
+| `internal/worker` | River workers（`mail`、`notification`、`account-cleanup`）与周期任务（会话清理、已读通知清理、账号清理补偿），由 `worker` 子命令运行 |
 | `internal/metrics` | Prometheus 指标（名称、标签、桶与 nestjs 一致，样本带 `app`），pgx 查询耗时 tracer |
 | `templates/mail` | 从 nestjs 逐字节复制的邮件模板，golden 用例为 `tests/fixtures/nestjs_mail` |
 | `migrations/`、`seeds/` | goose 迁移（表结构与 `db/nestjs-schema.sql` 一致）、种子数据（与 nestjs seed 账号一致） |
@@ -72,7 +73,7 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 - 静态段不区分大小写，允许一个末尾斜杠，路径参数保留原始大小写与编码。
 - 未匹配路由与方法不符都返回 404 `{code: 404, message: "Cannot <METHOD> <originalUrl>", data: null}`，不带 `Allow`。
 - `HEAD` 命中同路径的 `GET` 处理器。
-- 处理顺序：（`OTEL_ENABLED` 时 otelhttp）→ Request ID 与语言 → CORS（`OPTIONS` 一律 204）→ 指标 → pino-http 请求日志与 panic 兜底 → 安全头 → JSON 请求体（256kb，413 / 400）→ 路由匹配 → 路径参数解码 → 限流（GCRA）→ 鉴权 → RBAC → `ParseIdPipe`（数字 `:id`）→ 请求体 / 查询 DTO 校验（`uploadFile` 为用途守卫 → multipart 接收 → 查询 DTO）→ 生成的处理器（`Tx` 事务、`Audit` 审计）。新增接口必须在 `policy.go` 声明，缺失时启动失败；nestjs 不进文档的接口（`/metrics`、私有文件读取、local 下载）以 `RawRoute` 注册，列在 `Undocumented()`。
+- 处理顺序：（`OTEL_ENABLED` 时 otelhttp）→ Request ID 与语言 → CORS（`OPTIONS` 一律 204）→ 指标 → pino-http 请求日志与 panic 兜底 → 安全头 → JSON 请求体（256kb，413 / 400）→ 路由匹配 → 路径参数解码 → 限流（GCRA）→ 鉴权 → RBAC → `ParseIdPipe`（数字 `:id`）→ 请求体 / 查询 DTO 校验（`uploadFile` 为用途守卫 → multipart 接收 → 查询 DTO）→ 生成的处理器（`Tx` 事务、`Audit` 审计）。新增接口必须在 `policy.go` 声明，缺失时启动失败（`Params` 声明校验路径参数的 DTO）；nestjs 不进文档的接口（`/metrics`、私有文件读取、local 下载）以 `RawRoute` 注册，列在 `Undocumented()`。
 
 ## 测试
 

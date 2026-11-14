@@ -211,6 +211,11 @@ func jsTrim(s string) string {
 	return strings.Trim(s, _jsWhitespace)
 }
 
+// Trim is String.prototype.trim.
+func Trim(s string) string {
+	return jsTrim(s)
+}
+
 func jsLower(s string) string {
 	return _lower.String(s)
 }

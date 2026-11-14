@@ -74,7 +74,7 @@ func (p *pipeline) checkOperation(op *operation) []error {
 		errs = append(errs, fmt.Errorf("%w: %s needs %s", errPolicy, op.id, what))
 	}
 
-	for _, dto := range []string{op.bodyDTO, policy.Query} {
+	for _, dto := range []string{op.bodyDTO, policy.Query, policy.Params} {
 		if dto != "" && !p.validator.Has(dto) {
 			errs = append(errs, fmt.Errorf("%w: %s uses %s, which is not in validation.json", errPolicy, op.id, dto))
 		}
@@ -151,6 +151,11 @@ func (p *pipeline) prepare(w http.ResponseWriter, r *http.Request, op *operation
 		return r, err
 	}
 
+	if len(op.pathParams) > 0 {
+		// The generated parameter binding unescapes path values only when RawPath is set.
+		r.URL.RawPath = r.URL.EscapedPath()
+	}
+
 	policy := p.policies[op.id]
 
 	if err := p.throttle.check(w, r, op.id, &policy); err != nil {
@@ -161,10 +166,8 @@ func (p *pipeline) prepare(w http.ResponseWriter, r *http.Request, op *operation
 		return r, err
 	}
 
-	for _, param := range op.pathParams {
-		if param.numeric && !validID(params[param.name]) {
-			return r, httperr.InvalidID()
-		}
+	if err := p.validateParams(op, params, policy.Params); err != nil {
+		return r, err
 	}
 
 	if policy.Upload {
@@ -255,6 +258,28 @@ func (p *pipeline) validateBody(r *http.Request, dto string) (validatorx.Value, 
 	r.Header.Set("Content-Type", _jsonMediaType)
 
 	return value, nil
+}
+
+// validateParams runs ParseIdPipe on numeric parameters and then the path parameter DTO, if any.
+func (p *pipeline) validateParams(op *operation, params map[string]string, dto string) error {
+	for _, param := range op.pathParams {
+		if param.numeric && !validID(params[param.name]) {
+			return httperr.InvalidID()
+		}
+	}
+
+	if dto == "" {
+		return nil
+	}
+
+	o := validatorx.NewObject()
+	for _, param := range op.pathParams {
+		o.Set(param.name, params[param.name])
+	}
+
+	_, err := p.validator.Run(dto, "param", o)
+
+	return err //nolint:wrapcheck // validation errors are HTTP errors
 }
 
 func (p *pipeline) validateQuery(r *http.Request, dto string) (validatorx.Value, error) {

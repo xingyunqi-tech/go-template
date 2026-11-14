@@ -23,6 +23,8 @@ ORDER BY u."id"
 LIMIT $2`
 
 	_detachPhotoSQL = `UPDATE "user" SET "photoId" = NULL, "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = $1`
+
+	_userStateSQL = `SELECT "deletedAt" IS NOT NULL FROM "user" WHERE "id" = $1`
 )
 
 // AccountCleanups implements repo.AccountCleanups.
@@ -85,4 +87,20 @@ func (a *AccountCleanups) PendingUserIDs(ctx context.Context, deletedBefore time
 	}
 
 	return ids, nil
+}
+
+// UserState implements repo.AccountCleanups.
+func (a *AccountCleanups) UserState(ctx context.Context, userID int) (exists, removed bool, err error) {
+	err = a.db.dbtx(ctx, func(db sqlcgen.DBTX) error {
+		return db.QueryRow(ctx, _userStateSQL, userID).Scan(&removed)
+	})
+
+	switch {
+	case notFound(err):
+		return false, false, nil
+	case err != nil:
+		return false, false, fmt.Errorf("postgres: user state: %w", err)
+	default:
+		return true, removed, nil
+	}
 }

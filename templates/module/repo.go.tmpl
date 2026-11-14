@@ -1,0 +1,15 @@
+package postgres
+
+import "github.com/xingyunqi-tech/go-template/internal/repo"
+
+// {{.Type}} implements repo.{{.Type}}.
+type {{.Type}} struct {
+	db *DB
+}
+
+// New{{.Type}} returns the {{.Tag}} repository.
+func New{{.Type}}(db *DB) *{{.Type}} {
+	return &{{.Type}}{db: db}
+}
+
+var _ repo.{{.Type}} = (*{{.Type}})(nil)

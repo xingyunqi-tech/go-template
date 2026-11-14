@@ -1,0 +1,14 @@
+// Package {{.Package}} holds the {{.Tag}} business rules.
+package {{.Package}}
+
+import "github.com/xingyunqi-tech/go-template/internal/repo"
+
+// Service implements the {{.Tag}} use cases.
+type Service struct {
+	store repo.{{.Type}}
+}
+
+// New returns a Service.
+func New(store repo.{{.Type}}) *Service {
+	return &Service{store: store}
+}

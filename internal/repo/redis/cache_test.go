@@ -1,6 +1,7 @@
 package redis_test
 
 import (
+	"encoding/json"
 	"log/slog"
 	"strconv"
 	"testing"
@@ -76,4 +77,18 @@ func TestCacheWithoutRedisUsesMemory(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, "v", got)
 	require.NoError(t, c.Delete(t.Context(), "k"))
+}
+
+func TestMemoryStoresJSONWithoutHTMLEscaping(t *testing.T) {
+	t.Parallel()
+
+	m := redis.NewMemory()
+	require.NoError(t, m.Set(t.Context(), "k", map[string]string{"a": "<&>"}, time.Hour))
+
+	var raw json.RawMessage
+
+	found, err := m.Get(t.Context(), "k", &raw)
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, `{"a":"<&>"}`, string(raw))
 }

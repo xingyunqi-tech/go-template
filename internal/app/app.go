@@ -20,14 +20,21 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/repo/postgres"
 	"github.com/xingyunqi-tech/go-template/internal/repo/redis"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/accountcleanup"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/address"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/alert"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/appconfig"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/appprofile"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/audit"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/consent"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/favorite"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/feedback"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/file"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/health"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/notification"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/permission"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/region"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/session"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/sms"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/user"
 	"github.com/xingyunqi-tech/go-template/openapi"
 	"github.com/xingyunqi-tech/go-template/pkg/httpserver"
@@ -48,14 +55,18 @@ func authConfig(a *config.Auth) auth.Config {
 func newAccountCleanup(db *postgres.DB, jobs repo.Jobs, alerts *alert.Service, files *file.Service, log *slog.Logger) *accountcleanup.Service {
 	cleanups := postgres.NewAccountCleanups(db)
 
-	return accountcleanup.New(cleanups, jobs, alerts, log, accountcleanup.NewUsersCleaner(cleanups), file.NewCleaner(files))
+	return accountcleanup.New(cleanups, jobs, alerts, log, accountcleanup.NewUsersCleaner(cleanups), file.NewCleaner(files),
+		notification.NewCleaner(postgres.NewNotifications(db)),
+		favorite.NewCleaner(postgres.NewFavorites(db)), feedback.NewCleaner(postgres.NewFeedbacks(db)),
+		address.NewCleaner(postgres.NewAddresses(db)),
+	)
 }
 
 func newHealth(cfg *config.Config, db *postgres.DB, infra *Infra) *health.Service {
 	deps := health.Deps{
 		Config: health.Config{
-			WechatAppID: cfg.Observability.WechatAppID, WechatAppSecret: cfg.Observability.WechatAppSecret.Value(),
-			AlipayAppID: cfg.Observability.AlipayAppID,
+			WechatAppID: cfg.Wechat.AppID, WechatAppSecret: cfg.Wechat.AppSecret.Value(),
+			AlipayAppID: cfg.Alipay.AppID,
 		},
 		Database: postgres.NewHealth(db), Redis: nil, HTTP: nil, DiskPath: "", Memory: nil, Disk: nil,
 	}
@@ -114,6 +125,16 @@ type services struct {
 	health      *health.Service
 	permissions *permission.Service
 	limiter     *ratelimit.Limiter
+
+	notifications *notification.Service
+	cleanup       *accountcleanup.Service
+	addresses     *address.Service
+	favorites     *favorite.Service
+	feedbacks     *feedback.Service
+	config        *appconfig.Service
+	regions       *region.Service
+	appProfile    *appprofile.Service
+	consents      *consent.Service
 }
 
 func newServices(cfg *config.Config, log *slog.Logger, infra *Infra) (*services, error) {
@@ -135,19 +156,35 @@ func newServices(cfg *config.Config, log *slog.Logger, infra *Infra) (*services,
 	userRepo := postgres.NewUsers(db)
 	sessionRepo := postgres.NewSessions(db)
 	sessions := session.New(sessionRepo, cache, db, log)
-	users := user.New(userRepo, postgres.NewFiles(db), sessions, hasher, newAccountCleanup(db, jobs, alerts, files, log), log)
+	cleanup := newAccountCleanup(db, jobs, alerts, files, log)
+	users := user.New(userRepo, postgres.NewFiles(db), sessions, hasher, cleanup, log)
+	notifications := notification.New(postgres.NewNotifications(db), jobs, log)
+	codes := newSMS(cfg, log, infra, cache)
+	appConfig := appconfig.New(postgres.NewConfigs(db), cache, db, log)
 
 	return &services{
 		db: db,
 		auth: auth.New(&auth.Deps{
 			Config: authConfig(&cfg.Auth), Users: users, UserRepo: userRepo, Sessions: sessions, SessRepo: sessionRepo,
-			Cache: cache, Tx: db, Hasher: hasher, Mailer: queueMailer{jobs: jobs}, SMS: sms.NewCodes(cache), Log: log,
+			Cache: cache, Tx: db, Hasher: hasher, Mailer: queueMailer{jobs: jobs}, SMS: codes, Log: log,
+			Settings: notifications,
+			Sender:   codes, Wechat: newWechat(cfg, log, infra, cache), Alipay: newAlipay(cfg, log, infra), Bindings: userRepo,
 		}),
 		users:       users,
 		files:       files,
 		health:      newHealth(cfg, db, infra),
 		permissions: permission.New(postgres.NewPermissions(db), cache),
 		limiter:     ratelimit.New(infra.Redis, throttleObserver{log: log, metrics: infra.Metrics, alerts: alerts}),
+
+		notifications: notifications,
+		cleanup:       cleanup,
+		addresses:     address.New(postgres.NewAddresses(db), log),
+		favorites:     favorite.New(postgres.NewFavorites(db)),
+		feedbacks:     feedback.New(postgres.NewFeedbacks(db)),
+		config:        appConfig,
+		regions:       region.New(postgres.NewRegions(db), cache, log),
+		appProfile:    appprofile.New(appConfig),
+		consents:      consent.New(postgres.NewConsents(db), appConfig),
 	}, nil
 }
 
@@ -204,6 +241,9 @@ func NewHandler(cfg *config.Config, log *slog.Logger, infra *Infra) (*Handler, e
 	server := v1.New(&v1.Deps{
 		AppName: cfg.App.Name, Auth: svc.auth, Users: svc.users, URLs: fileURLs(cfg, svc.files),
 		Health: svc.health, Log: log, Files: svc.files, PresignedUploads: cfg.File.Driver == config.FileDriverS3Presigned,
+		Notifications: svc.notifications, Cleanup: svc.cleanup,
+		Addresses: svc.addresses, Favorites: svc.favorites, Feedbacks: svc.feedbacks,
+		Config: svc.config, Regions: svc.regions, AppProfile: svc.appProfile, Consents: svc.consents,
 	})
 
 	opts := routerOptions(cfg, log, infra, svc, server)

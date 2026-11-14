@@ -29,7 +29,7 @@ func toSession(s *sqlcgen.Session) *entity.Session {
 }
 
 func id32(id int) int32 {
-	return int32(id) //nolint:gosec // ids are int4
+	return int32(id) //nolint:gosec // ids, offsets and limits are int4
 }
 
 // Get returns the active session, or nil.

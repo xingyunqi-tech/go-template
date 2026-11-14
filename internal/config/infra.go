@@ -60,14 +60,11 @@ type Mail struct {
 	RequireTLS   OptionalBool `env:"MAIL_REQUIRE_TLS"`
 }
 
-// Observability configures tracing, Sentry and the external health probes.
+// Observability configures tracing and Sentry.
 type Observability struct {
-	OTelEnabled     OptionalBool `env:"OTEL_ENABLED"`
-	OTelEndpoint    string       `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
-	SentryDSN       Secret       `env:"SENTRY_DSN"`
-	WechatAppID     string       `env:"WECHAT_APP_ID"`
-	WechatAppSecret Secret       `env:"WECHAT_APP_SECRET"`
-	AlipayAppID     string       `env:"ALIPAY_APP_ID"`
+	OTelEnabled  OptionalBool `env:"OTEL_ENABLED"`
+	OTelEndpoint string       `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+	SentryDSN    Secret       `env:"SENTRY_DSN"`
 }
 
 // DisabledFlag is a boolean that is on unless the variable is the string "false".

@@ -17,6 +17,7 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/repo/redis"
 	"github.com/xingyunqi-tech/go-template/internal/repo/webapi/mail"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/alert"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/notification"
 	"github.com/xingyunqi-tech/go-template/internal/worker"
 )
 
@@ -55,6 +56,10 @@ func NewWorkerClient(cfg *config.Config, log *slog.Logger, infra *Infra, sender 
 		Maintenance: postgres.NewMaintenance(db),
 		Counter:     appMetrics,
 		Log:         log,
+		Notify: worker.NotificationDeps{
+			Notifications: notification.New(postgres.NewNotifications(db), postgres.NewJobs(inserter), log),
+			Users:         postgres.NewUsers(db), SMS: nil, Subscribe: nil, Templates: nil,
+		},
 	})
 	if err != nil {
 		return nil, err //nolint:wrapcheck // worker errors are wrapped

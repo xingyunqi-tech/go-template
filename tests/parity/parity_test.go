@@ -119,7 +119,7 @@ func withBody(contentType string, body []byte) option {
 func send(t *testing.T, base, method, target string, opts *requestOptions, s side) *response {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(t.Context(), _requestTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), _requestTimeout)
 	defer cancel()
 
 	var body io.Reader

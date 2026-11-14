@@ -43,6 +43,9 @@ type Config struct {
 	File          File
 	Mail          Mail
 	Observability Observability
+	SMS           SMS
+	Wechat        Wechat
+	Alipay        Alipay
 }
 
 // App holds settings shared with nestjs-template under the same variable names.

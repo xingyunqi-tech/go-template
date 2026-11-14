@@ -27,6 +27,8 @@ const _pipelineSpec = `{"paths":{
    "requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/AuthEmailLoginDto"}}}}}},
  "/api/v1/items":{"get":{"operationId":"listItems"}},
  "/api/v1/codes/{code}":{"get":{"operationId":"getCode",
+   "parameters":[{"in":"path","name":"code","schema":{"type":"string"}}]}},
+ "/api/v1/zones/{code}":{"get":{"operationId":"getZone",
    "parameters":[{"in":"path","name":"code","schema":{"type":"string"}}]}}
 }}`
 
@@ -35,6 +37,7 @@ func pipelinePolicies() map[string]Policy {
 		"updateItem": {Auth: AuthJWT},
 		"listItems":  {Auth: AuthNone, Query: "AdminPaginationQueryDto"},
 		"getCode":    {Auth: AuthNone},
+		"getZone":    {Auth: AuthNone, Params: "RegionCodeParam"},
 	}
 }
 
@@ -73,6 +76,9 @@ func newPipelineChain(t *testing.T) http.Handler {
 	mux.Patch("/api/v1/items/{id}", echo)
 	mux.Get("/api/v1/items", echo)
 	mux.Get("/api/v1/codes/{code}", echo)
+	mux.Get("/api/v1/zones/{code}", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(r.URL.RawPath)) //nolint:gosec // test echo handler
+	})
 
 	ops, err := parseOperations([]byte(_pipelineSpec))
 	require.NoError(t, err)
@@ -177,6 +183,28 @@ func TestPipelineDecodesPathParams(t *testing.T) {
 
 	rec = send(t, h, http.MethodPost, "/api/v1/codes/abc", "", nil)
 	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestPipelineValidatesPathParamsDTO(t *testing.T) {
+	t.Parallel()
+
+	h := newPipelineChain(t)
+
+	rec := send(t, h, http.MethodGet, "/api/v1/zones/x%31", "", nil)
+	assert.JSONEq(t, `{"code":422,"message":"Validation failed","data":{"code":"code must be a 12-digit region code"}}`, rec.Body.String())
+
+	rec = send(t, h, http.MethodGet, "/api/v1/zones/11010100000%30", "", nil)
+	assert.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, "/api/v1/zones/11010100000%30", rec.Body.String())
+
+	validator, err := validatorx.New(openapi.Validation)
+	require.NoError(t, err)
+
+	pipe := &pipeline{
+		ops: nil, policies: map[string]Policy{"paramsOp": {Params: "MissingParamsDto"}}, guards: nil, permission: nil,
+		validator: validator, errs: nil,
+	}
+	require.ErrorContains(t, pipe.check([]*operation{{id: "paramsOp"}}), "MissingParamsDto")
 }
 
 func TestPipelineCheckReportsUnrunnableOperations(t *testing.T) {

@@ -45,6 +45,7 @@ type Deps struct {
 	Maintenance repo.Maintenance
 	Counter     Counter
 	Log         *slog.Logger
+	Notify      NotificationDeps
 }
 
 // Config returns the River configuration of the worker process.
@@ -59,6 +60,7 @@ func Config(d *Deps) (*river.Config, error) {
 		WorkerDefaults: river.WorkerDefaults[ReadNotificationsArgs]{}, maintenance: d.Maintenance, log: d.Log,
 	})
 	river.AddWorker(workers, &CompensationWorker{WorkerDefaults: river.WorkerDefaults[CompensationArgs]{}, cleanup: d.Cleanup, log: d.Log})
+	addNotificationWorkers(workers, d)
 
 	shanghai, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {

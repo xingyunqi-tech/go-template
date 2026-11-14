@@ -90,6 +90,22 @@ func (s *Service) Enqueue(ctx context.Context, userID int) error {
 	return nil
 }
 
+// Retrigger queues the cleanup of a removed user again; nothing is queued while one is pending.
+func (s *Service) Retrigger(ctx context.Context, userID int) error {
+	exists, removed, err := s.cleanups.UserState(ctx, userID)
+
+	switch {
+	case err != nil:
+		return err //nolint:wrapcheck // repo errors are wrapped
+	case exists && !removed:
+		return entity.Invalid("user", "userNotDeleted")
+	case !exists:
+		return entity.NotFoundKey("userNotFound")
+	}
+
+	return s.Enqueue(ctx, userID)
+}
+
 // Run executes every cleaner; failures do not stop the others and are returned together. The
 // cleanup is recorded as completed only when all succeed.
 func (s *Service) Run(ctx context.Context, userID int) error {

@@ -3,6 +3,7 @@
 package redis
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -121,12 +122,12 @@ func (c *Cache) Set(ctx context.Context, k string, value any, ttl time.Duration)
 		return c.memory.Set(ctx, k, value, ttl)
 	}
 
-	raw, err := json.Marshal(value)
+	raw, err := encode(value)
 	if err != nil {
 		return fmt.Errorf("cache: encode: %w", err)
 	}
 
-	payload, err := json.Marshal(envelope{Value: raw, Expires: c.now().Add(ttl).UnixMilli()})
+	payload, err := encode(envelope{Value: raw, Expires: c.now().Add(ttl).UnixMilli()})
 	if err != nil {
 		return fmt.Errorf("cache: encode: %w", err)
 	}
@@ -159,6 +160,20 @@ func (c *Cache) Delete(ctx context.Context, k string) error {
 	}
 
 	return nil
+}
+
+// encode is JSON.stringify: <, > and & stay unescaped.
+func encode(v any) ([]byte, error) {
+	var buf bytes.Buffer
+
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+
+	if err := enc.Encode(v); err != nil {
+		return nil, err //nolint:wrapcheck // callers wrap
+	}
+
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 type memoryItem struct {
@@ -206,7 +221,7 @@ func (m *Memory) Get(_ context.Context, k string, dst any) (bool, error) {
 
 // Set stores value for ttl, evicting expired and then the oldest entries when full.
 func (m *Memory) Set(_ context.Context, k string, value any, ttl time.Duration) error {
-	raw, err := json.Marshal(value)
+	raw, err := encode(value)
 	if err != nil {
 		return fmt.Errorf("cache: encode: %w", err)
 	}

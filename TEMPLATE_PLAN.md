@@ -183,6 +183,7 @@ chi 与标准库 ServeMux 的差异不大：chi 提供 `Route` / `Group` / `With
 ```
 go-template/
 ├── cmd/app/main.go                 # 子命令入口：serve / worker / migrate / seed / healthcheck / ...
+├── cmd/modulegen/                  # 模块代码生成器（make module）
 ├── internal/
 │   ├── app/                        # 组装：配置 → 基础设施 → repo → usecase → controller；生命周期与优雅停机
 │   ├── config/                     # caarlos0/env 结构体，按分组拆分

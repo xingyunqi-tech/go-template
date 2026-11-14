@@ -278,3 +278,11 @@ func keys(m map[string]any) []string {
 
 	return out
 }
+
+func TestHealthProbes(t *testing.T) {
+	t.Parallel()
+
+	for _, target := range []string{"/api/v1/health/live", "/api/v1/health/ready"} {
+		requireSameBody(t, do(t, http.MethodGet, target))
+	}
+}

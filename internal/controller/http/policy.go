@@ -1,6 +1,10 @@
 package http
 
-import "github.com/xingyunqi-tech/go-template/internal/entity"
+import (
+	"maps"
+
+	"github.com/xingyunqi-tech/go-template/internal/entity"
+)
 
 // Auth is how an operation authenticates.
 type Auth int
@@ -58,7 +62,9 @@ type Policy struct {
 	Permissions   []string
 	AnyPermission bool
 	// Query is the nestjs DTO validating the query string.
-	Query    string
+	Query string
+	// Params is the nestjs DTO validating the path parameters (@Param() of a DTO class).
+	Params   string
 	Throttle *Throttle
 	Audit    *Audit
 	Tx       bool
@@ -70,42 +76,98 @@ type Policy struct {
 	NoCache bool
 }
 
+// rbac is a JWT policy that requires permission.
+func rbac(permission string, tx bool) Policy {
+	return Policy{Auth: AuthJWT, RBAC: true, Permissions: []string{permission}, Tx: tx}
+}
+
 // Policies returns the policy of every implemented operation, keyed by operationId.
 func Policies() map[string]Policy {
-	users := func(permission string, tx bool) Policy {
-		return Policy{Auth: AuthJWT, RBAC: true, Permissions: []string{permission}, Tx: tx}
+	policies := map[string]Policy{
+		"getAppInfo":           {Auth: AuthNone},
+		"simpleHealthCheck":    {Auth: AuthNone},
+		"healthCheck":          {Auth: AuthMonitor, NoCache: true},
+		"livenessProbe":        {Auth: AuthNone, NoCache: true},
+		"readinessProbe":       {Auth: AuthNone, NoCache: true},
+		"getMetrics":           {Auth: AuthMonitor, Raw: true},
+		"uploadFile":           {Auth: AuthJWT, Query: "UploadFileQueryDto", Upload: true},
+		"readPrivateFile":      {Auth: AuthJWT, Raw: true},
+		"downloadFile":         {Auth: AuthNone, Raw: true},
+		"loginWithEmail":       {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 60_000}, Tx: true},
+		"registerWithEmail":    {Auth: AuthNone, Tx: true},
+		"confirmEmail":         {Auth: AuthNone, Tx: true},
+		"confirmNewEmail":      {Auth: AuthNone, Tx: true},
+		"forgotPassword":       {Auth: AuthNone, Throttle: &Throttle{Limit: 3, TTL: 300_000}, Tx: true},
+		"resetPassword":        {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 300_000}, Tx: true},
+		"getCurrentUser":       {Auth: AuthJWT},
+		"updateCurrentUser":    {Auth: AuthJWT, Throttle: &Throttle{Limit: 10, TTL: 60_000}, Tx: true},
+		"deleteCurrentUser":    {Auth: AuthJWT, Tx: true},
+		"refreshToken":         {Auth: AuthRefresh, Tx: true},
+		"logout":               {Auth: AuthJWT, Tx: true},
+		"changePassword":       {Auth: AuthJWT, Throttle: &Throttle{Limit: 3, TTL: 60_000}, Tx: true},
+		"getMySessions":        {Auth: AuthJWT},
+		"revokeMySession":      {Auth: AuthJWT, Tx: true},
+		"revokeOtherSessions":  {Auth: AuthJWT, Tx: true},
+		"sendSmsCode":          {Auth: AuthNone, Throttle: &Throttle{Limit: 3, TTL: 60_000}},
+		"loginWithPhone":       {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 60_000}, Tx: true},
+		"loginWithSms":         {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 60_000}, Tx: true},
+		"registerWithPhone":    {Auth: AuthNone, Throttle: &Throttle{Limit: 3, TTL: 60_000}, Tx: true},
+		"resetPasswordByPhone": {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 300_000}, Tx: true},
+		"loginWithWechat":      {Auth: AuthNone, Throttle: &Throttle{Limit: 10, TTL: 60_000}},
+		"loginWithWechatPhone": {Auth: AuthNone, Throttle: &Throttle{Limit: 10, TTL: 60_000}},
+		"loginWithAlipay":      {Auth: AuthNone, Throttle: &Throttle{Limit: 10, TTL: 60_000}},
+		"createUser":           rbac(entity.PermUserCreate, true),
+		"getUsers":             {Auth: AuthJWT, RBAC: true, Permissions: []string{entity.PermUserList}, Query: "QueryUserDto"},
+		"getUser":              rbac(entity.PermUserRead, false),
+		"updateUser":           rbac(entity.PermUserUpdate, true),
+		"deleteUser":           rbac(entity.PermUserDelete, true),
 	}
 
+	maps.Copy(policies, modulePolicies())
+
+	return policies
+}
+
+// modulePolicies returns the policies of the general-purpose modules.
+func modulePolicies() map[string]Policy {
 	return map[string]Policy{
-		"getAppInfo":          {Auth: AuthNone},
-		"simpleHealthCheck":   {Auth: AuthNone},
-		"healthCheck":         {Auth: AuthMonitor, NoCache: true},
-		"livenessProbe":       {Auth: AuthNone, NoCache: true},
-		"readinessProbe":      {Auth: AuthNone, NoCache: true},
-		"getMetrics":          {Auth: AuthMonitor, Raw: true},
-		"uploadFile":          {Auth: AuthJWT, Query: "UploadFileQueryDto", Upload: true},
-		"readPrivateFile":     {Auth: AuthJWT, Raw: true},
-		"downloadFile":        {Auth: AuthNone, Raw: true},
-		"loginWithEmail":      {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 60_000}, Tx: true},
-		"registerWithEmail":   {Auth: AuthNone, Tx: true},
-		"confirmEmail":        {Auth: AuthNone, Tx: true},
-		"confirmNewEmail":     {Auth: AuthNone, Tx: true},
-		"forgotPassword":      {Auth: AuthNone, Throttle: &Throttle{Limit: 3, TTL: 300_000}, Tx: true},
-		"resetPassword":       {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 300_000}, Tx: true},
-		"getCurrentUser":      {Auth: AuthJWT},
-		"updateCurrentUser":   {Auth: AuthJWT, Throttle: &Throttle{Limit: 10, TTL: 60_000}, Tx: true},
-		"deleteCurrentUser":   {Auth: AuthJWT, Tx: true},
-		"refreshToken":        {Auth: AuthRefresh, Tx: true},
-		"logout":              {Auth: AuthJWT, Tx: true},
-		"changePassword":      {Auth: AuthJWT, Throttle: &Throttle{Limit: 3, TTL: 60_000}, Tx: true},
-		"getMySessions":       {Auth: AuthJWT},
-		"revokeMySession":     {Auth: AuthJWT, Tx: true},
-		"revokeOtherSessions": {Auth: AuthJWT, Tx: true},
-		"createUser":          users(entity.PermUserCreate, true),
-		"getUsers":            {Auth: AuthJWT, RBAC: true, Permissions: []string{entity.PermUserList}, Query: "QueryUserDto"},
-		"getUser":             users(entity.PermUserRead, false),
-		"updateUser":          users(entity.PermUserUpdate, true),
-		"deleteUser":          users(entity.PermUserDelete, true),
+		"getNotifications":             {Auth: AuthJWT, Query: "QueryNotificationDto"},
+		"getUnreadCount":               {Auth: AuthJWT},
+		"getNotification":              {Auth: AuthJWT},
+		"markNotificationAsRead":       {Auth: AuthJWT, Tx: true},
+		"markAllNotificationsAsRead":   {Auth: AuthJWT, Tx: true},
+		"deleteNotification":           {Auth: AuthJWT, Tx: true},
+		"getNotificationSettings":      {Auth: AuthJWT},
+		"updateNotificationSettings":   {Auth: AuthJWT, Tx: true},
+		"adminRetriggerAccountCleanup": rbac(entity.PermUserDelete, true),
+		"getAddresses":                 {Auth: AuthJWT, Query: "QueryAddressDto"},
+		"getDefaultAddress":            {Auth: AuthJWT},
+		"getAddress":                   {Auth: AuthJWT},
+		"createAddress":                {Auth: AuthJWT, Tx: true},
+		"updateAddress":                {Auth: AuthJWT, Tx: true},
+		"deleteAddress":                {Auth: AuthJWT, Tx: true},
+		"setDefaultAddress":            {Auth: AuthJWT, Tx: true},
+		"getFavorites":                 {Auth: AuthJWT, Query: "QueryFavoriteDto"},
+		"createFavorite":               {Auth: AuthJWT, Tx: true},
+		"deleteFavorite":               {Auth: AuthJWT, Tx: true},
+		"toggleFavorite":               {Auth: AuthJWT, Tx: true},
+		"checkFavorite":                {Auth: AuthJWT},
+		"createFeedback":               {Auth: AuthJWT, Tx: true},
+		"getFeedbacks":                 {Auth: AuthJWT, Query: "QueryFeedbackDto"},
+		"getFeedback":                  {Auth: AuthJWT},
+		"getConfig":                    {Auth: AuthNone},
+		"getConfigAsAdmin":             {Auth: AuthJWT, RBAC: true, Permissions: []string{entity.PermSystemConfig}},
+		"upsertConfig":                 {Auth: AuthJWT, RBAC: true, Permissions: []string{entity.PermSystemConfig}, Tx: true},
+		"getProvinces":                 {Auth: AuthNone},
+		"getCities":                    {Auth: AuthNone, Params: "ProvinceCodeParam"},
+		"getDistricts":                 {Auth: AuthNone, Params: "CityCodeParam"},
+		"getRegionByCode":              {Auth: AuthNone, Params: "RegionCodeParam"},
+		"getRegionTree":                {Auth: AuthNone},
+		"queryRegions":                 {Auth: AuthNone, Query: "QueryRegionDto"},
+		"getAppProfile":                {Auth: AuthNone},
+		"adminUpdateAppProfile":        {Auth: AuthJWT, RBAC: true, Permissions: []string{entity.PermSystemConfig}, Tx: true},
+		"getMyConsents":                {Auth: AuthJWT},
+		"agreeConsent":                 {Auth: AuthJWT, Tx: true},
 	}
 }
 

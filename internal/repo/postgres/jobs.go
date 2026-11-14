@@ -142,3 +142,8 @@ func AccountCleanupInsertOpts() *river.InsertOpts {
 func (j *Jobs) EnqueueAccountCleanup(ctx context.Context, userID int) error {
 	return j.insert(ctx, entity.AccountCleanupJob{UserID: userID}, AccountCleanupInsertOpts())
 }
+
+// EnqueueNotification queues a job on the notification queue.
+func (j *Jobs) EnqueueNotification(ctx context.Context, job entity.NotificationJob) error {
+	return j.insert(ctx, job, &river.InsertOpts{Queue: entity.QueueNotification}) //nolint:exhaustruct // defaults
+}

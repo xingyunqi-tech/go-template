@@ -1,4 +1,4 @@
-// Package sms verifies the one-time SMS codes stored as sms:code:{type}:{phone}.
+// Package sms sends and verifies the one-time SMS codes stored as sms:code:{type}:{phone}.
 package sms
 
 import (
@@ -29,14 +29,20 @@ type stored struct {
 
 // Codes verifies SMS codes.
 type Codes struct {
-	cache repo.Cache
-	locks [_lockStripes]sync.Mutex
-	now   func() time.Time
+	cache       repo.Cache
+	locks       [_lockStripes]sync.Mutex
+	now         func() time.Time
+	maxAttempts int
+	ttl         time.Duration
 }
 
-// NewCodes returns Codes.
+// NewCodes returns Codes with the default attempt limit and lifetime.
 func NewCodes(cache repo.Cache) *Codes {
-	return &Codes{cache: cache, locks: [_lockStripes]sync.Mutex{}, now: time.Now}
+	return newCodes(cache, MaxAttempts, CodeTTL)
+}
+
+func newCodes(cache repo.Cache, maxAttempts int, ttl time.Duration) *Codes {
+	return &Codes{cache: cache, locks: [_lockStripes]sync.Mutex{}, now: time.Now, maxAttempts: maxAttempts, ttl: ttl}
 }
 
 func (c *Codes) lock(key string) *sync.Mutex {
@@ -71,14 +77,14 @@ func (c *Codes) Verify(ctx context.Context, phone, code, purpose string) (bool, 
 		return false, nil
 	}
 
-	if s.Attempts >= MaxAttempts {
+	if s.Attempts >= c.maxAttempts {
 		return false, c.delete(ctx, key)
 	}
 
 	if subtle.ConstantTimeCompare([]byte(s.Code), []byte(code)) != 1 {
 		s.Attempts++
 
-		remaining := CodeTTL - c.now().Sub(time.UnixMilli(s.CreatedAt))
+		remaining := c.ttl - c.now().Sub(time.UnixMilli(s.CreatedAt))
 		if remaining > 0 {
 			if err := c.cache.Set(ctx, key, s, remaining); err != nil {
 				return false, fmt.Errorf("sms: %w", err)
