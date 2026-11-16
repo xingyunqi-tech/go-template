@@ -321,6 +321,29 @@ func TestS3PresignedUpload(t *testing.T) {
 		a.do(http.MethodPost, "/api/v1/files/upload", john.access, map[string]any{"fileName": 1}).Status)
 }
 
+func TestS3PresignedUploadFileSizeBounds(t *testing.T) {
+	t.Parallel()
+
+	a := newAppWith(t, 0, s3Files(t, config.FileDriverS3Presigned), nil)
+	john := a.login("john.doe@example.com", _secret00)
+
+	for raw, status := range map[string]int{
+		"1.5":        http.StatusInternalServerError,
+		"-1":         http.StatusCreated,
+		"0":          http.StatusCreated,
+		"2147483648": http.StatusRequestEntityTooLarge,
+		"5242881":    http.StatusRequestEntityTooLarge,
+		"1e400":      http.StatusUnprocessableEntity,
+	} {
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+
+			r := a.do(http.MethodPost, "/api/v1/files/upload", john.access, json.RawMessage(`{"fileName":"a.png","fileSize":`+raw+`}`))
+			assert.Equal(t, status, r.Status, r.Raw)
+		})
+	}
+}
+
 func TestFilesCleanerDeletesUploadsButKeepsReferencedOnes(t *testing.T) {
 	t.Parallel()
 

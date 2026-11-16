@@ -71,10 +71,11 @@ fi
 
 if [[ -z "${PARITY_NESTJS_URL:-}" ]]; then
   OWN_NESTJS=true
-  if ! docker image inspect "$NESTJS_IMAGE" >/dev/null 2>&1; then
+  if ! docker image inspect "$NESTJS_IMAGE" >/dev/null 2>&1 || ! docker image inspect "${NESTJS_IMAGE}-builder" >/dev/null 2>&1; then
     worktree="$STAGE/nestjs"
     git -C "$NESTJS_DIR" worktree add --detach "$worktree" "$ref" >/dev/null
     docker build --target production -t "$NESTJS_IMAGE" "$worktree"
+    docker build --target builder -t "${NESTJS_IMAGE}-builder" "$worktree"
     git -C "$NESTJS_DIR" worktree remove --force "$worktree"
   fi
 

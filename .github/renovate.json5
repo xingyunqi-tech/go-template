@@ -61,8 +61,10 @@
   customManagers: [
     {
       customType: 'regex',
-      managerFilePatterns: ['/^\\.github/workflows/.+\\.ya?ml$/'],
-      matchStrings: ['_IMAGE: (?<depName>[^:\\s]+):(?<currentValue>[^\\s]+)'],
+      managerFilePatterns: ['/(^|/)Makefile$/', '/^\\.github/workflows/.+\\.ya?ml$/'],
+      matchStrings: [
+        '_IMAGE(?: :=|:) (?<depName>[^:\\s/]+/[^:\\s]+):(?<currentValue>[^\\s@]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?',
+      ],
       datasourceTemplate: 'docker',
     },
     {

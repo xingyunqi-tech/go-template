@@ -20,30 +20,53 @@ import (
 const (
 	_notificationRate = 10
 
-	_smsNotInitialized   = "SMS client not initialized"
-	_noOpenID            = "User has no WeChat openId"
-	_wechatNotConfigured = "Unprocessable Entity Exception"
+	_smsNotInitialized = "SMS client not initialized"
+	_noOpenID          = "User has no WeChat openId"
+	_unprocessable     = "Unprocessable Entity Exception"
 )
 
 // ErrUnrecoverable marks a subscribe message failure that retries cannot fix: WeChat error codes
 // 43101, 40003, 40037, 41030 and 47003, or a mini program without AppID / Secret.
 var ErrUnrecoverable = errors.New("unrecoverable")
 
+type unrecoverableError struct {
+	err error
+}
+
+func (e *unrecoverableError) Error() string { return e.err.Error() }
+
+func (e *unrecoverableError) Unwrap() []error { return []error{ErrUnrecoverable, e.err} }
+
+// Unrecoverable marks err as ErrUnrecoverable and keeps its message.
+func Unrecoverable(err error) error {
+	return &unrecoverableError{err: err}
+}
+
+// failureMessage is the nestjs error.message of a delivery failure.
+func failureMessage(err error) string {
+	var httpErr *entity.Error
+	if errors.As(err, &httpErr) && httpErr.Message == "" && httpErr.Status == entity.StatusUnprocessable {
+		return _unprocessable
+	}
+
+	return err.Error()
+}
+
 // failure is a delivery error with the nestjs message.
 type failure string
 
 func (f failure) Error() string { return string(f) }
 
-// SMSSender sends a templated SMS.
+// SMSSender sends a templated SMS; the error message is the recorded failure.
 type SMSSender interface {
-	SendSMS(ctx context.Context, phone string, params map[string]string) error
+	Send(ctx context.Context, phone string, params map[string]string) error
 }
 
 // SubscribeMessage is a WeChat mini program subscribe message.
 type SubscribeMessage struct {
 	OpenID     string
 	TemplateID string
-	Page       string
+	Page       *string
 	Data       map[string]string
 }
 
@@ -88,7 +111,7 @@ func (n *notifier) user(ctx context.Context, id int) (*entity.User, error) {
 func (n *notifier) record(ctx context.Context, id int, channel string, failure error) {
 	message := ""
 	if failure != nil {
-		message = failure.Error()
+		message = failureMessage(failure)
 	}
 
 	if err := n.deps.Notifications.RecordChannelResult(ctx, id, channel, failure == nil, message); err != nil {
@@ -139,7 +162,7 @@ func (n *notifier) sms(ctx context.Context, job *entity.NotificationSMSJob) erro
 	case n.deps.SMS == nil:
 		err = failure(_smsNotInitialized)
 	default:
-		err = n.deps.SMS.SendSMS(ctx, *u.Phone, map[string]string{"content": job.Content})
+		err = n.deps.SMS.Send(ctx, *u.Phone, map[string]string{"content": job.Content})
 	}
 
 	n.record(ctx, job.NotificationID, entity.ChannelSMS, err)
@@ -156,7 +179,7 @@ func (n *notifier) sms(ctx context.Context, job *entity.NotificationSMSJob) erro
 type subscribePayload struct {
 	Scene  string         `json:"scene"`
 	Values map[string]any `json:"values"`
-	Page   string         `json:"page"`
+	Page   *string        `json:"page"`
 }
 
 type fieldLimit struct {
@@ -247,16 +270,18 @@ func (n *notifier) wechatSubscribe(ctx context.Context, job *entity.Notification
 	msg.OpenID = *u.WechatOpenID
 
 	if n.deps.Subscribe == nil {
-		err = fmt.Errorf("%w: %s", ErrUnrecoverable, _wechatNotConfigured)
-		n.record(ctx, job.NotificationID, entity.ChannelPush, failure(_wechatNotConfigured))
-	} else if err = n.deps.Subscribe.SendSubscribeMessage(ctx, msg); err != nil {
-		n.record(ctx, job.NotificationID, entity.ChannelPush, err)
+		err = Unrecoverable(failure(_unprocessable))
+	} else {
+		err = n.deps.Subscribe.SendSubscribeMessage(ctx, msg)
 	}
 
-	switch {
-	case errors.Is(err, ErrUnrecoverable):
-		return river.JobCancel(err) //nolint:wrapcheck // cancels the job
-	case err != nil:
+	if err != nil {
+		n.record(ctx, job.NotificationID, entity.ChannelPush, err)
+
+		if errors.Is(err, ErrUnrecoverable) {
+			return river.JobCancel(err) //nolint:wrapcheck // cancels the job
+		}
+
 		return err
 	}
 

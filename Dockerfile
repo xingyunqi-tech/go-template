@@ -19,6 +19,6 @@ FROM gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266
 COPY --from=builder /out/app /app
 WORKDIR /home/nonroot
 EXPOSE 3000
-USER nonroot:nonroot
+USER 65532:65532
 ENTRYPOINT ["/app"]
 CMD ["serve"]

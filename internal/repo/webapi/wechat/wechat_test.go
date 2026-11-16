@@ -50,7 +50,7 @@ func client(t *testing.T, cfg *wechat.Config, routes map[string]http.HandlerFunc
 }
 
 func configured() *wechat.Config {
-	return &wechat.Config{MiniAppID: "mini", MiniAppSecret: "mini-secret", AppID: "app", AppSecret: "app-secret"}
+	return &wechat.Config{MiniAppID: "mini", MiniAppSecret: "mini-secret", AppID: "app", AppSecret: "app-secret", MiniProgramState: "trial"}
 }
 
 func reply(v any) http.HandlerFunc {
@@ -248,4 +248,110 @@ func TestPhoneNumberTokenFailure(t *testing.T) {
 	_, err := c.PhoneNumber(t.Context(), "pc")
 	_, _, details := fields(t, err)
 	assert.Equal(t, []entity.Detail{{Name: "wechat", Value: "requestFailed"}}, details)
+}
+
+func stableToken() http.HandlerFunc {
+	return reply(map[string]any{"access_token": "mini-token", "expires_in": 7200})
+}
+
+func TestSendSubscribeMessage(t *testing.T) {
+	t.Parallel()
+
+	var (
+		body  map[string]any
+		token string
+	)
+
+	c, _ := client(t, configured(), map[string]http.HandlerFunc{
+		"/cgi-bin/stable_token": stableToken(),
+		"/cgi-bin/message/subscribe/send": func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodPost, r.Method)
+			token = r.URL.Query().Get("access_token")
+			assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			reply(map[string]any{"errcode": 0, "errmsg": "ok"})(w, r)
+		},
+	})
+
+	require.NoError(t, c.SendSubscribeMessage(t.Context(), &wechat.SubscribeMessage{
+		OpenID: "o1", TemplateID: "TPL1", Page: new("pages/order?id=1"), Data: map[string]string{"character_string1": "ORD1", "amount2": "99.00元"},
+	}))
+	assert.Equal(t, "mini-token", token)
+	assert.Equal(t, map[string]any{
+		"touser": "o1", "template_id": "TPL1", "page": "pages/order?id=1",
+		"data":              map[string]any{"character_string1": map[string]any{"value": "ORD1"}, "amount2": map[string]any{"value": "99.00元"}},
+		"miniprogram_state": "trial", "lang": "zh_CN",
+	}, body)
+}
+
+func TestSendSubscribeMessageErrors(t *testing.T) {
+	t.Parallel()
+
+	msg := &wechat.SubscribeMessage{OpenID: "o1", TemplateID: "TPL1", Page: new(""), Data: map[string]string{}}
+
+	cases := []struct {
+		name          string
+		reply         http.HandlerFunc
+		message       string
+		unrecoverable bool
+	}{
+		{
+			"not subscribed", reply(map[string]any{"errcode": 43101, "errmsg": "user refuse to accept the msg"}),
+			"WeChat API error 43101: user refuse to accept the msg", true,
+		},
+		{"invalid openid", reply(map[string]any{"errcode": 40003}), "WeChat API error 40003: ", true},
+		{"invalid template", reply(map[string]any{"errcode": 40037, "errmsg": "invalid template_id"}), "WeChat API error 40037: invalid template_id", true},
+		{"invalid page", reply(map[string]any{"errcode": 41030, "errmsg": "invalid page"}), "WeChat API error 41030: invalid page", true},
+		{"invalid data", reply(map[string]any{"errcode": 47003, "errmsg": "argument invalid!"}), "WeChat API error 47003: argument invalid!", true},
+		{"system busy", reply(map[string]any{"errcode": -1, "errmsg": "system error"}), "WeChat API error -1: system error", false},
+		{"http error", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadGateway) }, "wechat: requestFailed", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			c, _ := client(t, configured(), map[string]http.HandlerFunc{
+				"/cgi-bin/stable_token": stableToken(), "/cgi-bin/message/subscribe/send": tc.reply,
+			})
+
+			err := c.SendSubscribeMessage(t.Context(), msg)
+			require.EqualError(t, err, tc.message)
+			assert.Equal(t, tc.unrecoverable, wechat.SubscribeUnrecoverable(err))
+		})
+	}
+
+	t.Run("not configured", func(t *testing.T) {
+		t.Parallel()
+
+		c, _ := client(t, &wechat.Config{MiniAppID: "", MiniAppSecret: "", AppID: "app", AppSecret: "s", MiniProgramState: "formal"}, nil)
+
+		err := c.SendSubscribeMessage(t.Context(), msg)
+		status, _, details := fields(t, err)
+		assert.Equal(t, entity.StatusUnprocessable, status)
+		assert.Equal(t, []entity.Detail{{Name: "wechat", Value: "notConfigured"}}, details)
+		assert.True(t, wechat.SubscribeUnrecoverable(err))
+	})
+}
+
+func TestSendSubscribeMessageOmitsOnlyAMissingPage(t *testing.T) {
+	t.Parallel()
+
+	var body map[string]any
+
+	c, _ := client(t, configured(), map[string]http.HandlerFunc{
+		"/cgi-bin/stable_token": stableToken(),
+		"/cgi-bin/message/subscribe/send": func(w http.ResponseWriter, r *http.Request) {
+			assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			reply(map[string]any{"errcode": 0})(w, r)
+		},
+	})
+
+	require.NoError(t, c.SendSubscribeMessage(t.Context(), &wechat.SubscribeMessage{OpenID: "o1", TemplateID: "T", Page: nil, Data: nil}))
+	assert.NotContains(t, body, "page")
+	assert.Equal(t, map[string]any{}, body["data"])
+
+	body = nil
+
+	require.NoError(t, c.SendSubscribeMessage(t.Context(), &wechat.SubscribeMessage{OpenID: "o1", TemplateID: "T", Page: new(""), Data: nil}))
+	assert.Equal(t, "", body["page"])
 }

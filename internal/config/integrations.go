@@ -1,5 +1,11 @@
 package config
 
+import (
+	"errors"
+	"regexp"
+	"strings"
+)
+
 // Alipay gateways chosen by ALIPAY_SANDBOX when ALIPAY_GATEWAY is unset.
 const (
 	AlipayProductionGateway = "https://openapi.alipay.com/gateway.do"
@@ -22,12 +28,58 @@ type SMS struct {
 }
 
 // Wechat holds the mini program and open platform (app) credentials used for sign-in and the
-// health probe.
+// health probe, and the subscribe message settings.
 type Wechat struct {
-	MiniAppID     string `env:"WECHAT_MINI_APP_ID"`
-	MiniAppSecret Secret `env:"WECHAT_MINI_APP_SECRET"`
-	AppID         string `env:"WECHAT_APP_ID"`
-	AppSecret     Secret `env:"WECHAT_APP_SECRET"`
+	MiniAppID               string          `env:"WECHAT_MINI_APP_ID"`
+	MiniAppSecret           Secret          `env:"WECHAT_MINI_APP_SECRET"`
+	AppID                   string          `env:"WECHAT_APP_ID"`
+	AppSecret               Secret          `env:"WECHAT_APP_SECRET"`
+	MiniProgramState        string          `env:"WECHAT_MINI_PROGRAM_STATE"               envDefault:"formal" validate:"oneof=developer trial formal"`
+	OrderPaidTemplateID     string          `env:"WECHAT_SUBSCRIBE_ORDER_PAID_TEMPLATE_ID"`
+	OrderPaidTemplateFields SubscribeFields `env:"WECHAT_SUBSCRIBE_ORDER_PAID_FIELDS"`
+}
+
+// SubscribeTemplate is a subscribe message template: its ID and the template field key of each
+// business field.
+type SubscribeTemplate struct {
+	TemplateID string
+	Fields     map[string]string
+}
+
+// SubscribeTemplates returns the subscribe message templates by scene.
+func (w *Wechat) SubscribeTemplates() map[string]SubscribeTemplate {
+	return map[string]SubscribeTemplate{
+		"orderPaid": {TemplateID: w.OrderPaidTemplateID, Fields: w.OrderPaidTemplateFields},
+	}
+}
+
+var (
+	_subscribeFieldsPattern = regexp.MustCompile(`^\s*\w+\s*:\s*\w+\s*(,\s*\w+\s*:\s*\w+\s*)*$`)
+
+	errSubscribeFields = errors.New("WECHAT_SUBSCRIBE_ORDER_PAID_FIELDS must be like orderNo:character_string1,amount:amount2")
+)
+
+// SubscribeFields maps business fields to template field keys, written as
+// "orderNo:character_string1,amount:amount2".
+type SubscribeFields map[string]string
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (f *SubscribeFields) UnmarshalText(text []byte) error {
+	value := string(text)
+	if !_subscribeFieldsPattern.MatchString(value) {
+		return errSubscribeFields
+	}
+
+	fields := SubscribeFields{}
+
+	for pair := range strings.SplitSeq(value, ",") {
+		name, key, _ := strings.Cut(pair, ":")
+		fields[strings.TrimSpace(name)] = strings.TrimSpace(key)
+	}
+
+	*f = fields
+
+	return nil
 }
 
 // Alipay holds what alipay.system.oauth.token needs.

@@ -6,7 +6,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"uuid"
 
@@ -137,6 +139,8 @@ func RandomKey(name string) string {
 
 // Errors of the upload rules.
 var (
+	// ErrSizeNotInteger is the integer size column rejecting a fractional size: a 500.
+	ErrSizeNotInteger = errors.New("file: size is not an integer")
 	ErrInvalidPurpose = entity.Invalid("purpose", "invalidFilePurpose")
 	ErrFileType       = entity.Invalid("file", "cantUploadFileType")
 	ErrSelectFile     = entity.Invalid("file", "selectFile")
@@ -245,6 +249,10 @@ func (s *Service) Presign(ctx context.Context, name string, size float64, p Purp
 	signed, err := s.storage.PresignPut(ctx, key, int64(size))
 	if err != nil {
 		return nil, "", err //nolint:wrapcheck // storage errors are wrapped
+	}
+
+	if size != math.Trunc(size) {
+		return nil, "", fmt.Errorf("%w: %v", ErrSizeNotInteger, size)
 	}
 
 	n := int(size)

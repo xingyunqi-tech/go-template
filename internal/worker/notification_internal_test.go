@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 
@@ -59,7 +60,7 @@ func (m *mails) Send(_ context.Context, out *mail.Outgoing) error {
 
 type smsFunc func(phone string, params map[string]string) error
 
-func (f smsFunc) SendSMS(_ context.Context, phone string, params map[string]string) error {
+func (f smsFunc) Send(_ context.Context, phone string, params map[string]string) error {
 	return f(phone, params)
 }
 
@@ -157,7 +158,7 @@ func TestBuildSubscribeMessageMapsAndTruncatesFields(t *testing.T) {
 	msg, scene, ok := BuildSubscribeMessage(orderPaidPayload(t), orderPaid())
 	require.True(t, ok)
 	assert.Equal(t, "orderPaid", scene)
-	assert.Equal(t, &SubscribeMessage{OpenID: "", TemplateID: "tpl", Page: "pages/order", Data: map[string]string{
+	assert.Equal(t, &SubscribeMessage{OpenID: "", TemplateID: "tpl", Page: new("pages/order"), Data: map[string]string{
 		"character_string1": "N1", "amount2": "9.90元", "thing3": "一二三四五六七八九十一二三四五六七八九十",
 	}}, msg)
 
@@ -205,7 +206,7 @@ func TestWechatSubscribeJob(t *testing.T) {
 
 				switch calls {
 				case 1:
-					return fmt.Errorf("%w: 43101 user refuse to accept the msg", ErrUnrecoverable)
+					return Unrecoverable(errors.New("WeChat API error 43101: user refuse to accept the msg"))
 				case 2:
 					return errors.New("system busy")
 				default:
@@ -224,7 +225,7 @@ func TestWechatSubscribeJob(t *testing.T) {
 		require.NoError(t, n.wechatSubscribe(t.Context(), job))
 
 		assert.Equal(t, []map[string]any{
-			{"id": 7, "channel": "PUSH", "result": map[string]any{"sent": false, "error": "unrecoverable: 43101 user refuse to accept the msg"}},
+			{"id": 7, "channel": "PUSH", "result": map[string]any{"sent": false, "error": "WeChat API error 43101: user refuse to accept the msg"}},
 			{"id": 7, "channel": "PUSH", "result": map[string]any{"sent": false, "error": "system busy"}},
 			{"id": 7, "channel": "PUSH", "result": map[string]any{"sent": true}},
 		}, results.results)
@@ -243,6 +244,99 @@ func TestWechatSubscribeJob(t *testing.T) {
 			{"id": 7, "channel": "PUSH", "result": map[string]any{"sent": false, "error": "Unprocessable Entity Exception"}},
 		}, results.results)
 	})
+}
+
+func TestSMSJobRecordsTheSenderFailure(t *testing.T) {
+	t.Parallel()
+
+	failures := []error{errors.New("触发分钟级流控Permits:1"), errors.New("")}
+	results := &channelResults{}
+	n := testNotifier(results, &mails{}, func(d *NotificationDeps) {
+		d.SMS = smsFunc(func(string, map[string]string) error {
+			err := failures[0]
+			failures = failures[1:]
+
+			return err
+		})
+	})
+
+	require.EqualError(t, n.sms(t.Context(), &entity.NotificationSMSJob{NotificationID: 7, UserID: 1, Content: "C"}), "触发分钟级流控Permits:1")
+	require.Error(t, n.sms(t.Context(), &entity.NotificationSMSJob{NotificationID: 8, UserID: 1, Content: "C"}))
+	require.EqualError(t, n.sms(t.Context(), &entity.NotificationSMSJob{NotificationID: 9, UserID: 2, Content: "C"}),
+		"User 2 not found or has no phone")
+
+	assert.Equal(t, []map[string]any{
+		{"id": 7, "channel": "SMS", "result": map[string]any{"sent": false, "error": "触发分钟级流控Permits:1"}},
+		{"id": 8, "channel": "SMS", "result": map[string]any{"sent": false}},
+		{"id": 9, "channel": "SMS", "result": map[string]any{"sent": false, "error": "User 2 not found or has no phone"}},
+	}, results.results)
+}
+
+func TestWechatSubscribeJobRecordsUnprocessableFailures(t *testing.T) {
+	t.Parallel()
+
+	notConfigured := entity.InvalidFields(entity.Detail{Name: "wechat", Value: "notConfigured"})
+	requestFailed := entity.InvalidFields(entity.Detail{Name: "wechat", Value: "requestFailed"})
+	failures := []error{Unrecoverable(notConfigured), fmt.Errorf("wrapped: %w", requestFailed)}
+
+	var sent []*SubscribeMessage
+
+	results := &channelResults{}
+	n := testNotifier(results, &mails{}, func(d *NotificationDeps) {
+		d.Templates = orderPaid()
+		d.Subscribe = subscribeFunc(func(m *SubscribeMessage) error {
+			sent = append(sent, m)
+			err := failures[0]
+			failures = failures[1:]
+
+			return err
+		})
+	})
+
+	job := &entity.NotificationWechatSubscribeJob{NotificationID: 7, UserID: 1, Payload: orderPaidPayload(t)}
+
+	var cancel *river.JobCancelError
+	require.ErrorAs(t, n.wechatSubscribe(t.Context(), job), &cancel)
+
+	err := n.wechatSubscribe(t.Context(), job)
+	require.ErrorIs(t, err, requestFailed)
+	require.NotErrorAs(t, err, &cancel)
+
+	require.Len(t, sent, 2)
+	assert.Equal(t, &SubscribeMessage{OpenID: "openid", TemplateID: "tpl", Page: new("pages/order"), Data: map[string]string{
+		"character_string1": "N1", "amount2": "9.90元", "thing3": "一二三四五六七八九十一二三四五六七八九十",
+	}}, sent[0])
+	assert.Equal(t, []map[string]any{
+		{"id": 7, "channel": "PUSH", "result": map[string]any{"sent": false, "error": "Unprocessable Entity Exception"}},
+		{"id": 7, "channel": "PUSH", "result": map[string]any{"sent": false, "error": "Unprocessable Entity Exception"}},
+	}, results.results)
+}
+
+func TestBuildSubscribeMessageMatchesNestjs(t *testing.T) {
+	t.Parallel()
+
+	payload := json.RawMessage(`{"scene":"orderPaid","values":{"orderNo":"ORD1","amount":"99.00元","paidAt":"2026年10月14日 15:01"},` +
+		`"page":"pages-sub/order/detail/index?id=1"}`)
+	templates := map[string]SubscribeTemplate{
+		"orderPaid": {TemplateID: "TPL1", Fields: map[string]string{"orderNo": "character_string1", "amount": "amount2"}},
+	}
+
+	msg, _, ok := BuildSubscribeMessage(payload, templates)
+	require.True(t, ok)
+	assert.Equal(t, &SubscribeMessage{OpenID: "", TemplateID: "TPL1", Page: new("pages-sub/order/detail/index?id=1"), Data: map[string]string{
+		"character_string1": "ORD1", "amount2": "99.00元",
+	}}, msg)
+
+	_, _, ok = BuildSubscribeMessage(payload, map[string]SubscribeTemplate{"orderPaid": {TemplateID: "", Fields: map[string]string{}}})
+	assert.False(t, ok)
+
+	_, _, ok = BuildSubscribeMessage(payload, nil)
+	assert.False(t, ok)
+
+	assert.Equal(t, "一二三四五六七八九十一二三四五六七八九十", FormatSubscribeValue("thing1", "一二三四五六七八九十一二三四五六七八九十多余"))
+	assert.Equal(t, "已支付成功", FormatSubscribeValue("phrase2", "已支付成功啦"))
+	assert.Len(t, FormatSubscribeValue("character_string3", strings.Repeat("A", 40)), 32)
+	assert.Equal(t, "99.00元", FormatSubscribeValue("amount1", "99.00元"))
 }
 
 func TestNotificationLimiterAllowsTenJobsASecond(t *testing.T) {

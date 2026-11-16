@@ -10,6 +10,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 	"uuid"
 
 	"github.com/go-chi/chi/v5"
@@ -135,11 +136,12 @@ func sendFile(w http.ResponseWriter, r *http.Request, diskPath string) error {
 	h.Set("Content-Type", contentType)
 	h.Set("Cache-Control", "public, max-age=0")
 	h.Set("Accept-Ranges", "bytes")
-	h.Set("ETag", fmt.Sprintf(`W/"%x-%x"`, info.Size(), info.ModTime().UnixMilli()))
+	h.Set("Last-Modified", info.ModTime().UTC().Format(http.TimeFormat))
 
-	http.ServeContent(w, r, "", info.ModTime(), fh)
+	etag := fmt.Sprintf(`W/"%x-%x"`, info.Size(), info.ModTime().UnixMilli())
+	h.Set("ETag", etag)
 
-	return nil
+	return send(w, r, fh, info.Size(), etag, info.ModTime().Truncate(time.Second))
 }
 
 // redirect is Express res.redirect: 302 with a text or HTML body chosen by Accept.

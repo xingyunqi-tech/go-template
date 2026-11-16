@@ -317,3 +317,90 @@ func TestPrivateFileAccess(t *testing.T) {
 		require.Equal(t, p.Nestjs.Body, p.Go.Body)
 	}
 }
+
+func TestPublicFileDownloadRanges(t *testing.T) {
+	t.Parallel()
+
+	files := uploadPair(t, tempUser(t, "download-range"), "image")
+	targets := withTargets([2]string{
+		"/api/v1/files/" + lastSegment(str(t, files[0], "path")),
+		"/api/v1/files/" + lastSegment(str(t, files[1], "path")),
+	})
+
+	for _, value := range []string{
+		"bytes=abc", "bytes=5-2", "items=0-1", "bytes=100-200", "bytes=-3", "bytes=0-1", "bytes=3-",
+		"bytes=0-1,3-4", "bytes=0-1,1-2", "bytes=", "bytes=-0", "bytes=5-100",
+	} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+
+			p := do(t, http.MethodGet, "", targets, withHeader("Range", value))
+			require.Equal(t, p.Nestjs.Status, p.Go.Status, "go: %s\nnestjs: %s", p.Go.Body, p.Nestjs.Body)
+			require.Equal(t, string(p.Nestjs.Body), string(p.Go.Body))
+
+			for _, h := range []string{"Content-Type", "Content-Range", "Content-Length", "Accept-Ranges"} {
+				require.Equal(t, p.Nestjs.Header.Get(h), p.Go.Header.Get(h), h)
+			}
+		})
+	}
+}
+
+// withSideHeader sends each side its own value of one header.
+func withSideHeader(name string, values [2]string) option {
+	return func(o *requestOptions) {
+		for i := range o.sides {
+			o.sides[i].headers[name] = values[i]
+		}
+	}
+}
+
+func TestPublicFileDownloadConditional(t *testing.T) {
+	t.Parallel()
+
+	files := uploadPair(t, tempUser(t, "download-conditional"), "image")
+	targets := withTargets([2]string{
+		"/api/v1/files/" + lastSegment(str(t, files[0], "path")),
+		"/api/v1/files/" + lastSegment(str(t, files[1], "path")),
+	})
+
+	first := do(t, http.MethodGet, "", targets)
+	etags := [2]string{first.Go.Header.Get("ETag"), first.Nestjs.Header.Get("ETag")}
+	modified := [2]string{first.Go.Header.Get("Last-Modified"), first.Nestjs.Header.Get("Last-Modified")}
+	require.NotEmpty(t, modified[0])
+	require.NotEmpty(t, modified[1])
+
+	cases := map[string][]option{
+		"if-none-match":                {withSideHeader("If-None-Match", etags)},
+		"if-none-match no-cache":       {withSideHeader("If-None-Match", etags), withHeader("Cache-Control", "no-cache")},
+		"if-none-match star":           {withHeader("If-None-Match", "*")},
+		"if-none-match other":          {withHeader("If-None-Match", `W/"x"`)},
+		"if-modified-since":            {withSideHeader("If-Modified-Since", modified)},
+		"if-modified-since past":       {withHeader("If-Modified-Since", "Thu, 01 Jan 1970 00:00:00 GMT")},
+		"if-match other":               {withHeader("If-Match", `"x"`)},
+		"if-match star":                {withHeader("If-Match", "*")},
+		"if-unmodified-since past":     {withHeader("If-Unmodified-Since", "Thu, 01 Jan 1970 00:00:00 GMT")},
+		"if-range etag":                {withSideHeader("If-Range", etags), withHeader("Range", "bytes=0-1")},
+		"if-range stale":               {withHeader("If-Range", `"x"`), withHeader("Range", "bytes=0-1")},
+		"if-range stale unsatisfiable": {withHeader("If-Range", `"x"`), withHeader("Range", "bytes=100-200")},
+		"if-range date":                {withSideHeader("If-Range", modified), withHeader("Range", "bytes=0-1")},
+	}
+
+	for name, options := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			p := do(t, http.MethodGet, "", append([]option{targets}, options...)...)
+			require.Equal(t, p.Nestjs.Status, p.Go.Status, "go: %s\nnestjs: %s", p.Go.Body, p.Nestjs.Body)
+			require.Equal(t, string(p.Nestjs.Body), string(p.Go.Body))
+
+			for _, h := range []string{"Content-Type", "Content-Range", "Content-Length", "Accept-Ranges", "Cache-Control"} {
+				require.Equal(t, p.Nestjs.Header.Get(h), p.Go.Header.Get(h), h)
+			}
+		})
+	}
+
+	p := do(t, http.MethodHead, "", targets, withHeader("Range", "bytes=0-1"))
+	require.Equal(t, p.Nestjs.Status, p.Go.Status)
+	require.Equal(t, p.Nestjs.Header.Get("Content-Length"), p.Go.Header.Get("Content-Length"))
+	require.Equal(t, p.Nestjs.Header.Get("Content-Range"), p.Go.Header.Get("Content-Range"))
+}

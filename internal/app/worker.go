@@ -40,6 +40,7 @@ func NewWorkerClient(cfg *config.Config, log *slog.Logger, infra *Infra, sender 
 	}
 
 	appMetrics := infra.Metrics
+	cache := redis.NewCache(infra.Redis, log).WithCounter(appMetrics)
 	db := postgres.NewDB(infra.Pool, acquireTimeout(cfg), log)
 
 	inserter, err := newInserter(infra.Pool, log)
@@ -58,7 +59,10 @@ func NewWorkerClient(cfg *config.Config, log *slog.Logger, infra *Infra, sender 
 		Log:         log,
 		Notify: worker.NotificationDeps{
 			Notifications: notification.New(postgres.NewNotifications(db), postgres.NewJobs(inserter), log),
-			Users:         postgres.NewUsers(db), SMS: nil, Subscribe: nil, Templates: nil,
+			Users:         postgres.NewUsers(db),
+			SMS:           newSMSProvider(cfg, log, infra),
+			Subscribe:     subscribeSender{client: newWechat(cfg, log, infra, cache)},
+			Templates:     subscribeTemplates(&cfg.Wechat),
 		},
 	})
 	if err != nil {

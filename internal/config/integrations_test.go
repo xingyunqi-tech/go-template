@@ -56,3 +56,52 @@ func TestIntegrationRangesAreChecked(t *testing.T) {
 		assert.Contains(t, err.Error(), name)
 	}
 }
+
+func TestWechatSubscribeDefaults(t *testing.T) {
+	setSecrets(t)
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	assert.Equal(t, "formal", cfg.Wechat.MiniProgramState)
+	assert.Equal(t, map[string]config.SubscribeTemplate{"orderPaid": {TemplateID: "", Fields: nil}}, cfg.Wechat.SubscribeTemplates())
+
+	t.Setenv("WECHAT_MINI_PROGRAM_STATE", "")
+	t.Setenv("WECHAT_SUBSCRIBE_ORDER_PAID_FIELDS", "")
+
+	cfg, err = config.Load()
+	require.NoError(t, err)
+	assert.Equal(t, "formal", cfg.Wechat.MiniProgramState)
+	assert.Empty(t, cfg.Wechat.SubscribeTemplates()["orderPaid"].Fields)
+}
+
+func TestWechatSubscribeTemplateParsing(t *testing.T) {
+	setSecrets(t)
+	t.Setenv("WECHAT_MINI_PROGRAM_STATE", "developer")
+	t.Setenv("WECHAT_SUBSCRIBE_ORDER_PAID_TEMPLATE_ID", "TPL1")
+	t.Setenv("WECHAT_SUBSCRIBE_ORDER_PAID_FIELDS", " orderNo : character_string1,amount:amount2 ,paidAt:time3")
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	assert.Equal(t, "developer", cfg.Wechat.MiniProgramState)
+	assert.Equal(t, map[string]config.SubscribeTemplate{"orderPaid": {TemplateID: "TPL1", Fields: map[string]string{
+		"orderNo": "character_string1", "amount": "amount2", "paidAt": "time3",
+	}}}, cfg.Wechat.SubscribeTemplates())
+}
+
+func TestWechatSubscribeSettingsAreChecked(t *testing.T) {
+	for _, tc := range []struct{ name, value string }{
+		{"WECHAT_SUBSCRIBE_ORDER_PAID_FIELDS", "orderNo=character_string1"},
+		{"WECHAT_SUBSCRIBE_ORDER_PAID_FIELDS", "orderNo:character_string1,"},
+		{"WECHAT_SUBSCRIBE_ORDER_PAID_FIELDS", "order-no:thing1"},
+		{"WECHAT_MINI_PROGRAM_STATE", "release"},
+	} {
+		t.Run(tc.name+"="+tc.value, func(t *testing.T) {
+			setSecrets(t)
+			t.Setenv(tc.name, tc.value)
+
+			_, err := config.Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.name)
+		})
+	}
+}

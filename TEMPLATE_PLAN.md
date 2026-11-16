@@ -698,7 +698,7 @@ nestjs 用 class-transformer + `JSON.stringify` 输出，Go `encoding/json` 默�
 
 | 变量 | 默认 | 作用 |
 |---|---|---|
-| `APP_PORT` | `3000` | 监听端口；前端 Orval target、dev 环境、manage.sh、HEALTHCHECK 均按 3000 |
+| `APP_PORT` | `3000` | 监听端口；前端 Orval target、dev 环境、manage.sh、`/app healthcheck` 均按 3000 |
 | `API_PREFIX` | `api` | 全局前缀，`/`、`/metrics` 除外 |
 | `TRUST_PROXY` | `0` | 反向代理**层数**（整数，非布尔），限流按 `X-Forwarded-For` 倒数第 N 跳取客户端 IP |
 | `REDIS_ENABLED` | 未设置视为 `false`（只认字符串 `true`）；`env-example-relational` 为 `true` | 关闭时缓存 / 限流回落进程内实现（队列在 Postgres 上，不受影响）；生产强制 `true` |
@@ -761,7 +761,7 @@ fastapi 侧的 `WEB_CONCURRENCY`、`PROMETHEUS_MULTIPROC_DIR` 在 Go 中不需�
 ### 10.3 Docker
 
 - 多阶段：builder `golang:1.27-trixie`（与 runtime 的 Debian 13 一致），`--platform=$BUILDPLATFORM` + `GOOS/GOARCH=$TARGETOS/$TARGETARCH` 交叉编译（不经 QEMU），BuildKit cache mount 缓存 `GOMODCACHE` 与 `GOCACHE`，`CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=..."` → runtime `gcr.io/distroless/static-debian13:nonroot`（按 digest 固定，Renovate 更新）
-- runtime 不含 shell、curl、wget：`HEALTHCHECK` 用 `["/app", "healthcheck"]` 子命令访问 `/api/v1/health/live`；`/app healthcheck --ready` 访问 `/api/v1/health/ready`，供 manage.sh 使用
+- runtime 不含 shell、curl、wget：`/app healthcheck` 子命令访问 `/api/v1/health/live`，由 compose 中 api 服务的 `healthcheck` 使用（镜像不写 `HEALTHCHECK`：worker 与 migrate 使用同一镜像，没有 HTTP 端口）；`/app healthcheck --ready` 访问 `/api/v1/health/ready`，供 manage.sh 使用
 - 迁移文件、i18n、邮件模板、`nestjs-baseline.json`、`validation.json` 全部 `embed` 进二进制，镜像只有一个文件
 - 构建：buildx 多架构（amd64 / arm64），生成 SBOM 与 provenance attestation
 - `.dockerignore` 白名单写法；hadolint 检查 Dockerfile

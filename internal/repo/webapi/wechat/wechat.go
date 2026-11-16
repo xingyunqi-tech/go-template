@@ -1,5 +1,5 @@
-// Package wechat calls the WeChat sign-in APIs: mini program jscode2session, open platform OAuth
-// and the mini program phone number.
+// Package wechat calls the WeChat sign-in APIs: mini program jscode2session, open platform OAuth,
+// the mini program phone number and subscribe messages.
 package wechat
 
 import (
@@ -37,16 +37,24 @@ const (
 	_errTokenExpired      = 42001
 	_errInvalidCode       = 40029
 	_errCodeUsed          = 40163
+
+	_errNotSubscribed   = 43101
+	_errInvalidOpenID   = 40003
+	_errInvalidTemplate = 40037
+	_errInvalidPage     = 41030
+	_errInvalidData     = 47003
 )
 
 var errAPI = errors.New("wechat: api error")
 
-// Config holds the mini program and open platform credentials.
+// Config holds the mini program and open platform credentials; MiniProgramState is the
+// miniprogram_state of subscribe messages.
 type Config struct {
-	MiniAppID     string
-	MiniAppSecret string
-	AppID         string
-	AppSecret     string
+	MiniAppID        string
+	MiniAppSecret    string
+	AppID            string
+	AppSecret        string
+	MiniProgramState string
 }
 
 // Client calls the WeChat APIs.
@@ -328,6 +336,68 @@ func (c *Client) phoneError(ctx context.Context, err error) error {
 	return requestFailed()
 }
 
+// SubscribeMessage is a mini program subscribe message; Data maps template field keys to values.
+type SubscribeMessage struct {
+	OpenID     string
+	TemplateID string
+	Page       *string
+	Data       map[string]string
+}
+
+type subscribeValue struct {
+	Value string `json:"value"`
+}
+
+type subscribeBody struct {
+	ToUser           string                    `json:"touser"`
+	TemplateID       string                    `json:"template_id"`
+	Page             *string                   `json:"page,omitempty"`
+	Data             map[string]subscribeValue `json:"data"`
+	MiniProgramState string                    `json:"miniprogram_state"`
+	Lang             string                    `json:"lang"`
+}
+
+// SendSubscribeMessage sends a subscribe message; a non-zero errcode is returned as
+// "WeChat API error <errcode>: <errmsg>".
+func (c *Client) SendSubscribeMessage(ctx context.Context, m *SubscribeMessage) error {
+	data := make(map[string]subscribeValue, len(m.Data))
+	for k, v := range m.Data {
+		data[k] = subscribeValue{Value: v}
+	}
+
+	_, err := c.callMiniApp(ctx, "/cgi-bin/message/subscribe/send", subscribeBody{
+		ToUser: m.OpenID, TemplateID: m.TemplateID, Page: m.Page, Data: data,
+		MiniProgramState: c.cfg.MiniProgramState, Lang: "zh_CN",
+	}, "Send subscribe message")
+
+	return err
+}
+
+// SubscribeUnrecoverable reports a subscribe message failure that retries cannot fix: errcode
+// 43101, 40003, 40037, 41030 or 47003, or mini program credentials not configured.
+func SubscribeUnrecoverable(err error) bool {
+	var api *apiError
+	if errors.As(err, &api) {
+		switch api.code {
+		case _errNotSubscribed, _errInvalidOpenID, _errInvalidTemplate, _errInvalidPage, _errInvalidData:
+			return true
+		default:
+			return false
+		}
+	}
+
+	var known *entity.Error
+	if errors.As(err, &known) {
+		for _, f := range known.Fields {
+			if f.Name == "wechat" {
+				return f.Value == "notConfigured"
+			}
+		}
+	}
+
+	return false
+}
+
 func invalidToken(code int) bool {
 	return code == _errInvalidCredential || code == _errInvalidToken || code == _errTokenExpired
 }
@@ -358,7 +428,7 @@ func (c *Client) callMiniApp(ctx context.Context, path string, body any, label s
 	}
 
 	if code := data.errcode(); code != 0 {
-		return nil, &apiError{code: code, msg: data["errmsg"]}
+		return nil, &apiError{code: code, msg: data.text("errmsg")}
 	}
 
 	return data, nil
@@ -412,7 +482,7 @@ func (c *Client) stableToken(ctx context.Context, force bool) (string, error) {
 	if code := data.errcode(); code != 0 {
 		c.log.ErrorContext(ctx, "Get stable_token failed", "errcode", code, "errmsg", data["errmsg"])
 
-		return "", &apiError{code: code, msg: data["errmsg"]}
+		return "", &apiError{code: code, msg: data.text("errmsg")}
 	}
 
 	expires := 0

@@ -33,12 +33,33 @@ const (
 	_maxBody    = 1 << 20
 )
 
-var (
-	errNotInitialized = errors.New("SMS client not initialized")
-	errIncomplete     = errors.New("SMS configuration incomplete")
-	errEmptyBody      = errors.New("SMS response body is empty")
-	errRejected       = errors.New("SMS send failed")
+const (
+	_codeNotInitialized = "CLIENT_NOT_INITIALIZED"
+	_codeConfigError    = "CONFIG_ERROR"
+	_codeEmptyResponse  = "EMPTY_RESPONSE"
+	_codeSendError      = "SEND_ERROR"
+	_msgNotInitialized  = "SMS client not initialized"
+	_msgIncomplete      = "SMS configuration incomplete"
+	_msgEmptyBody       = "SMS response body is empty"
+	_msgSendFailed      = "SMS send failed"
+	_undefined          = "undefined"
 )
+
+// sendError is a failed send with the nestjs error message.
+type sendError string
+
+func (e sendError) Error() string { return string(e) }
+
+var errEmptyBody error = sendError(_msgEmptyBody)
+
+// Result is the outcome of nestjs AliyunSmsProvider.sendSms; Message is nil when Dysms returned none.
+type Result struct {
+	Success   bool
+	RequestID string
+	BizID     string
+	Code      string
+	Message   *string
+}
 
 // Config is the Dysms account; Mock only logs the messages.
 type Config struct {
@@ -67,66 +88,87 @@ func (a *Aliyun) enabled() bool {
 	return !a.cfg.Mock && a.cfg.AccessKeyID != "" && a.cfg.AccessKeySecret != ""
 }
 
-func templateParam(params map[string]string) (string, error) {
+func templateParam(params map[string]string) string {
 	var buf bytes.Buffer
 
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
+	_ = enc.Encode(params)
 
-	if err := enc.Encode(params); err != nil {
-		return "", fmt.Errorf("sms: %w", err)
-	}
-
-	return strings.TrimSuffix(buf.String(), "\n"), nil
+	return strings.TrimSuffix(buf.String(), "\n")
 }
 
-// Send sends the template with params to phone.
+func text(s string) *string {
+	return &s
+}
+
+func failed(code, message string) Result {
+	return Result{Success: false, RequestID: "", BizID: "", Code: code, Message: text(message)}
+}
+
+// Send sends the template with params to phone; the error message is the failure message of
+// SendSMS, or "SMS send failed" when there is none.
 func (a *Aliyun) Send(ctx context.Context, phone string, params map[string]string) error {
-	encoded, err := templateParam(params)
-	if err != nil {
-		return err
+	r := a.SendSMS(ctx, phone, params)
+
+	switch {
+	case r.Success:
+		return nil
+	case r.Message == nil:
+		return sendError(_msgSendFailed)
+	default:
+		return sendError(*r.Message)
 	}
+}
+
+// SendSMS sends the template with params to phone.
+func (a *Aliyun) SendSMS(ctx context.Context, phone string, params map[string]string) Result {
+	encoded := templateParam(params)
 
 	switch {
 	case a.cfg.Mock:
 		a.log.InfoContext(ctx, "[MOCK SMS]", "to", entity.MaskPhone(phone), "params", encoded)
 
-		return nil
+		return Result{Success: true, RequestID: "mock-request-id", BizID: "mock-biz-id", Code: _codeOK, Message: text("Mock SMS sent successfully")}
 	case !a.enabled():
 		a.log.ErrorContext(ctx, "SMS client not initialized")
 
-		return errNotInitialized
+		return failed(_codeNotInitialized, _msgNotInitialized)
 	case a.cfg.SignName == "" || a.cfg.TemplateCode == "":
 		a.log.ErrorContext(ctx, "SMS sign name or template code not configured")
 
-		return errIncomplete
+		return failed(_codeConfigError, _msgIncomplete)
 	}
 
 	body, err := a.call(ctx, map[string]string{
 		"PhoneNumbers": phone, "SignName": a.cfg.SignName, "TemplateCode": a.cfg.TemplateCode, "TemplateParam": encoded,
 	})
-	if err != nil {
+
+	switch {
+	case errors.Is(err, errEmptyBody):
+		a.log.ErrorContext(ctx, "SMS response body is empty")
+
+		return failed(_codeEmptyResponse, _msgEmptyBody)
+	case err != nil:
 		a.log.ErrorContext(ctx, "SMS send error", "error", err.Error())
 
-		return err
-	}
-
-	if body.Code != _codeOK {
+		return failed(_codeSendError, err.Error())
+	case body.Code != _codeOK:
 		a.log.ErrorContext(ctx, "SMS send failed", "code", body.Code, "message", body.Message)
 
-		return fmt.Errorf("%w: %s - %s", errRejected, body.Code, body.Message)
+		return Result{Success: false, RequestID: body.RequestID, BizID: "", Code: body.Code, Message: body.Message}
 	}
 
 	a.log.InfoContext(ctx, "SMS sent successfully", "to", entity.MaskPhone(phone), "biz_id", body.BizID)
 
-	return nil
+	return Result{Success: true, RequestID: body.RequestID, BizID: body.BizID, Code: body.Code, Message: body.Message}
 }
 
 type response struct {
-	Code      string `json:"Code"`
-	Message   string `json:"Message"`
-	RequestID string `json:"RequestId"`
-	BizID     string `json:"BizId"`
+	Code      string  `json:"Code"`
+	Message   *string `json:"Message"`
+	RequestID string  `json:"RequestId"`
+	BizID     string  `json:"BizId"`
 }
 
 func nonce() string {
@@ -159,7 +201,7 @@ func (a *Aliyun) call(ctx context.Context, query map[string]string) (*response, 
 
 	res, err := a.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("sms: %w", outbound.Redact(err))
+		return nil, outbound.Redact(err) //nolint:wrapcheck // the message is the recorded failure
 	}
 	defer res.Body.Close()
 
@@ -178,10 +220,27 @@ func (a *Aliyun) call(ctx context.Context, query map[string]string) (*response, 
 	}
 
 	if res.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("%w: %s: %s", errRejected, body.Code, body.Message)
+		return nil, sendError(fmt.Sprintf("%s: code: %d, %s request id: %s",
+			orUndefined(body.Code), res.StatusCode, orUndefined(deref(body.Message)), orUndefined(body.RequestID)))
 	}
 
 	return body, nil
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+
+	return *s
+}
+
+func orUndefined(s string) string {
+	if s == "" {
+		return _undefined
+	}
+
+	return s
 }
 
 // Request is what the ACS3 signature covers; the body is empty.

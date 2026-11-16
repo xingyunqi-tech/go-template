@@ -1,0 +1,100 @@
+# 开发环境：从源码构建镜像，Mailpit 收信，种子数据一次性写入；develop.watch 在源码变更时重新构建 api 与 worker
+#
+# 用法：
+#   docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.redis.yaml -f docker/docker-compose.postgres.yaml -f docker/docker-compose.dev.yaml up --build --watch
+
+name: go-template-dev
+
+x-dev-build: &dev-build
+  context: ..
+  dockerfile: Dockerfile
+
+x-dev-env: &dev-env
+  APP_ENV: development
+  MAIL_HOST: mailpit
+  MAIL_PORT: '1025'
+  MAIL_IGNORE_TLS: 'true'
+
+x-dev-watch: &dev-watch
+  - action: rebuild
+    path: ../cmd
+    ignore: &dev-watch-ignore
+      - '**/*_test.go'
+      - '**/testdata/'
+  - action: rebuild
+    path: ../internal
+    ignore: *dev-watch-ignore
+  - action: rebuild
+    path: ../pkg
+    ignore: *dev-watch-ignore
+  - action: rebuild
+    path: ../migrations
+  - action: rebuild
+    path: ../seeds
+  - action: rebuild
+    path: ../templates
+  - action: rebuild
+    path: ../openapi
+  - action: rebuild
+    path: ../go.mod
+  - action: rebuild
+    path: ../go.sum
+
+services:
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - '${MAIL_CLIENT_PORT:-1080}:8025'
+      - '${MAIL_PORT:-1025}:1025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 1s
+
+  migrate:
+    build: *dev-build
+    image: go-template:dev
+    pull_policy: build
+    environment: *dev-env
+
+  seed:
+    image: go-template:dev
+    pull_policy: never
+    env_file:
+      - ../.env.example
+    command: ['seed']
+    restart: 'no'
+    environment:
+      <<: *dev-env
+      DATABASE_HOST: postgres
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    build: *dev-build
+    image: go-template:dev
+    environment: *dev-env
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+    develop:
+      watch: *dev-watch
+
+  worker:
+    build: *dev-build
+    image: go-template:dev
+    pull_policy: build
+    environment: *dev-env
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+    develop:
+      watch: *dev-watch

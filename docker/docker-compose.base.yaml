@@ -26,6 +26,12 @@ services:
       dockerfile: Dockerfile
     pull_policy: build
     command: ['serve']
+    healthcheck:
+      test: ['CMD', '/app', 'healthcheck']
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     ports:
       - '${APP_PORT:-3000}:3000'
     depends_on:

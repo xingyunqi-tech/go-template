@@ -1,0 +1,65 @@
+# 测试环境：从源码构建镜像，APP_ENV=test，Mailpit 收信，种子数据一次性写入；宿主机可对其运行 tests/e2e
+#
+# 用法：
+#   docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.redis.yaml -f docker/docker-compose.postgres.yaml -f docker/docker-compose.test.yaml up --build --wait
+#   APP_URL=http://localhost:3000 go test -count=1 -tags e2e ./tests/e2e/...
+
+name: go-template-test
+
+x-test-env: &test-env
+  APP_ENV: test
+  MAIL_HOST: mailpit
+  MAIL_PORT: '1025'
+  MAIL_IGNORE_TLS: 'true'
+
+services:
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - '${MAIL_CLIENT_PORT:-1080}:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 1s
+
+  migrate:
+    environment: *test-env
+
+  seed:
+    image: go-template:local
+    pull_policy: never
+    env_file:
+      - ../.env.example
+    command: ['seed']
+    restart: 'no'
+    environment:
+      <<: *test-env
+      DATABASE_HOST: postgres
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    environment: *test-env
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+
+  worker:
+    environment: *test-env
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy

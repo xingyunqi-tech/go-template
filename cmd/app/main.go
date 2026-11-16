@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/xingyunqi-tech/go-template/internal/app"
 	"github.com/xingyunqi-tech/go-template/internal/config"
@@ -22,6 +24,8 @@ const (
 	exitOK    = 0
 	exitError = 1
 	exitUsage = 2
+
+	_healthcheckTimeout = 5 * time.Second
 )
 
 const usage = `Usage: app <command>
@@ -31,6 +35,8 @@ Commands:
   worker    run the queue workers and periodic jobs
   migrate   apply the database migrations
   seed      insert reference data and seed accounts
+  healthcheck [--ready]
+            probe the local API liveness (or readiness) endpoint; exit 0 when it answers 200
   version   print the build version
 `
 
@@ -56,6 +62,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return command(stderr, "migrate", app.Migrate)
 	case "seed":
 		return command(stderr, "seed", app.Seed)
+	case "healthcheck":
+		return healthcheck(fs.Args()[1:], stderr)
 	case "version":
 		_, _ = fmt.Fprintln(stdout, version)
 
@@ -65,6 +73,57 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 		return exitUsage
 	}
+}
+
+// healthcheck GETs /<API_PREFIX>/v1/health/live (ready with --ready) on 127.0.0.1:<APP_PORT>.
+func healthcheck(args []string, stderr io.Writer) int {
+	fs := flag.NewFlagSet("healthcheck", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	ready := fs.Bool("ready", false, "probe readiness instead of liveness")
+
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+
+		return exitError
+	}
+
+	probe := "live"
+	if *ready {
+		probe = "ready"
+	}
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/%s/v1/health/%s", cfg.App.Port, cfg.App.APIPrefix, probe)
+
+	ctx, cancel := context.WithTimeout(context.Background(), _healthcheckTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+
+		return exitError
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+
+		return exitError
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		_, _ = fmt.Fprintf(stderr, "%s: %d\n", url, res.StatusCode)
+
+		return exitError
+	}
+
+	return exitOK
 }
 
 func command(stderr io.Writer, name string, run func(context.Context, *config.Config, *slog.Logger) error) int {

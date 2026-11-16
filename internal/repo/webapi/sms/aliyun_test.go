@@ -135,3 +135,97 @@ func TestSendWithoutAccount(t *testing.T) {
 	incomplete.TemplateCode = ""
 	require.EqualError(t, sms.New(incomplete, nil, discard()).Send(t.Context(), "13800138000", nil), "SMS configuration incomplete")
 }
+
+func text(s string) *string { return &s }
+
+func TestSendSMSResults(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		want   sms.Result
+	}{
+		{
+			"sent", http.StatusOK, `{"Code":"OK","Message":"OK","RequestId":"r1","BizId":"b1"}`,
+			sms.Result{Success: true, RequestID: "r1", BizID: "b1", Code: "OK", Message: text("OK")},
+		},
+		{
+			"rejected", http.StatusOK, `{"Code":"isv.BUSINESS_LIMIT_CONTROL","Message":"limit","RequestId":"r2"}`,
+			sms.Result{Success: false, RequestID: "r2", BizID: "", Code: "isv.BUSINESS_LIMIT_CONTROL", Message: text("limit")},
+		},
+		{
+			"rejected without message", http.StatusOK, `{"Code":"isv.X"}`,
+			sms.Result{Success: false, RequestID: "", BizID: "", Code: "isv.X", Message: nil},
+		},
+		{
+			"http error", http.StatusBadRequest, `{"Code":"InvalidParameter","Message":"bad","RequestId":"r3"}`,
+			sms.Result{Success: false, RequestID: "", BizID: "", Code: "SEND_ERROR", Message: text("InvalidParameter: code: 400, bad request id: r3")},
+		},
+		{
+			"http error without fields", http.StatusForbidden, `{}`,
+			sms.Result{Success: false, RequestID: "", BizID: "", Code: "SEND_ERROR", Message: text("undefined: code: 403, undefined request id: undefined")},
+		},
+		{
+			"empty body", http.StatusOK, `null`,
+			sms.Result{Success: false, RequestID: "", BizID: "", Code: "EMPTY_RESPONSE", Message: text("SMS response body is empty")},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rt := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			})
+
+			assert.Equal(t, tc.want, sms.New(account(), rt, discard()).SendSMS(t.Context(), "13800138000", map[string]string{"content": "c"}))
+		})
+	}
+}
+
+func TestSendSMSWithoutAccount(t *testing.T) {
+	t.Parallel()
+
+	mock := account()
+	mock.Mock = true
+	assert.Equal(t, sms.Result{Success: true, RequestID: "mock-request-id", BizID: "mock-biz-id", Code: "OK", Message: text("Mock SMS sent successfully")},
+		sms.New(mock, nil, discard()).SendSMS(t.Context(), "13800138000", nil))
+
+	missing := account()
+	missing.AccessKeyID = ""
+	assert.Equal(t, sms.Result{Success: false, RequestID: "", BizID: "", Code: "CLIENT_NOT_INITIALIZED", Message: text("SMS client not initialized")},
+		sms.New(missing, nil, discard()).SendSMS(t.Context(), "13800138000", nil))
+
+	incomplete := account()
+	incomplete.SignName = ""
+	assert.Equal(t, sms.Result{Success: false, RequestID: "", BizID: "", Code: "CONFIG_ERROR", Message: text("SMS configuration incomplete")},
+		sms.New(incomplete, nil, discard()).SendSMS(t.Context(), "13800138000", nil))
+}
+
+func TestSendErrorIsTheResultMessage(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"message", `{"Code":"isv.BUSINESS_LIMIT_CONTROL","Message":"触发分钟级流控Permits:1"}`, "触发分钟级流控Permits:1"},
+		{"no message", `{"Code":"isv.X"}`, "SMS send failed"},
+		{"empty message", `{"Code":"isv.X","Message":""}`, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rt := serve(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(tc.body)) })
+
+			require.EqualError(t, sms.New(account(), rt, discard()).Send(t.Context(), "13800138000", nil), tc.want)
+		})
+	}
+}
