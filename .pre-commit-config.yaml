@@ -54,7 +54,7 @@ repos:
         name: 生成代码新鲜度
         entry: scripts/check-generated.sh
         language: system
-        files: ^(openapi/|tools/openapigen/|migrations/|internal/repo/postgres/queries/|sqlc\.yaml)
+        files: ^(openapi/|tools/openapigen/|migrations/|internal/repo/postgres/queries/|sqlc\.yaml$|Makefile$|internal/repo/contracts\.go$|internal/usecase/[^/]+/[^/]+\.go$)
         pass_filenames: false
 
       - id: comment-history

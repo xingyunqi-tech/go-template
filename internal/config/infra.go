@@ -27,6 +27,8 @@ type Metrics struct {
 	Disabled DisabledFlag `env:"METRICS_ENABLED"`
 	Path     string       `env:"METRICS_PATH"    envDefault:"metrics" validate:"required,excludesall=/"`
 	Token    Secret       `env:"METRICS_TOKEN"`
+	// WorkerPort is the worker process metrics listener; 0 disables it.
+	WorkerPort int `env:"WORKER_METRICS_PORT" envDefault:"9464" validate:"min=0,max=65535"`
 }
 
 // File configures uploads; sizes are in bytes.

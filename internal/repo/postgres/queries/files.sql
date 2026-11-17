@@ -2,8 +2,8 @@
 SELECT * FROM "file" WHERE "id" = ANY(@ids::uuid[]);
 
 -- name: CreateFile :one
-INSERT INTO "file" ("path", "ownerUserId", "visibility", "mimeType", "size")
-VALUES (@path, sqlc.narg(owner_user_id), @visibility, sqlc.narg(mime_type), sqlc.narg(size))
+INSERT INTO "file" ("id", "path", "ownerUserId", "visibility", "mimeType", "size")
+VALUES (@id, @path, sqlc.narg(owner_user_id), @visibility, sqlc.narg(mime_type), sqlc.narg(size))
 RETURNING *;
 
 -- name: GetFile :one

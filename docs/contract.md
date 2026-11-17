@@ -78,7 +78,7 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 
 ## 基线中未实现的接口（148 个）
 
-请求这些接口返回 404 信封 `Cannot <METHOD> <originalUrl>`。前端仍可从 `/docs-json` 生成全部代码。
+请求这些接口返回 404 信封 `Cannot <METHOD> <originalUrl>`。前端仍可从 `/docs-json` 生成全部代码。本节由 `TestUnimplementedOperationsAreListedInContractDoc` 校验，`UPDATE_CONTRACT_DOC=1 make test-contract` 重新生成。
 
 | 方法 | 路径 | operationId | tag |
 |---|---|---|---|
@@ -253,6 +253,7 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 | 周期任务互斥 | `lock:scheduler:<name>` | River leader 选举，不使用锁键 |
 | 账号清理并发 | jobId `user-<id>` 去重 | River `UniqueOpts`（按参数，未完成状态）去重；执行时另持 `lock:account-cleanup:user-{id}`，被占用时 30 秒后重试 |
 | 配置校验 | 各模块运行时校验 | 启动时一次性解析并校验全部变量，列出全部问题后退出 |
+| uuid 主键生成 | uuid v4 | `file`、`user_consent` 插入时由应用生成 UUIDv7 |
 | 优雅停机 | Nest 默认 | 就绪探针先返回 503，等待 `SHUTDOWN_DRAIN_PERIOD`，再在 `SHUTDOWN_TIMEOUT` 内等待在途请求与任务 |
 | 可观测性 | pino 日志、Prometheus | 另有 OpenTelemetry（`OTEL_ENABLED`）与 Sentry（`SENTRY_DSN`），日志带 trace_id / span_id；均不属于契约 |
 | 指标采集范围 | 只记录 HTTP、告警、限流回落三组，其余只注册 | 全部记录：`database_query_duration_seconds` 由 pgx tracer 记录，`cache_hits_total` / `cache_misses_total` 由缓存记录 |
@@ -280,7 +281,7 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 - 注册确认、确认新邮箱、找回密码邮件在请求事务内入 `mail` 队列，提交后由 worker 按请求语言渲染并发送，SMTP 失败不影响接口响应；nestjs 在请求内同步发送，SMTP 失败时接口返回 500
 - `MAIL_HOST`、`MAIL_DEFAULT_EMAIL`、`MAIL_DEFAULT_NAME` 只在生产环境必填，非生产未设置 `MAIL_HOST` 时邮件只写日志；nestjs 在任何环境都要求这三项
 - notification 队列的「每秒 10 个任务」在每个 worker 进程内各自计算（`golang.org/x/time/rate`），启用多个 worker 进程时总速率为 10 × 进程数；nestjs BullMQ limiter 为跨 worker 的全局计数
-- worker 进程中记录的 `queue_jobs_total`、`admin_alerts_total`（账号清理失败告警等）在 worker 进程自己的注册表中，worker 不提供 HTTP 端点，API 的 `/metrics` 中没有这些样本；nestjs 的队列处理器与 HTTP 在同一进程，样本出现在 `/metrics`
+- worker 进程中记录的 `queue_jobs_total`、`admin_alerts_total`（账号清理失败告警等）由 worker 自己在 `WORKER_METRICS_PORT` 的 `/<METRICS_PATH>` 输出，不在 API 的 `/metrics` 中，需单独抓取；nestjs 的队列处理器与 HTTP 在同一进程，样本出现在 `/metrics`
 
 **数据**
 
@@ -299,6 +300,7 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 |---|---|---|
 | `FILE_LOCAL_ROOT` | `files` | local 驱动的存储目录（相对工作目录）；nestjs 写死 `./files`，本变量供测试与部署挂载卷使用 |
 | `SHUTDOWN_DRAIN_PERIOD` | `0s` | 收到 SIGTERM 后就绪探针先返回 503 的时长，之后才停止接收请求；部署在负载均衡后时设为不小于探针周期 |
+| `WORKER_METRICS_PORT` | `9464` | worker 进程指标监听端口（`/<METRICS_PATH>`，`METRICS_TOKEN` 校验）；0 关闭 |
 
 ### 范围与决定
 

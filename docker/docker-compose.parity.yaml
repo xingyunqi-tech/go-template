@@ -23,6 +23,8 @@ services:
     restart: 'no'
     environment:
       DATABASE_HOST: postgres
+      REDIS_ENABLED: 'true'
+      REDIS_HOST: redis
     depends_on:
       migrate:
         condition: service_completed_successfully

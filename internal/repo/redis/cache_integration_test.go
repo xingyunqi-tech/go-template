@@ -13,17 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/xingyunqi-tech/go-template/internal/repo/redis"
-	"github.com/xingyunqi-tech/go-template/internal/testutil"
 )
 
 func TestCacheUsesKeyvFormatInRedis(t *testing.T) {
 	t.Parallel()
 
-	r, err := testutil.StartRedis(t.Context())
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = r.Terminate() })
-
-	client := goredis.NewClient(&goredis.Options{Addr: r.Addr}) //nolint:exhaustruct // defaults
+	db := _redis.Borrow(t)
+	client := goredis.NewClient(&goredis.Options{Addr: db.Addr, DB: db.DB}) //nolint:exhaustruct // defaults
 
 	t.Cleanup(func() { _ = client.Close() })
 

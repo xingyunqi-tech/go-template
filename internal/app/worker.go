@@ -93,6 +93,12 @@ func Work(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 		return err
 	}
 
+	stopMetrics, err := serveWorkerMetrics(ctx, cfg, infra.Metrics, log)
+	if err != nil {
+		return err
+	}
+	defer stopMetrics()
+
 	if err := client.Start(context.WithoutCancel(ctx)); err != nil {
 		return fmt.Errorf("app: start worker: %w", err)
 	}

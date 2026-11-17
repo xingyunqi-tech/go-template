@@ -2,7 +2,9 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -10,12 +12,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/xingyunqi-tech/go-template/internal/app"
 	"github.com/xingyunqi-tech/go-template/internal/config"
 	"github.com/xingyunqi-tech/go-template/pkg/logger"
+	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
 )
 
 var version = "dev"
@@ -26,6 +30,7 @@ const (
 	exitUsage = 2
 
 	_healthcheckTimeout = 5 * time.Second
+	_minPasswordLength  = 6
 )
 
 const usage = `Usage: app <command>
@@ -34,17 +39,21 @@ Commands:
   serve     run the HTTP API server
   worker    run the queue workers and periodic jobs
   migrate   apply the database migrations
-  seed      insert reference data and seed accounts
+  seed      insert reference data and seed accounts, then clear the permission cache
+  permissions clear-cache
+            delete the cached role permission map
+  createsuperuser -email <email>
+            create an active administrator; the password is read from the first line of stdin
   healthcheck [--ready]
             probe the local API liveness (or readiness) endpoint; exit 0 when it answers 200
   version   print the build version
 `
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-func run(args []string, stdout, stderr io.Writer) int {
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("app", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { _, _ = fmt.Fprint(stderr, usage) }
@@ -53,15 +62,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
+	if run, ok := commands()[fs.Arg(0)]; ok {
+		return command(stderr, fs.Arg(0), run)
+	}
+
 	switch fs.Arg(0) {
-	case "serve":
-		return command(stderr, "serve", app.Serve)
-	case "worker":
-		return command(stderr, "worker", app.Work)
-	case "migrate":
-		return command(stderr, "migrate", app.Migrate)
-	case "seed":
-		return command(stderr, "seed", app.Seed)
+	case "permissions":
+		if fs.Arg(1) != "clear-cache" {
+			fs.Usage()
+
+			return exitUsage
+		}
+
+		return command(stderr, "permissions clear-cache", app.ClearPermissionCache)
+	case "createsuperuser":
+		return createSuperuser(fs.Args()[1:], stdin, stderr)
 	case "healthcheck":
 		return healthcheck(fs.Args()[1:], stderr)
 	case "version":
@@ -73,6 +88,46 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 		return exitUsage
 	}
+}
+
+func commands() map[string]func(context.Context, *config.Config, *slog.Logger) error {
+	return map[string]func(context.Context, *config.Config, *slog.Logger) error{
+		"serve": app.Serve, "worker": app.Work, "migrate": app.Migrate, "seed": app.Seed,
+	}
+}
+
+// createSuperuser reads -email and the password from the first line of stdin.
+func createSuperuser(args []string, stdin io.Reader, stderr io.Writer) int {
+	fs := flag.NewFlagSet("createsuperuser", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	email := fs.String("email", "", "administrator email")
+
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+
+	address := strings.ToLower(strings.TrimSpace(*email))
+	if !validatorx.IsEmail(address) {
+		_, _ = fmt.Fprintln(stderr, "createsuperuser: -email must be an email address")
+
+		return exitUsage
+	}
+
+	line, err := bufio.NewReader(stdin).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		_, _ = fmt.Fprintln(stderr, err)
+
+		return exitError
+	}
+
+	pass := strings.TrimRight(line, "\r\n")
+	if len(pass) < _minPasswordLength {
+		_, _ = fmt.Fprintf(stderr, "createsuperuser: the password on stdin must have at least %d characters\n", _minPasswordLength)
+
+		return exitUsage
+	}
+
+	return command(stderr, "createsuperuser", app.CreateSuperuser(address, pass))
 }
 
 // healthcheck GETs /<API_PREFIX>/v1/health/live (ready with --ready) on 127.0.0.1:<APP_PORT>.

@@ -123,6 +123,10 @@ func TestConsents(t *testing.T) {
 
 	var count int
 	require.NoError(t, a.pool.QueryRow(t.Context(), `SELECT count(*) FROM "user_consent" WHERE "type" = 'PRIVACY_POLICY'`).Scan(&count))
+
+	var versions int
+	require.NoError(t, a.pool.QueryRow(t.Context(), `SELECT count(*) FROM "user_consent" WHERE substr("id"::text, 15, 1) <> '7'`).Scan(&versions))
+	assert.Zero(t, versions, "consent ids are UUIDv7")
 	assert.Equal(t, 1, count)
 
 	setVersion("consent.privacyPolicyVersion", "v2")

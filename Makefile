@@ -35,7 +35,11 @@ OPENAPIGEN := $(BIN)/openapigen
 PKGS := ./...
 IMAGE := go-template:local
 BUILD_PLATFORMS := linux/amd64 linux/arm64
-GENERATED := internal/controller/http/gen internal/repo/postgres/sqlcgen
+MOCK_SOURCES := internal/repo/contracts.go internal/usecase/accountcleanup/accountcleanup.go internal/usecase/alert/alert.go \
+	internal/usecase/auth/auth.go internal/usecase/auth/phone.go internal/usecase/auth/social.go \
+	internal/usecase/file/file.go internal/usecase/sms/sender.go internal/usecase/user/user.go
+MOCK_DIRS := $(sort $(foreach src,$(MOCK_SOURCES),$(dir $(src))mocks))
+GENERATED := internal/controller/http/gen internal/repo/postgres/sqlcgen $(MOCK_DIRS)
 GITLEAKS_LOG_OPTS ?=
 MIGRATIONS_DB := go_template_migrations
 NAMING_SQL := SELECT c.relname || '.' || con.conname FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND con.contype <> 'n' AND c.relname <> 'goose_db_version' UNION ALL SELECT tablename || '.' || indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename <> 'goose_db_version' AND indexname NOT IN (SELECT conname FROM pg_constraint)
@@ -81,6 +85,11 @@ down: ## 停止开发栈
 migrate: ## 执行数据库迁移（读取 .env；DB_SCHEMA_OWNER=external 时只校验表结构）
 	$(ENV_RUN) $(GO) run ./cmd/app migrate
 
+.PHONY: migrate-create
+migrate-create: ## 新建顺序编号的 goose SQL 迁移（NAME=add_orders）
+	@[[ -n "$(NAME)" ]] || { echo "用法：make migrate-create NAME=<name>" >&2; exit 1; }
+	$(GOTOOL) goose -dir migrations -s create $(NAME) sql
+
 .PHONY: seed
 seed: ## 写入种子数据（读取 .env）
 	$(ENV_RUN) $(GO) run ./cmd/app seed
@@ -94,9 +103,13 @@ worker: ## 本地启动队列 worker 与周期任务（读取 .env）
 	$(ENV_RUN) $(GO) run ./cmd/app worker
 
 .PHONY: generate
-generate: $(OPENAPIGEN) $(SQLC) ## 生成代码：oapi-codegen（scope.yaml 范围内）、sqlc
+generate: $(OPENAPIGEN) $(SQLC) ## 生成代码：oapi-codegen（scope.yaml 范围内）、sqlc、mockgen（MOCK_SOURCES 中的端口）
 	$(OPENAPIGEN)
 	$(SQLC) generate
+	for dir in $(MOCK_DIRS); do rm -f "$$dir"/mock_*.go; done
+	for src in $(MOCK_SOURCES); do \
+		$(GOTOOL) mockgen -typed -source=$$src -package=mocks -destination=$$(dirname $$src)/mocks/mock_$$(basename $$src); \
+	done
 
 .PHONY: module
 module: ## 按 OpenAPI 标签生成模块骨架（NAME=orders TAG=Orders）：写入 scope.yaml、处理器桩、用例、仓储与端口

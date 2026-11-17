@@ -33,7 +33,7 @@ PostgreSQL 18（镜像 `postgres:18.6-alpine`；nestjs 参照服务 `scripts/nes
 - 动态排序的列表手写 SQL：排序列只取白名单映射的列名，值走占位参数；未知排序字段按未知错误返回 500（与 TypeORM `EntityPropertyNotFoundError` 一致）
 - 时间列为 `timestamp without time zone`，存 UTC；API 输出为 `toISOString` 格式（毫秒、`Z`）
 - 软删除列 `deletedAt`；已删除用户的唯一字段由部分索引释放
-- uuid 主键（`file`、`user_consent`）默认值 `uuid_generate_v4()`，初始迁移创建 `uuid-ossp` 扩展
+- uuid 主键（`file`、`user_consent`）：插入时由应用以 `uuid.NewV7()` 生成（按时间有序）；列默认值 `uuid_generate_v4()` 与 nestjs 表结构一致，初始迁移创建 `uuid-ossp` 扩展
 - 新约束命名：`<table>_<column>_key`、`<table>_<column>_fkey`、`idx_<table>_<column>`（`make test-migrations` 检查）
 
 表：`user`、`role`、`status`、`session`、`permission`、`role_permission`、`file`、`audit_logs`、`config`、`region`、`notification`、`notification_setting`、`address`、`favorite`、`feedback`、`user_consent`、`account_cleanup`、`admin_alert`。

@@ -9,9 +9,11 @@ go run ./cmd/app            # 打印用法
 | 命令 | 说明 | Make |
 |---|---|---|
 | `app serve` | 启动 HTTP API（`APP_PORT`，默认 3000）；`DB_SCHEMA_OWNER=external` 时先检查表结构 | `make dev` |
-| `app worker` | 启动 River workers 与周期任务 | `make worker` |
+| `app worker` | 启动 River workers 与周期任务；`WORKER_METRICS_PORT`（默认 9464，0 关闭）上提供 `/<METRICS_PATH>`，与 API 用同一 `METRICS_TOKEN` 校验 | `make worker` |
 | `app migrate` | goose 迁移 + River 迁移；`DB_SCHEMA_OWNER=external` 时只检查表结构并迁移 `river` schema | `make migrate` |
-| `app seed` | 写入角色、状态、权限、行政区划、配置与初始账号，已存在的不覆盖，见 [database.md](database.md#seed) | `make seed` |
+| `app seed` | 写入角色、状态、权限、行政区划、配置与初始账号，已存在的不覆盖，见 [database.md](database.md#seed)；完成后删除角色权限缓存（失败只告警，缓存最长 5 分钟后过期） | `make seed` |
+| `app permissions clear-cache` | 删除角色权限缓存 `permissions:v2:role-map`（Redis），Redis 不可达时退出码 1；`REDIS_ENABLED=false` 时各进程在内存中缓存，最长 5 分钟后失效，命令只输出提示 | – |
+| `app createsuperuser -email <email>` | 新建一个状态为启用的管理员（role 1），邮箱按登录接口相同的 `isEmail` 规则校验（需有顶级域名），密码取标准输入第一行（至少 6 个字符，按客户端做法先取 MD5 再哈希）；邮箱已存在时退出码 1。例：`printf '%s\n' "$PASSWORD" \| docker compose exec -T api /app createsuperuser -email root@example.com` | – |
 | `app healthcheck [--ready]` | 请求本机 `http://127.0.0.1:<APP_PORT>/<API_PREFIX>/v1/health/live`（`--ready` 时为 `health/ready`），200 时退出码 0，否则 1；compose 的 api 健康检查与 `deploy/manage.sh health` 使用它 | – |
 | `app version` | 打印构建版本（`-ldflags "-X main.version=..."`，`make image` 取 `git describe`） | – |
 
@@ -44,9 +46,11 @@ go run ./cmd/app            # 打印用法
 |---|---|---|
 | `make generate` | `openapi/nestjs-baseline.json` + `openapi/overlay.yaml` + `openapi/oapi-codegen.yaml`，范围取 `openapi/scope.yaml` | `internal/controller/http/gen/gen.go`（`tools/openapigen` 调用 oapi-codegen 库） |
 | | `migrations/` + `internal/repo/postgres/queries/*.sql`（`sqlc.yaml`） | `internal/repo/postgres/sqlcgen/` |
+| | Makefile `MOCK_SOURCES` 中声明端口的源文件（mockgen，`-typed`） | `internal/repo/mocks/`、`internal/usecase/<pkg>/mocks/` |
+| `make migrate-create NAME=<name>` | – | `migrations/000NN_<name>.sql`（goose `-s` 顺序编号，含 Up / Down 骨架） |
 | `make generate-check` | 同上 | 重新生成后检查生成代码与入库版本无差异 |
 
-生成文件不手改。pre-commit 钩子在 `openapi/`、`tools/openapigen/`、`migrations/`、sqlc 查询有暂存改动时重新生成并检查无差异（`scripts/check-generated.sh`）。
+生成文件不手改。新增端口时把其所在源文件加入 Makefile `MOCK_SOURCES`。pre-commit 钩子在 `openapi/`、`tools/openapigen/`、`migrations/`、sqlc 查询、`Makefile` 或 mock 源文件有暂存改动时重新生成并检查无差异（`scripts/check-generated.sh`）。
 
 ## 模块生成器
 

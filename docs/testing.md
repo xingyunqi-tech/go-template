@@ -21,7 +21,7 @@
 ## 单元测试
 
 - 用例调用 `t.Parallel()`（paralleltest）；使用 `t.Setenv` 的用例除外
-- usecase 依赖 repo 端口，测试中用手写 fake
+- usecase 依赖 repo 端口与包内声明的端口：mockgen（go.uber.org/mock 0.6.0，`-typed`）生成于 `internal/repo/mocks` 与 `internal/usecase/<pkg>/mocks`，测试在外部测试包 `<pkg>_test` 中引用；简单端口用手写 fake
 - 中间件、管线、守卫、限流、错误翻译、view 类型用 `httptest` 直接测试
 - `pkg/validatorx` 的 validator.js 移植、`pkg/ratelimit` 的 GCRA 计算（含与 fastapi-temp 共用 Redis 键的 TAT 格式）、`pkg/msduration`、`pkg/password`、`pkg/jwtx` 各有单测
 - 邮件模板以 `tests/fixtures/nestjs_mail/*.json`（nestjs 渲染的 subject / text / html）为 golden 逐字节比对
@@ -32,7 +32,7 @@
 |---|---|
 | `testutil.StartDatabase` | 每个测试包的 `TestMain` 启动一个 `postgres:18.6-alpine` 容器，在模板库上执行 goose + River 迁移与 seed |
 | `Database.Clone(t)` | `CREATE DATABASE … TEMPLATE` 克隆独立库并返回 DSN，用例结束 `DROP … WITH (FORCE)`；真实连接池、真实提交，用例可并行 |
-| `testutil.StartRedis` | `redis:8.10.3-alpine` 容器，由用到 Redis 的用例自行启动 |
+| `testutil.StartRedisPool` | 每个用到 Redis 的测试包在 `TestMain` 启动一个 `redis:8.10.3-alpine` 容器；用例 `pool.Borrow(t)` 独占借一个逻辑库（DB 0–15，全部借出时阻塞），借出前、归还前各 `FLUSHDB`；客户端以 `Options{Addr: db.Addr, DB: db.DB}` 连接，对应生产的 `REDIS_HOST:REDIS_PORT` 与 `REDIS_DB`。用例里只用 `FLUSHDB`，不用 `FLUSHALL` 或跨库的全局命令 |
 | `testutil.StartMinio` | `chainguard/minio`（按 digest 固定）容器与独立桶，覆盖 `s3` / `s3-presigned` 驱动 |
 | `testutil.SchemaSnapshot` | `scripts/schema_snapshot.py` 的 Go 版本，比对迁移结果与 `db/nestjs-schema.sql` |
 

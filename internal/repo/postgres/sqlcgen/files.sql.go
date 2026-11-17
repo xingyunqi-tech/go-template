@@ -12,12 +12,13 @@ import (
 )
 
 const createFile = `-- name: CreateFile :one
-INSERT INTO "file" ("path", "ownerUserId", "visibility", "mimeType", "size")
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO "file" ("id", "path", "ownerUserId", "visibility", "mimeType", "size")
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, path, visibility, "ownerUserId", "mimeType", size, sha256
 `
 
 type CreateFileParams struct {
+	ID          uuid.UUID
 	Path        string
 	OwnerUserID *int32
 	Visibility  string
@@ -27,6 +28,7 @@ type CreateFileParams struct {
 
 func (q *Queries) CreateFile(ctx context.Context, arg CreateFileParams) (*File, error) {
 	row := q.db.QueryRow(ctx, createFile,
+		arg.ID,
 		arg.Path,
 		arg.OwnerUserID,
 		arg.Visibility,

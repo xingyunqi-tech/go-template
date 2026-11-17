@@ -724,6 +724,7 @@ Go 独有变量的说明：
 | `WORKER_DATABASE_MAX_CONNECTIONS` | `10` | `worker` 进程（River worker 与周期任务，独立进程，§8「进程」）单独建 pgxpool 的 `MaxConns`，不与 API 共用连接池；计入 `DATABASE_MAX_CONNECTIONS` 一行的不等式 |
 | `FILE_LOCAL_ROOT` | `files` | local 驱动的存储目录（相对工作目录）；nestjs 写死 `./files`，本变量供测试与部署挂载卷使用 |
 | `SHUTDOWN_DRAIN_PERIOD` | `0s` | 收到 SIGTERM 后就绪探针先返回 503 的时长，之后才 `Shutdown`；部署在负载均衡后时设为探针周期以上 |
+| `WORKER_METRICS_PORT` | `9464` | worker 进程指标监听端口（`/<METRICS_PATH>`，`METRICS_TOKEN` 校验）；0 关闭。worker 的 `queue_jobs_total`、`admin_alerts_total` 从这里抓取 |
 | `PASSWORD_HASH_CONCURRENCY` | `2` | 每个进程同时进行的密码哈希 / 验证数（§5 第 1 项） |
 
 nestjs 未使用 `REDIS_KEY_PREFIX`（键前缀写死在代码里，如 `throttle:`、`lock:`、`session:rotated:`），本服务同样不引入，Redis 键名与 nestjs 逐字一致，便于共用实例；唯一例外是限流状态键（`throttle:<sha>:default:gcra`，§4.1.3）。队列在 Postgres（River）上，与 nestjs 的 BullMQ 不互通，共用实例时两边各自处理自己的任务。

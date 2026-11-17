@@ -12,10 +12,10 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/repo"
 )
 
-const (
-	_cacheKey = "permissions:v2:role-map"
-	_cacheTTL = 5 * time.Minute
-)
+// CacheKey is the cached role permission map.
+const CacheKey = "permissions:v2:role-map"
+
+const _cacheTTL = 5 * time.Minute
 
 // Service resolves permissions.
 type Service struct {
@@ -36,7 +36,7 @@ func (s *Service) ForRole(ctx context.Context, roleID int) ([]string, error) {
 
 	var roleMap map[string][]string
 
-	found, err := s.cache.Get(ctx, _cacheKey, &roleMap)
+	found, err := s.cache.Get(ctx, CacheKey, &roleMap)
 	if err != nil {
 		return nil, fmt.Errorf("permission: cache: %w", err)
 	}
@@ -65,7 +65,7 @@ func (s *Service) load(ctx context.Context) (map[string][]string, error) {
 		roleMap[strconv.Itoa(id)] = perms
 	}
 
-	if err := s.cache.Set(ctx, _cacheKey, roleMap, _cacheTTL); err != nil {
+	if err := s.cache.Set(ctx, CacheKey, roleMap, _cacheTTL); err != nil {
 		return nil, fmt.Errorf("permission: cache: %w", err)
 	}
 

@@ -89,6 +89,7 @@ compose 文件写死项目名 `go-template`，所有调用都是 `docker compose
 | `AUTH_JWT_SECRET`、`AUTH_REFRESH_SECRET`、`AUTH_FORGOT_SECRET`、`AUTH_CONFIRM_EMAIL_SECRET` | ≥32 字符且互不相同 |
 | `MAIL_HOST`、`MAIL_DEFAULT_EMAIL`、`MAIL_DEFAULT_NAME` | 必填 |
 | `METRICS_TOKEN` | 设置时 ≥16 字符；未设置时生产拒绝访问 `/metrics` 与完整 `/api/v1/health` |
+| `WORKER_METRICS_PORT` | worker 指标端口（默认 9464，容器网络内抓取 `http://worker:9464/<METRICS_PATH>`），0 关闭 |
 | `FILE_DRIVER` 及 S3 变量 | 非 `local` 时 `ACCESS_KEY_ID`、`SECRET_ACCESS_KEY`、`AWS_DEFAULT_S3_BUCKET`、`AWS_S3_REGION` 必填 |
 | `FRONTEND_DOMAIN` | CORS 白名单，逗号分隔 |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | `RUN_SEEDS=true` 时两项都设置才创建管理员 |

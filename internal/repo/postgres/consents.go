@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"uuid"
 
 	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/repo"
@@ -31,7 +32,7 @@ func toConsent(c *sqlcgen.UserConsent) entity.UserConsent {
 func (r *Consents) InsertIfAbsent(ctx context.Context, c *entity.UserConsent) error {
 	err := r.db.queries(ctx, func(q *sqlcgen.Queries) error {
 		return q.InsertConsentIfAbsent(ctx, sqlcgen.InsertConsentIfAbsentParams{
-			UserID: id32(c.UserID), Type: c.Type, Version: c.Version, Ip: c.IP,
+			ID: uuid.NewV7(), UserID: id32(c.UserID), Type: c.Type, Version: c.Version, Ip: c.IP,
 		})
 	})
 	if err != nil {

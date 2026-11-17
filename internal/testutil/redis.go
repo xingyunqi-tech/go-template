@@ -5,13 +5,21 @@ package testutil
 import (
 	"context"
 	"fmt"
+	"testing"
+	"time"
 
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 )
 
 // RedisImage is the server image used by integration tests.
 const RedisImage = "redis:8.10.3-alpine"
+
+const (
+	_redisDatabases    = 16
+	_redisFlushTimeout = 10 * time.Second
+)
 
 // Redis is a running Redis container.
 type Redis struct {
@@ -45,4 +53,83 @@ func (r *Redis) Terminate() error {
 	}
 
 	return nil
+}
+
+// RedisPool is one Redis container whose logical databases 0–15 are lent to tests exclusively.
+type RedisPool struct {
+	redis *Redis
+	dbs   chan int
+}
+
+// RedisDB is a borrowed logical database, addressed the same way as REDIS_HOST:REDIS_PORT and
+// REDIS_DB.
+type RedisDB struct {
+	Addr string
+	DB   int
+}
+
+// StartRedisPool starts the package's Redis container.
+func StartRedisPool(ctx context.Context) (*RedisPool, error) {
+	r, err := StartRedis(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dbs := make(chan int, _redisDatabases)
+	for i := range _redisDatabases {
+		dbs <- i
+	}
+
+	return &RedisPool{redis: r, dbs: dbs}, nil
+}
+
+// Borrow blocks until a logical database is free, flushes it, and returns it flushed to the pool
+// when the test ends.
+func (p *RedisPool) Borrow(t *testing.T) RedisDB {
+	t.Helper()
+
+	var db int
+
+	select {
+	case db = <-p.dbs:
+	case <-t.Context().Done():
+		t.Fatalf("testutil: borrow redis db: %v", t.Context().Err())
+	}
+
+	d := RedisDB{Addr: p.redis.Addr, DB: db}
+
+	if err := d.flush(t.Context()); err != nil {
+		p.dbs <- db
+
+		t.Fatalf("testutil: flush redis db %d: %v", db, err)
+	}
+
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), _redisFlushTimeout)
+		defer cancel()
+
+		if err := d.flush(ctx); err != nil {
+			t.Errorf("testutil: flush redis db %d: %v", db, err)
+		}
+
+		p.dbs <- db
+	})
+
+	return d
+}
+
+func (d RedisDB) flush(ctx context.Context) error {
+	client := goredis.NewClient(&goredis.Options{Addr: d.Addr, DB: d.DB}) //nolint:exhaustruct // defaults
+	defer func() { _ = client.Close() }()
+
+	if err := client.FlushDB(ctx).Err(); err != nil {
+		return fmt.Errorf("testutil: flushdb: %w", err)
+	}
+
+	return nil
+}
+
+// Close removes the container.
+func (p *RedisPool) Close() {
+	_ = p.redis.Terminate()
 }

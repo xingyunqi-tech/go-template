@@ -7,6 +7,8 @@ package sqlcgen
 
 import (
 	"context"
+
+	"uuid"
 )
 
 const consentExists = `-- name: ConsentExists :one
@@ -53,12 +55,13 @@ func (q *Queries) GetConsent(ctx context.Context, arg GetConsentParams) (*UserCo
 }
 
 const insertConsentIfAbsent = `-- name: InsertConsentIfAbsent :exec
-INSERT INTO "user_consent" ("userId", "type", "version", "ip")
-VALUES ($1, $2, $3, $4)
+INSERT INTO "user_consent" ("id", "userId", "type", "version", "ip")
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT ("userId", "type", "version") DO NOTHING
 `
 
 type InsertConsentIfAbsentParams struct {
+	ID      uuid.UUID
 	UserID  int32
 	Type    string
 	Version string
@@ -67,6 +70,7 @@ type InsertConsentIfAbsentParams struct {
 
 func (q *Queries) InsertConsentIfAbsent(ctx context.Context, arg InsertConsentIfAbsentParams) error {
 	_, err := q.db.Exec(ctx, insertConsentIfAbsent,
+		arg.ID,
 		arg.UserID,
 		arg.Type,
 		arg.Version,

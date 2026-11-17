@@ -11,7 +11,8 @@ Go 后端模板，与 nestjs-template（`release/exam-prep`）**API 契约一致
 | 启动本地 Postgres、Redis | `make infra` |
 | 迁移 / 种子数据 | `make migrate` / `make seed` |
 | 本地启动 API / 队列 worker | `make dev` / `make worker` |
-| 生成代码（oapi-codegen、sqlc） | `make generate` |
+| 生成代码（oapi-codegen、sqlc、mockgen） | `make generate` |
+| 新建迁移（goose 顺序编号） | `make migrate-create NAME=<name>` |
 | 按 nestjs tag 生成模块骨架（处理器、usecase、repo、端口，并加入 `scope.yaml`） | `make module NAME=<包名> TAG=<tag>` |
 | 格式化 | `make fmt` |
 | lint（golangci-lint、typos、`go mod tidy -diff`） | `make lint` |
@@ -88,7 +89,9 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 - 用例调用 `t.Parallel()`（paralleltest）；使用 `t.Setenv` 的用例除外。
 - 集成测试每个包一个 Postgres 容器：`testutil.StartDatabase` 先迁移并写入种子到模板库，用例用 `Clone(t)` 得到独立库，可并行。
 - policy 中 `Tx: true` 的接口在事务内执行：成功或 4xx 业务错误提交，5xx 与 SQL 语句本身的错误回滚；鉴权守卫在事务开始前完成，同一请求不会同时持有两条连接。
-- Redis、MinIO（`chainguard/minio`，按 digest 固定）同样由 testcontainers 启动；local 文件驱动的用例用 `FILE_LOCAL_ROOT` 指向临时目录。
+- MinIO（`chainguard/minio`，按 digest 固定）同样由 testcontainers 启动；local 文件驱动的用例用 `FILE_LOCAL_ROOT` 指向临时目录。
+- Redis 每个测试包一个容器：`TestMain` 调 `testutil.StartRedisPool`，用例 `pool.Borrow(t)` 独占借一个逻辑库（DB 0–15，全部借出时阻塞），借出前、归还前各 `FLUSHDB`；用例里只用 `FLUSHDB`，不用 `FLUSHALL` 或跨库的全局命令。
+- 端口 mock 由 mockgen 生成（`internal/repo/mocks`、`internal/usecase/<pkg>/mocks`），新增端口时把源文件加入 Makefile `MOCK_SOURCES`；简单端口用手写 fake。
 - parity 两侧都开启限流（`THROTTLE_ENABLED=true`），每个请求带不同的 `X-Forwarded-For`；之后对本服务关闭限流再跑 nestjs `auth.e2e-spec.ts`。
 - testcontainers 起不来时测试失败，不跳过。Docker Desktop 的 socket 不在 `/var/run/docker.sock` 时，夹具自动使用 `~/.docker/run/docker.sock`。
 
@@ -96,6 +99,7 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 
 - `internal/controller/http/gen/gen.go` ← `make generate`（oapi-codegen）
 - `internal/repo/postgres/sqlcgen/` ← `make generate`（sqlc，输入为 `migrations/` 与 `internal/repo/postgres/queries/`）
+- `internal/repo/mocks/`、`internal/usecase/*/mocks/` ← `make generate`（mockgen，源文件见 Makefile `MOCK_SOURCES`）
 
 ## 注释规范
 

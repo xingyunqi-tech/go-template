@@ -1,6 +1,6 @@
 -- name: InsertConsentIfAbsent :exec
-INSERT INTO "user_consent" ("userId", "type", "version", "ip")
-VALUES (@user_id, @type, @version, sqlc.narg('ip'))
+INSERT INTO "user_consent" ("id", "userId", "type", "version", "ip")
+VALUES (@id, @user_id, @type, @version, sqlc.narg('ip'))
 ON CONFLICT ("userId", "type", "version") DO NOTHING;
 
 -- name: ListLatestConsents :many

@@ -54,7 +54,7 @@ func (r *Files) Create(ctx context.Context, f *entity.File) (*entity.File, error
 
 	err := r.db.queries(ctx, func(q *sqlcgen.Queries) error {
 		row, err := q.CreateFile(ctx, sqlcgen.CreateFileParams{
-			Path: f.Path, OwnerUserID: int32Ptr(f.OwnerUserID), Visibility: f.Visibility, MimeType: f.MimeType, Size: int32Ptr(f.Size),
+			ID: uuid.NewV7(), Path: f.Path, OwnerUserID: int32Ptr(f.OwnerUserID), Visibility: f.Visibility, MimeType: f.MimeType, Size: int32Ptr(f.Size),
 		})
 		if err == nil {
 			out = fileEntity(row)

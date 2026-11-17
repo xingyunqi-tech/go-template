@@ -851,3 +851,10 @@ func isISO8601(s string, opts options) bool {
 
 	return true
 }
+
+// IsEmail is validator.js isEmail with default options, as class-validator @IsEmail() applies it.
+func IsEmail(s string) bool {
+	ok, err := isEmail(s, firstOptions(nil))
+
+	return ok && err == nil
+}

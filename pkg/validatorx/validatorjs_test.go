@@ -204,3 +204,11 @@ func TestIsUUIDRejectsObjectPrototypeVersion(t *testing.T) {
 	_, err := isUUID("A987FBC9-4BED-4078-8F07-9141BA07C9F3", "toString")
 	require.ErrorIs(t, err, errUUIDNotRegexp)
 }
+
+func TestIsEmailRequiresATopLevelDomain(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IsEmail("root@example.com"))
+	require.False(t, IsEmail("admin@localhost"))
+	require.False(t, IsEmail("not-an-email"))
+}

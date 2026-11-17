@@ -5,8 +5,11 @@ import (
 	"crypto/md5" //nolint:gosec // seed passwords are sent as MD5 like the clients do
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/repo/postgres/sqlcgen"
@@ -15,6 +18,7 @@ import (
 const (
 	_regionCodeLength = 12
 	_demoPassword     = "Secret00"
+	_uniqueViolation  = "23505"
 )
 
 // SeedData is seeds/seed.json.
@@ -236,4 +240,24 @@ func (d *DB) seedUsers(ctx context.Context, q *sqlcgen.Queries, opts SeedOptions
 	}
 
 	return nil
+}
+
+// ErrUserExists is returned by CreateSuperuser when the email is taken.
+var ErrUserExists = errors.New("seed: a user with this email already exists")
+
+// CreateSuperuser creates an active administrator whose stored password is the hash of
+// md5(password), as clients send it.
+func (d *DB) CreateSuperuser(ctx context.Context, email, password string, hash func(context.Context, string) (string, error)) error {
+	return d.InTx(ctx, func(ctx context.Context) error {
+		return d.queries(ctx, func(q *sqlcgen.Queries) error {
+			err := d.seedUser(ctx, q, SeedOptions{Hash: hash}, [4]string{"Super", "Admin", email, password}, entity.RoleAdmin)
+
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == _uniqueViolation {
+				return ErrUserExists
+			}
+
+			return err
+		})
+	})
 }

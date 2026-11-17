@@ -313,9 +313,7 @@ func sortUsersByEmail(t *testing.T, v any) any {
 	return v
 }
 
-func TestAdminReads(t *testing.T) {
-	t.Parallel()
-
+func TestAdminReads(t *testing.T) { //nolint:paralleltest,tparallel // runs before the parallel tests that register users, so the newest user is the same on both sides
 	tokens := loginBoth(t, "admin@example.com")
 	urls := []string{
 		"/api/v1/users?limit=2",

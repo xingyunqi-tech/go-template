@@ -190,6 +190,7 @@ func TestLocalUploadDownloadAndPrivateAccess(t *testing.T) {
 	assert.Equal(t, "PUBLIC", f["visibility"])
 	assert.Equal(t, "image/jpeg", f["mimeType"])
 	assert.InDelta(t, len(_pngBytes), f["size"], 0)
+	assert.Equal(t, byte('7'), asString(t, f["id"])[14], "id is a UUIDv7")
 	assert.Regexp(t, `^http://backend\.test/api/v1/files/[0-9a-f]{21}\.jpg$`, f["path"])
 
 	name := filepath.Base(asString(t, f["path"]))
