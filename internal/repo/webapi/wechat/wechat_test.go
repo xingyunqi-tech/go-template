@@ -128,6 +128,24 @@ func TestMiniAppLoginErrors(t *testing.T) {
 	assert.Equal(t, []entity.Detail{{Name: "wechat", Value: "notConfigured"}}, details)
 }
 
+func TestCodeExchangeWithoutOpenIDFails(t *testing.T) {
+	t.Parallel()
+
+	mini, _ := client(t, configured(), map[string]http.HandlerFunc{
+		"/sns/jscode2session": reply(map[string]any{"session_key": "k"}),
+	})
+	_, err := mini.MiniAppLogin(t.Context(), "x")
+	_, _, details := fields(t, err)
+	assert.Equal(t, []entity.Detail{{Name: "wechat", Value: "requestFailed"}}, details)
+
+	app, _ := client(t, configured(), map[string]http.HandlerFunc{
+		"/sns/oauth2/access_token": reply(map[string]any{"access_token": "at"}),
+	})
+	_, err = app.AppLogin(t.Context(), "x")
+	_, _, details = fields(t, err)
+	assert.Equal(t, []entity.Detail{{Name: "wechat", Value: "requestFailed"}}, details)
+}
+
 func TestAppLogin(t *testing.T) {
 	t.Parallel()
 

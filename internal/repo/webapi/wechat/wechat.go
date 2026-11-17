@@ -240,6 +240,12 @@ func (c *Client) MiniAppLogin(ctx context.Context, code string) (*entity.WechatU
 		return nil, failure("code", "invalidCode", data["errmsg"])
 	}
 
+	if data.text("openid") == "" {
+		c.log.ErrorContext(ctx, "WeChat Mini App login response has no openid")
+
+		return nil, requestFailed()
+	}
+
 	return &entity.WechatUser{OpenID: data.text("openid"), UnionID: data.str("unionid"), Nickname: nil, Gender: nil}, nil
 }
 
@@ -271,6 +277,12 @@ func (c *Client) appLogin(ctx context.Context, code string) (*entity.WechatUser,
 
 	if token.errcode() != 0 {
 		return nil, failure("code", "invalidCode", token["errmsg"])
+	}
+
+	if token.text("openid") == "" {
+		c.log.ErrorContext(ctx, "WeChat OAuth token response has no openid")
+
+		return nil, requestFailed()
 	}
 
 	info, err := c.fetch(ctx, "/sns/userinfo", url.Values{
