@@ -281,4 +281,4 @@ $(SQLC): | $(BIN)
 	chmod +x $@
 
 $(OPENAPIGEN): tools/go.mod tools/go.sum $(wildcard tools/openapigen/*.go) | $(BIN)
-	$(GO) build -C tools -o $@ ./openapigen
+	$(GO) build -C tools -buildvcs=false -o $@ ./openapigen

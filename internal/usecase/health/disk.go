@@ -11,7 +11,7 @@ func diskUsage(path string) (total, available uint64, err error) {
 		return 0, 0, fmt.Errorf("health: statfs %s: %w", path, err)
 	}
 
-	bsize := uint64(st.Bsize)
+	bsize := blockSize(&st)
 
 	return st.Blocks * bsize, st.Bavail * bsize, nil
 }
