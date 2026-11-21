@@ -14,7 +14,7 @@ internal/
 ├── entity/                  # 领域对象与领域错误（BusinessError、HTTP 风格错误），不引用 pgx、生成代码、net/http
 ├── usecase/                 # 业务流程；接口在 contracts.go
 │   └── auth、user、session、permission、sms、file、health、alert、audit、accountcleanup、
-│       notification、address、favorite、feedback、appconfig、region、appprofile、consent
+│       notification
 ├── repo/                    # 端口在 contracts.go
 │   ├── postgres/            # sqlc 查询（queries/ → sqlcgen/）与端口实现、请求事务、River 入队
 │   ├── redis/               # 与 nestjs Keyv 兼容的缓存、lock:<key> 分布式锁
@@ -42,14 +42,14 @@ pkg/                         # 与业务无关，不引用 internal/
 
 | 目录 | 内容 |
 |---|---|
-| `openapi/` | `nestjs-baseline.json`（`/docs-json` 原文）、`validation.json`、`nest_handlers.json`、`SOURCE`（共享产物）；`scope.yaml`、`overlay.yaml`、`oapi-codegen.yaml`、`templates/strict-interface.tmpl`（代码生成输入）；`openapi.go` 把运行时需要的文件 `embed` 进二进制 |
-| `db/` | `nestjs-schema.sql`（nestjs 迁移后的表结构快照，共享产物），`db.go` 将其 `embed` |
+| `openapi/` | `nestjs-baseline.json`（`/docs-json` 原文）、`validation.json`、`nest_handlers.json`、`SOURCE`（nestjs 导出的原始产物）；`scope.yaml`、`overlay.yaml`、`oapi-codegen.yaml`、`templates/strict-interface.tmpl`（代码生成输入）；`openapi.go` 把运行时需要的文件 `embed` 进二进制 |
+| `db/` | `nestjs-schema.sql`（nestjs 迁移后的表结构快照，nestjs 导出的原始产物），`db.go` 将其 `embed` |
 | `migrations/` | goose SQL 迁移，`embed` 进二进制 |
-| `seeds/` | `seed.json`（角色、状态、权限、角色权限、配置项）、`region-data.json`（行政区划） |
+| `seeds/` | `seed.json`（角色、状态、权限、角色权限） |
 | `templates/` | `mail/`（从 nestjs 逐字节复制的 `.hbs` 邮件模板）、`module/`（模块生成器模板） |
 | `tools/` | 独立 Go 模块：oapi-codegen、goose、mockgen、govulncheck、gotestsum、go-test-coverage 与 `openapigen` |
-| `scripts/` | 共享的 `openapi-sync.sh` 等生成工具、`copy-shared-artifacts.sh`、`parity.sh`、Git 钩子脚本、`bench/` |
-| `tests/` | `contract`、`parity`、`e2e`、`fixtures/nestjs_mail`，见 [testing.md](testing.md) |
+| `scripts/` | Git 钩子脚本 |
+| `tests/` | `contract`、`e2e`、`fixtures/nestjs_mail`，见 [testing.md](testing.md) |
 | `docker/`、`Dockerfile` | compose 文件与生产镜像，见 [deploy.md](deploy.md) |
 
 ## 分层

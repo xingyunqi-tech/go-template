@@ -29,7 +29,6 @@ make image        # docker buildx build --load -t go-template:local .
 | 开发服务栈 | base + redis + postgres + dev | `go-template-dev` | 见下 |
 | 测试服务栈 | base + redis + postgres + test | `go-template-test` | 见下 |
 | e2e / CI | base + postgres + redis + ci | `go-template-e2e`（`-p`） | `make test-e2e` |
-| parity | base + postgres + redis + parity | `go-template-parity`（`-p`） | `make test-parity` |
 | 服务器 | `docker-compose.ecs.yaml` | `go-template` | `deploy/manage.sh` |
 
 | 文件 | 服务 / 作用 |
@@ -40,7 +39,6 @@ make image        # docker buildx build --load -t go-template:local .
 | `docker-compose.dev.yaml` | 镜像 `go-template:dev`、`APP_ENV=development`；`mailpit`（SMTP 宿主端口 `MAIL_PORT` 默认 1025，UI `MAIL_CLIENT_PORT` 默认 1080）；`seed` 在 migrate 之后写入演示账号；`develop.watch` 在 `cmd/`、`internal/`、`pkg/`、`migrations/`、`seeds/`、`templates/`、`openapi/`、`go.mod`、`go.sum` 变更时重新构建 api 与 worker |
 | `docker-compose.test.yaml` | `APP_ENV=test`；`mailpit`（只映射 UI）；`seed`；postgres / redis 不映射宿主端口 |
 | `docker-compose.ci.yaml` | 生产镜像以 `APP_ENV=production` 运行，CI 用密钥、`TRUST_PROXY=1`；`seed` 以 `APP_ENV=test` 写入演示账号；api 只绑定 `127.0.0.1` |
-| `docker-compose.parity.yaml` | 与 nestjs 参照服务相同的 `APP_NAME`、`TRUST_PROXY`，宿主只暴露 api（`PARITY_PORT`） |
 | `docker-compose.ecs.yaml` | 服务器：migrate、seed（profile `seed`）、api、worker、postgres、redis；镜像 `IMAGE_FULL_NAME`，配置取部署目录 `.env` |
 
 开发服务栈：
@@ -119,10 +117,9 @@ deploy workflow 向部署目录同步 `docker/docker-compose.ecs.yaml` 与 `depl
 
 | workflow | 触发 | 内容 |
 |---|---|---|
-| `check.yml` | push / PR 到 main、master、`release/**`，手动 | lint、workflow-lint、type-check、test、migrations、contract、coverage、security、build、image-scan、e2e、parity，每个 job 调用同名 Makefile 目标 |
+| `check.yml` | push / PR 到 main、master、`release/**`，手动 | lint、workflow-lint、type-check、test、migrations、contract、coverage、security、build、image-scan、e2e，每个 job 调用同名 Makefile 目标 |
 | `deploy.yml` | 手动（输入 `deploy`、`target`：aliyun / tencent / all） | 多架构镜像推送到 GHCR 与腾讯云 TCR 个人版，服务器从 TCR 拉取并部署；成功后调用 `cleanup-registry.yml` |
 | `cleanup-registry.yml` | 每周一 03:00（北京时间）、手动（`dry_run`）、被 deploy 调用 | GHCR 保留 latest 与最近 2 个带 tag 的镜像并删除无 tag 镜像；TCR 保留 2 个 |
-| `drift.yml` | 每周、手动 | 对 nestjs-template release 分支 HEAD 重新导出共享产物，与入库版本不一致时失败 |
 
 仓库需要配置：
 
@@ -132,5 +129,4 @@ deploy workflow 向部署目录同步 `docker/docker-compose.ecs.yaml` 与 `depl
 | Secret | `TENCENT_TCR_PASSWORD` | 推送与拉取 TCR 镜像 |
 | Variable | `TENCENT_TCR_REGISTRY`、`TENCENT_TCR_NAMESPACE`、`TENCENT_TCR_USERNAME` | TCR 仓库 `<命名空间>/go-template` |
 | Secret | `TENCENTCLOUD_SECRET_ID`、`TENCENTCLOUD_SECRET_KEY`；Variable `TENCENT_TCR_REGION`（默认 ap-guangzhou） | 清理 TCR 旧镜像，未配置时跳过 |
-| Secret | `NESTJS_REPO_TOKEN` | nestjs-template 为私有仓库时，parity 与 drift job 检出它用的只读 token |
 | Environment | `aliyun-production`、`tencent-production` | 部署 job 的环境 |

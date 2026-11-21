@@ -7,8 +7,3 @@ import _ "embed"
 //
 //go:embed seed.json
 var Data []byte
-
-// Regions is region-data.json: the province / city / district tree.
-//
-//go:embed region-data.json
-var Regions []byte

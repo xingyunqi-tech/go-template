@@ -9,32 +9,6 @@ import (
 	"context"
 )
 
-const countRegions = `-- name: CountRegions :one
-SELECT count(*) FROM "region"
-`
-
-func (q *Queries) CountRegions(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countRegions)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const seedConfig = `-- name: SeedConfig :exec
-INSERT INTO "config" ("key", "value", "isPublic") VALUES ($1, $2, $3) ON CONFLICT DO NOTHING
-`
-
-type SeedConfigParams struct {
-	Key      string
-	Value    []byte
-	IsPublic bool
-}
-
-func (q *Queries) SeedConfig(ctx context.Context, arg SeedConfigParams) error {
-	_, err := q.db.Exec(ctx, seedConfig, arg.Key, arg.Value, arg.IsPublic)
-	return err
-}
-
 const seedPermission = `-- name: SeedPermission :exec
 INSERT INTO "permission" ("id", "name", "description", "resource", "action")
 VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING
@@ -57,14 +31,6 @@ func (q *Queries) SeedPermission(ctx context.Context, arg SeedPermissionParams) 
 		arg.Action,
 	)
 	return err
-}
-
-type SeedRegionsParams struct {
-	Code       string
-	Name       string
-	Level      int32
-	ParentCode *string
-	Sort       int32
 }
 
 const seedRole = `-- name: SeedRole :exec

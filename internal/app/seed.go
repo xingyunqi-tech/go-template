@@ -27,7 +27,7 @@ func Seed(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 
 	db := postgres.NewDB(infra.Pool, acquireTimeout(cfg), log)
 
-	err = db.Seed(ctx, seeds.Data, seeds.Regions, postgres.SeedOptions{
+	err = db.Seed(ctx, seeds.Data, postgres.SeedOptions{
 		Production:    cfg.App.IsProduction(),
 		AdminEmail:    cfg.Seed.AdminEmail,
 		AdminPassword: cfg.Seed.AdminPassword.Value(),

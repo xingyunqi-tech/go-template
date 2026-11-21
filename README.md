@@ -19,9 +19,9 @@ Go 后端模板。HTTP API 契约与 [nestjs-template](https://github.com/xingyu
 - 统一响应信封、错误翻译（i18n en / zh）、与 nestjs ValidationPipe 等价的校验、Request ID、CORS、安全头、限流，Express 路由语义
 - 认证：邮箱、手机号密码、短信验证码、微信（小程序 / App / 手机号）、支付宝；JWT access + refresh 轮换；会话（设备）管理；RBAC
 - 用户管理、文件上传（`local` / `s3` / `s3-presigned`）与私有文件
-- 通用模块：config、regions、notifications、addresses、favorites、feedbacks、consents、app-profile
+- 通用模块：notifications
 - 健康检查、Prometheus 指标、审计、运营告警、账号注销清理、邮件（中英模板）、定时任务
-- `/docs-json` 逐字节输出 nestjs 完整 OpenAPI 基线（含本模板未实现的考试业务接口，请求返回 404 信封），`/docs` 为 Scalar 页面；`SWAGGER_ENABLED` 控制，未设置时生产关闭
+- `/docs-json` 逐字节输出 nestjs 完整 OpenAPI 基线（含本模板未实现的接口，如考试业务与地址、收藏、反馈、配置、行政区划、协议、应用信息，请求返回 404 信封），`/docs` 为 Scalar 页面；`SWAGGER_ENABLED` 控制，未设置时生产关闭
 - 模块骨架生成器：按 nestjs 文档中的 tag 生成处理器、usecase、repo
 
 ## 快速开始
@@ -33,7 +33,7 @@ make install      # 下载 golangci-lint / prek / typos / sqlc 到 bin/，安装
 cp .env.example .env
 make infra        # Postgres 18 :5432、Redis 8 :6379
 make migrate      # goose 迁移 + River 迁移
-make seed         # 角色、状态、权限、行政区划、配置与初始账号
+make seed         # 角色、状态、权限与初始账号
 make dev          # http://localhost:3000
 make worker       # 另开终端：队列 worker 与周期任务（邮件、通知、账号清理）
 ```
@@ -63,7 +63,6 @@ make worker       # 另开终端：队列 worker 与周期任务（邮件、通�
 | `make generate` | oapi-codegen（`openapi/scope.yaml` 范围内）+ sqlc |
 | `make generate-check` | 重新生成后检查生成代码与入库版本一致 |
 | `make module NAME=orders TAG=Orders` | 按 nestjs 文档 tag 生成模块骨架并加入 `scope.yaml` |
-| `make openapi-sync` | 从 fastapi-temp 复制共享产物；`OPENAPI_SYNC=run` 时在 nestjs 上重新导出 |
 | `make fmt` | gofumpt + gci |
 | `make lint` | golangci-lint（主模块与 tools 模块）、typos、`go mod tidy -diff`（`make lint-new` 只报告相对 HEAD 新增的问题，`make typos` 只做拼写检查） |
 | `make vet` | `go vet`（含全部测试标签）+ `go build` |
@@ -72,14 +71,13 @@ make worker       # 另开终端：队列 worker 与周期任务（邮件、通�
 | `make test-integration` | 第 2 层：集成测试（testcontainers，需要 Docker） |
 | `make test-e2e` | 第 3 层：构建镜像，compose 启动完整服务栈后黑盒测试 |
 | `make test-contract` | 第 4 层：契约测试（含全部 nestjs 校验 oracle 用例） |
-| `make test-parity` | 第 5 层：启动 nestjs 参照服务与本服务后逐请求比对（需要 Docker 与 nestjs-template 本地仓库） |
 | `make test-migrations` | 空库 up → sqlc vet → down-to 0 → up，检查约束与索引命名（需要 `make infra`） |
 | `make coverage` | 合并单元、集成、契约覆盖率并校验 ≥80% |
 | `make vuln` / `make gitleaks` / `make security` | govulncheck / gitleaks / 两者 |
 | `make hadolint` / `make workflow-lint` | Dockerfile 检查 / actionlint + zizmor |
 | `make build` | 交叉编译 linux amd64 / arm64 到 `bin/` |
 | `make image` / `make image-scan` | 构建生产镜像 `go-template:local` / Trivy 扫描 |
-| `make ci` | 本地运行 CI 中除 parity 外的全部检查 |
+| `make ci` | 本地运行 CI 中的全部检查 |
 | `make clean` | 清理 `bin/` 与 `coverage/` |
 
 `make help` 列出全部目标与说明。
@@ -101,7 +99,7 @@ internal/
 pkg/                与业务无关的封装（validatorx、ratelimit、password、jwtx、jsontime……）
 openapi/            nestjs 基线、validation.json、scope.yaml、overlay.yaml
 migrations/、seeds/、templates/、db/
-tests/              contract、parity、e2e
+tests/              contract、e2e
 docker/、deploy/、scripts/、tools/
 ```
 
@@ -109,7 +107,7 @@ docker/、deploy/、scripts/、tools/
 
 ## 镜像与 Compose
 
-`Dockerfile` 多阶段构建，运行时为 `gcr.io/distroless/static-debian13:nonroot`，镜像只含一个静态二进制 `/app`（迁移、种子数据、邮件模板、OpenAPI 文档都已 `embed`）。`docker/` 下的 compose 文件按组合使用：`docker-compose.base.yaml`（migrate、api、worker）叠加 `docker-compose.postgres.yaml`、`docker-compose.redis.yaml`，再叠加 `dev` / `test` / `ci` / `parity` 之一；服务器部署用独立的 `docker-compose.ecs.yaml`；`infra.compose.yaml` 只启动本地依赖（`make infra`）。详见 [docs/deploy.md](docs/deploy.md)。
+`Dockerfile` 多阶段构建，运行时为 `gcr.io/distroless/static-debian13:nonroot`，镜像只含一个静态二进制 `/app`（迁移、种子数据、邮件模板、OpenAPI 文档都已 `embed`）。`docker/` 下的 compose 文件按组合使用：`docker-compose.base.yaml`（migrate、api、worker）叠加 `docker-compose.postgres.yaml`、`docker-compose.redis.yaml`，再叠加 `dev` / `test` / `ci` 之一；服务器部署用独立的 `docker-compose.ecs.yaml`；`infra.compose.yaml` 只启动本地依赖（`make infra`）。详见 [docs/deploy.md](docs/deploy.md)。
 
 ## 文档
 
@@ -119,10 +117,9 @@ docker/、deploy/、scripts/、tools/
 | [docs/auth.md](docs/auth.md) | 登录方式、JWT 与会话、密码、短信验证码、RBAC |
 | [docs/database.md](docs/database.md) | 连接配置、模型与迁移、事务、共库、seed |
 | [docs/deploy.md](docs/deploy.md) | 镜像、compose、deploy/manage.sh、GitHub Actions |
-| [docs/testing.md](docs/testing.md) | 五层测试与运行方式 |
+| [docs/testing.md](docs/testing.md) | 四层测试与运行方式 |
 | [docs/cli.md](docs/cli.md) | 子命令、worker、代码生成与模块生成器、脚本 |
-| [docs/contract.md](docs/contract.md) | 契约同步流程、spec-first 生成、parity、未实现接口、与 nestjs 的行为差异 |
-| [docs/benchmark.md](docs/benchmark.md) | 与 nestjs 的压测对照 |
+| [docs/contract.md](docs/contract.md) | spec-first 生成、未实现接口、与 nestjs 的行为差异 |
 | [CLAUDE.md](CLAUDE.md) | 开发约定（AI 助手同样遵守） |
 
 ## 许可证

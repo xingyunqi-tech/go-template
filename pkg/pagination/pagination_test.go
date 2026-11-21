@@ -33,33 +33,3 @@ func TestNewInfinityReportsNextPage(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"data":[],"hasNextPage":false}`, string(out))
 }
-
-func TestOffsetLimitRoundsLikePostgres(t *testing.T) {
-	t.Parallel()
-
-	offset, limit := pagination.OffsetLimit(3, 10)
-	assert.Equal(t, int64(20), offset)
-	assert.Equal(t, int64(10), limit)
-
-	offset, limit = pagination.OffsetLimit(1.5, 5)
-	assert.Equal(t, int64(3), offset)
-	assert.Equal(t, int64(5), limit)
-}
-
-func TestLazyTotal(t *testing.T) {
-	t.Parallel()
-
-	total, ok := pagination.LazyTotal(3, 2, 10)
-	assert.True(t, ok)
-	assert.InDelta(t, 13, total, 0)
-
-	total, ok = pagination.LazyTotal(3, 1, 10)
-	assert.True(t, ok)
-	assert.InDelta(t, 3, total, 0)
-
-	_, ok = pagination.LazyTotal(10, 1, 10)
-	assert.False(t, ok)
-
-	_, ok = pagination.LazyTotal(0, 2, 10)
-	assert.False(t, ok)
-}

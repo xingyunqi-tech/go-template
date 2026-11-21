@@ -17,7 +17,7 @@ func TestAccountCleanersRunInNestjsOrder(t *testing.T) {
 	names := newAccountCleanup(postgres.NewDB(nil, 0, log), nil, nil, nil, log).CleanerNames()
 
 	var positions []int
-	for _, name := range []string{"favorites", "feedbacks", "addresses", "users", "files"} {
+	for _, name := range []string{"users", "files"} {
 		positions = append(positions, slices.Index(names, name))
 	}
 

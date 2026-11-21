@@ -1,6 +1,6 @@
 # 数据库
 
-PostgreSQL 18（镜像 `postgres:18.6-alpine`；nestjs 参照服务 `scripts/nestjs/nestjs.compose.yaml` 为 17.11）、pgx v5（pgxpool）、sqlc、goose；队列 River 的表在同一个库的 `river` schema。
+PostgreSQL 18（镜像 `postgres:18.6-alpine`）、pgx v5（pgxpool）、sqlc、goose；队列 River 的表在同一个库的 `river` schema。
 
 ## 连接配置
 
@@ -33,7 +33,7 @@ PostgreSQL 18（镜像 `postgres:18.6-alpine`；nestjs 参照服务 `scripts/nes
 - 动态排序的列表手写 SQL：排序列只取白名单映射的列名，值走占位参数；未知排序字段按未知错误返回 500（与 TypeORM `EntityPropertyNotFoundError` 一致）
 - 时间列为 `timestamp without time zone`，存 UTC；API 输出为 `toISOString` 格式（毫秒、`Z`）
 - 软删除列 `deletedAt`；已删除用户的唯一字段由部分索引释放
-- uuid 主键（`file`、`user_consent`）：插入时由应用以 `uuid.NewV7()` 生成（按时间有序）；列默认值 `uuid_generate_v4()` 与 nestjs 表结构一致，初始迁移创建 `uuid-ossp` 扩展
+- uuid 主键（`file`、`user_consent`）：`file` 插入时由应用以 `uuid.NewV7()` 生成（按时间有序）；列默认值 `uuid_generate_v4()` 与 nestjs 表结构一致，初始迁移创建 `uuid-ossp` 扩展
 - 新约束命名：`<table>_<column>_key`、`<table>_<column>_fkey`、`idx_<table>_<column>`（`make test-migrations` 检查）
 
 表：`user`、`role`、`status`、`session`、`permission`、`role_permission`、`file`、`audit_logs`、`config`、`region`、`notification`、`notification_setting`、`address`、`favorite`、`feedback`、`user_consent`、`account_cleanup`、`admin_alert`。
@@ -73,7 +73,7 @@ make test-migrations                                         # 空库 up → sql
 - `app migrate` 依次执行 goose 迁移与 River 迁移（`rivermigrate`，schema `river`，River 自带版本表）
 - 已合并的迁移不修改，变更通过新迁移完成
 - compose 中由一次性 `migrate` 服务执行，api 与 worker 依赖其成功完成，多副本不会并发迁移
-- 集成测试 `TestMigrationsMatchNestjsSchemaSnapshot` 对迁移后的库执行与 `scripts/schema_snapshot.py` 相同的 `pg_catalog` 查询（`internal/testutil/schema.go`），断言与 `db/nestjs-schema.sql` 只差引用本期未实现表的两个外键（`FK_feedback_errata`、`FK_feedback_question`）
+- 集成测试 `TestMigrationsMatchNestjsSchemaSnapshot` 对迁移后的库执行 `pg_catalog` 查询（`internal/testutil/schema.go`），断言与 `db/nestjs-schema.sql` 只差引用本期未实现表的两个外键（`FK_feedback_errata`、`FK_feedback_question`）
 
 ## 与 nestjs 共用数据库
 
@@ -92,8 +92,7 @@ make test-migrations                                         # 空库 up → sql
 
 | 数据 | 来源 |
 |---|---|
-| 角色、状态、权限、角色权限、配置项 | `seeds/seed.json` |
-| 行政区划 | `seeds/region-data.json`（`region` 表为空时写入） |
+| 角色、状态、权限、角色权限 | `seeds/seed.json` |
 | 管理员 | 没有未删除的 admin 角色用户时创建：非生产为 `admin@example.com` / `Secret00`；生产（`APP_ENV=production`）取 `SEED_ADMIN_EMAIL`（去空白、转小写）/ `SEED_ADMIN_PASSWORD`，任一未设置则不创建 |
 | 示例用户 | 非生产且没有未删除的 user 角色用户时创建 `john.doe@example.com` / `Secret00` |
 

@@ -20,20 +20,13 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/repo/postgres"
 	"github.com/xingyunqi-tech/go-template/internal/repo/redis"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/accountcleanup"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/address"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/alert"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/appconfig"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/appprofile"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/audit"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/consent"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/favorite"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/feedback"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/file"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/health"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/notification"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/permission"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/region"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/session"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/user"
 	"github.com/xingyunqi-tech/go-template/openapi"
@@ -57,8 +50,6 @@ func newAccountCleanup(db *postgres.DB, jobs repo.Jobs, alerts *alert.Service, f
 
 	return accountcleanup.New(cleanups, jobs, alerts, log, accountcleanup.NewUsersCleaner(cleanups), file.NewCleaner(files),
 		notification.NewCleaner(postgres.NewNotifications(db)),
-		favorite.NewCleaner(postgres.NewFavorites(db)), feedback.NewCleaner(postgres.NewFeedbacks(db)),
-		address.NewCleaner(postgres.NewAddresses(db)),
 	)
 }
 
@@ -128,13 +119,6 @@ type services struct {
 
 	notifications *notification.Service
 	cleanup       *accountcleanup.Service
-	addresses     *address.Service
-	favorites     *favorite.Service
-	feedbacks     *feedback.Service
-	config        *appconfig.Service
-	regions       *region.Service
-	appProfile    *appprofile.Service
-	consents      *consent.Service
 }
 
 func newServices(cfg *config.Config, log *slog.Logger, infra *Infra) (*services, error) {
@@ -160,7 +144,6 @@ func newServices(cfg *config.Config, log *slog.Logger, infra *Infra) (*services,
 	users := user.New(userRepo, postgres.NewFiles(db), sessions, hasher, cleanup, log)
 	notifications := notification.New(postgres.NewNotifications(db), jobs, log)
 	codes := newSMS(cfg, log, infra, cache)
-	appConfig := appconfig.New(postgres.NewConfigs(db), cache, db, log)
 
 	return &services{
 		db: db,
@@ -178,13 +161,6 @@ func newServices(cfg *config.Config, log *slog.Logger, infra *Infra) (*services,
 
 		notifications: notifications,
 		cleanup:       cleanup,
-		addresses:     address.New(postgres.NewAddresses(db), log),
-		favorites:     favorite.New(postgres.NewFavorites(db)),
-		feedbacks:     feedback.New(postgres.NewFeedbacks(db)),
-		config:        appConfig,
-		regions:       region.New(postgres.NewRegions(db), cache, log),
-		appProfile:    appprofile.New(appConfig),
-		consents:      consent.New(postgres.NewConsents(db), appConfig),
 	}, nil
 }
 
@@ -242,8 +218,6 @@ func NewHandler(cfg *config.Config, log *slog.Logger, infra *Infra) (*Handler, e
 		AppName: cfg.App.Name, Auth: svc.auth, Users: svc.users, URLs: fileURLs(cfg, svc.files),
 		Health: svc.health, Log: log, Files: svc.files, PresignedUploads: cfg.File.Driver == config.FileDriverS3Presigned,
 		Notifications: svc.notifications, Cleanup: svc.cleanup,
-		Addresses: svc.addresses, Favorites: svc.favorites, Feedbacks: svc.feedbacks,
-		Config: svc.config, Regions: svc.regions, AppProfile: svc.appProfile, Consents: svc.consents,
 	})
 
 	opts := routerOptions(cfg, log, infra, svc, server)

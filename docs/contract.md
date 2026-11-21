@@ -1,10 +1,10 @@
 # 与 nestjs-template 的契约
 
-本服务的 HTTP 契约以 nestjs-template `release/exam-prep` 分支提交 `02fdb4d` 为准（`openapi/SOURCE` 的 `commit`），校验元数据导出脚本 `scripts/export-validation.ts` 取自提交 `8b5f296`（`validation_script`），导出环境为 `NODE_ENV=development FILE_DRIVER=local`。契约变更先在 nestjs 落地，再同步到本仓库。
+本服务的 HTTP 契约以 nestjs-template `release/exam-prep` 分支提交 `02fdb4d` 为准（`openapi/SOURCE` 的 `commit`），校验元数据导出脚本 `scripts/export-validation.ts` 取自提交 `8b5f296`（`validation_script`），导出环境为 `NODE_ENV=development FILE_DRIVER=local`。
 
-## 共享产物
+## nestjs 原始产物
 
-以下文件在 fastapi-temp、springboot-template 与本仓库中同名、同路径、逐字节相同，只能通过 `make openapi-sync` 更新，不得手改：
+以下文件为 nestjs 导出的原始产物，不得手改：
 
 | 产物 | 内容 | 本服务的用途 |
 |---|---|---|
@@ -14,33 +14,14 @@
 | `openapi/SOURCE` | `repository`、`branch`、`commit`、`validation_script`、`environment` | 记录契约来源 |
 | `db/nestjs-schema.sql` | nestjs 迁移后 18 张表的规范化结构快照，每个列 / 约束 / 索引 / 注释一行 | 迁移一致性测试；`DB_SCHEMA_OWNER=external` 时的列检查 |
 | `tests/contract/fixtures/validation-cases.json` | 校验用例，期望结果由 nestjs 真实 ValidationPipe 跑出 | 契约测试门禁 |
-| `scripts/openapi-sync.sh`、`scripts/schema_snapshot.py`、`scripts/gen_validation_cases.py`、`scripts/gen_nest_handlers.py`、`scripts/nestjs/` | 生成上述产物的工具（由 fastapi-temp 维护） | `OPENAPI_SYNC=run` 时调用 |
 
 运行时需要的 `nestjs-baseline.json`、`validation.json`、`nest_handlers.json`、`nestjs-schema.sql` 都 `embed` 进二进制。
-
-## 同步流程
-
-```bash
-make openapi-sync                    # 从 FASTAPI_DIR（默认 ../fastapi-temp）复制共享产物
-make openapi-sync OPENAPI_SYNC=run   # 在 nestjs 固定提交上重新导出（需要 Docker、git、uv）
-```
-
-- 默认方式由 `scripts/copy-shared-artifacts.sh` 从 fastapi-temp 复制；fastapi-temp 中这些文件有未提交改动时拒绝复制
-- `OPENAPI_SYNC=run` 执行 `scripts/openapi-sync.sh`：在 `NESTJS_DIR` 的 `NESTJS_REF` 上构建并启动 nestjs（compose 项目 `nestjs-openapi-sync-<仓库目录名>`），下载 `/docs-json`，导出 `validation.json`、限流 handler 映射、表结构快照，并在 nestjs builder 镜像中跑出校验用例的期望结果；产物须与 fastapi-temp 中的逐字节相同
-- 契约测试 `TestSharedArtifactsMatchFastapiTemp` 比对本仓库与 fastapi-temp `HEAD` 中的共享产物，`TestSourceDeclaresContractOrigin` 检查 `SOURCE` 的五个键
-
-同步之后：
-
-1. `make generate`：基线变化会改变生成的类型与接口
-2. `make test-contract`：`/docs-json` 字节、`scope.yaml` 注册、policy 与文档 `security` 交叉检查、`validation.json` 约束全部实现、校验用例全部通过
-3. `make test-integration`：迁移结果与新的 `db/nestjs-schema.sql` 比对
-4. `make test-parity`：对新提交的 nestjs 参照服务比对行为
 
 ## spec-first 代码生成
 
 | 文件 | 作用 |
 |---|---|
-| `openapi/scope.yaml` | 本期已实现的 operationId（71 个）；`make generate` 只为它们生成处理器接口与路由注册 |
+| `openapi/scope.yaml` | 本期已实现的 operationId（43 个）；`make generate` 只为它们生成处理器接口与路由注册 |
 | `openapi/oapi-codegen.yaml` | 生成 `models`、`chi-server`、`strict-server`，`skip-prune: true`；`date-time` → `jsontime.Time`，`uuid` → `string`，`number` → `float64` |
 | `openapi/overlay.yaml` | 只作用于生成输入：数字路径参数映射为 `int32`、去掉 `Accept-Language` 头参数、响应 schema 经 `x-go-type` 指向 `v1/view` 中的手写类型、部分请求体 DTO 映射为 `any`（处理器从 `validatorx` 校验后的 JSON 值读取字段）；不改变 `/docs-json` 输出 |
 | `openapi/templates/strict-interface.tmpl` | 覆盖 strict 响应写出：成功一律 HTTP 200（仅 `uploadFile` 为 201），body 为 `{code: 200, message: "success", data}`，无内容时不输出 `data` |
@@ -51,17 +32,13 @@ make openapi-sync OPENAPI_SYNC=run   # 在 nestjs 固定提交上重新导出（
 1. 把 operationId 加进 `openapi/scope.yaml`（或用 `make module NAME=... TAG=...` 按 tag 批量加入并生成骨架，见 [cli.md](cli.md#模块生成器)）
 2. `make generate`，在 `internal/controller/http/v1` 实现生成的方法，响应用 `v1/view` 中的类型
 3. 在 `internal/controller/http/policy.go` 声明 policy；缺 policy、缺守卫或 DTO 不在 `validation.json` 中时启动失败
-4. 补集成测试与 parity 用例
+4. 补集成测试
 
 nestjs 文档的局限由实现侧补齐：可空字段未标 `nullable`、`@Expose({groups})` 分组不进文档，所以响应一律经手写 view 类型输出；鉴权方式（监控令牌、可选 JWT）、RBAC 权限、限流、事务不在文档中，写在 policy 中，契约测试只做与文档 `security` 的交叉检查。
 
 ## 校验
 
 nestjs 文档不含 class-validator 约束。`pkg/validatorx` 读取 `openapi/validation.json`，按 nestjs 全局 `ValidationPipe` 的配置执行 class-transformer `plainToInstance`（含 `@Transform`、`@Type`、类字段初值）与 class-validator：同一字段的全部失败约束按装饰器顺序以 `", "` 拼接，字符串长度按 UTF-16 码元计，`isEmail`、`isUrl`、`isUUID`、`isISO8601` 等格式约束移植自 validator.js。文件中出现而未实现的约束或转换函数会让 `validatorx.New` 失败。门禁是 `TestValidationCasesMatchNestjsValidationPipe` 对 `validation-cases.json` 全部用例逐条比对。
-
-## parity
-
-parity 证明同一请求在两个服务上得到相同的响应：`make test-parity` 在 `openapi/SOURCE` 的提交上构建并启动 nestjs 参照服务（`scripts/nestjs/nestjs.compose.yaml`），以 compose 启动本服务，两侧使用同一份 seed 与 `THROTTLE_ENABLED=true`、`TRUST_PROXY=1`，然后运行 `tests/parity`；最后把本服务改为限流关闭，直接运行 nestjs 自己的 `test/user/auth.e2e-spec.ts`。用例与 fastapi-temp `tests/parity` 逐条对应，同一套用例对 nestjs 也必须通过。运行方式、变量与比对规则见 [testing.md](testing.md#parity)。
 
 ## 不在基线中的路由
 
@@ -76,12 +53,30 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 
 `FILE_DRIVER=s3-presigned` 时，同一路径 `POST /api/v1/files/upload` 接收 `application/json` `FileUploadDto {fileName, fileSize}`、返回 `{file, uploadSignedUrl}`，与基线（local 驱动导出）中的 multipart 定义不同；nestjs 在该驱动下行为相同。
 
-## 基线中未实现的接口（148 个）
+## 基线中未实现的接口（176 个）
 
 请求这些接口返回 404 信封 `Cannot <METHOD> <originalUrl>`。前端仍可从 `/docs-json` 生成全部代码。本节由 `TestUnimplementedOperationsAreListedInContractDoc` 校验，`UPDATE_CONTRACT_DOC=1 make test-contract` 重新生成。
 
 | 方法 | 路径 | operationId | tag |
 |---|---|---|---|
+| POST | `/api/v1/addresses` | createAddress | Addresses |
+| GET | `/api/v1/addresses` | getAddresses | Addresses |
+| GET | `/api/v1/addresses/default` | getDefaultAddress | Addresses |
+| GET | `/api/v1/addresses/{id}` | getAddress | Addresses |
+| PUT | `/api/v1/addresses/{id}` | updateAddress | Addresses |
+| DELETE | `/api/v1/addresses/{id}` | deleteAddress | Addresses |
+| PUT | `/api/v1/addresses/{id}/default` | setDefaultAddress | Addresses |
+| GET | `/api/v1/regions/provinces` | getProvinces | Regions |
+| GET | `/api/v1/regions/cities/{provinceCode}` | getCities | Regions |
+| GET | `/api/v1/regions/districts/{cityCode}` | getDistricts | Regions |
+| GET | `/api/v1/regions/code/{code}` | getRegionByCode | Regions |
+| GET | `/api/v1/regions/tree` | getRegionTree | Regions |
+| GET | `/api/v1/regions` | queryRegions | Regions |
+| POST | `/api/v1/favorites` | createFavorite | Favorites |
+| GET | `/api/v1/favorites` | getFavorites | Favorites |
+| POST | `/api/v1/favorites/check` | checkFavorite | Favorites |
+| POST | `/api/v1/favorites/toggle` | toggleFavorite | Favorites |
+| DELETE | `/api/v1/favorites/{id}` | deleteFavorite | Favorites |
 | POST | `/api/v1/practice/sessions` | createPracticeSession | Practice |
 | GET | `/api/v1/practice/sessions` | getPracticeSessions | Practice |
 | GET | `/api/v1/practice/sessions/ongoing` | getOngoingPracticeSessions | Practice |
@@ -160,6 +155,12 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 | POST | `/api/v1/admin/paper-rules/{id}/preview` | adminPreviewPaperRule | Admin Paper Rules |
 | GET | `/api/v1/admin/subjects/{id}/daily-sets` | adminGetDailyQuestionSets | Admin Daily Question Sets |
 | POST | `/api/v1/admin/subjects/{id}/daily-sets/{date}/regenerate` | adminRegenerateDailyQuestionSet | Admin Daily Question Sets |
+| GET | `/api/v1/config/{key}` | getConfig | Config |
+| PUT | `/api/v1/config/{key}` | upsertConfig | Config |
+| GET | `/api/v1/config/admin/{key}` | getConfigAsAdmin | Config |
+| POST | `/api/v1/feedbacks` | createFeedback | Feedbacks |
+| GET | `/api/v1/feedbacks` | getFeedbacks | Feedbacks |
+| GET | `/api/v1/feedbacks/{id}` | getFeedback | Feedbacks |
 | POST | `/api/v1/orders` | createOrder | Orders |
 | GET | `/api/v1/orders` | getOrders | Orders |
 | GET | `/api/v1/orders/{id}` | getOrder | Orders |
@@ -216,6 +217,8 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 | GET | `/api/v1/admin/question-reports` | adminGetQuestionReports | Admin Question Reports |
 | GET | `/api/v1/admin/question-reports/{id}` | adminGetQuestionReport | Admin Question Reports |
 | PATCH | `/api/v1/admin/question-reports/{id}` | adminUpdateQuestionReport | Admin Question Reports |
+| GET | `/api/v1/me/consents` | getMyConsents | Consents |
+| POST | `/api/v1/me/consents` | agreeConsent | Consents |
 | POST | `/api/v1/ai/conversations` | createAiConversation | AI |
 | GET | `/api/v1/ai/conversations` | getAiConversations | AI |
 | GET | `/api/v1/ai/conversations/{id}/messages` | getAiMessages | AI |
@@ -228,6 +231,8 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 | POST | `/api/v1/ai/messages/{id}/report` | reportAiMessage | AI |
 | GET | `/api/v1/ai/quota` | getAiQuota | AI |
 | GET | `/api/v1/admin/ai/usage` | adminGetAiUsage | Admin AI |
+| GET | `/api/v1/app-profile` | getAppProfile | App Profile |
+| PUT | `/api/v1/admin/app-profile` | adminUpdateAppProfile | Admin App Profile |
 | POST | `/api/v1/game/auth/login` | gameLogin | Game Auth |
 | POST | `/api/v1/game/auth/refresh` | gameRefreshToken | Game Auth |
 
@@ -235,7 +240,6 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 
 ### 有意与 nestjs 保持一致的实现细节
 
-- 反馈列表 `GET /api/v1/feedbacks` 的 `total` 按 TypeORM `findAndCount` 的方式计算：本页未取满、且不是「首页之后的空页」时 `total = skip + 本页行数`，不执行 count 查询；否则执行 count（`internal/usecase/feedback/feedback.go`、`pkg/pagination.LazyTotal`）
 - 分页排序中出现不存在的字段时返回 500（TypeORM `EntityPropertyNotFoundError` 经异常过滤器输出为未知错误，`internal/repo/postgres/users.go` 的 `ErrUnknownSortProperty`）
 - 健康检查 503 时 body 只有 `{code: 503, message: "SERVICE_UNAVAILABLE", data: null}`（terminus 结果被异常过滤器丢弃）
 - `METRICS_ENABLED=false` 只关闭 HTTP 指标采集与运行时默认指标，`/metrics` 路由仍存在
@@ -253,7 +257,7 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 | 周期任务互斥 | `lock:scheduler:<name>` | River leader 选举，不使用锁键 |
 | 账号清理并发 | jobId `user-<id>` 去重 | River `UniqueOpts`（按参数，未完成状态）去重；执行时另持 `lock:account-cleanup:user-{id}`，被占用时 30 秒后重试 |
 | 配置校验 | 各模块运行时校验 | 启动时一次性解析并校验全部变量，列出全部问题后退出 |
-| uuid 主键生成 | uuid v4 | `file`、`user_consent` 插入时由应用生成 UUIDv7 |
+| uuid 主键生成 | uuid v4 | `file` 插入时由应用生成 UUIDv7 |
 | 优雅停机 | Nest 默认 | 就绪探针先返回 503，等待 `SHUTDOWN_DRAIN_PERIOD`，再在 `SHUTDOWN_TIMEOUT` 内等待在途请求与任务 |
 | 可观测性 | pino 日志、Prometheus | 另有 OpenTelemetry（`OTEL_ENABLED`）与 Sentry（`SENTRY_DSN`），日志带 trace_id / span_id；均不属于契约 |
 | 指标采集范围 | 只记录 HTTP、告警、限流回落三组，其余只注册 | 全部记录：`database_query_duration_seconds` 由 pgx tracer 记录，`cache_hits_total` / `cache_misses_total` 由缓存记录 |
@@ -262,7 +266,7 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 
 **请求与响应**
 
-- Express 对 JSON 响应默认生成弱 `ETag`，请求带匹配的 `If-None-Match` 时返回 304 空体；本服务的 JSON 响应不带 `ETag`，也不返回 304（不纳入契约，parity 不发送 `If-None-Match`）。local 驱动的文件读取与下载（`GET /api/v1/files/private/{id}`、`GET /api/v1/files/{path}`）按 send 1.2.1、fresh 2.0.0、range-parser 1.3.0 移植：弱 `ETag` `W/"<size hex>-<mtime ms hex>"`、`Last-Modified`、304 / 412 条件请求、`Range` 206 / 416（`internal/controller/http/v1/send.go`）；与 Node 的差别：`If-Modified-Since`、`If-Unmodified-Since` 与日期形式的 `If-Range` 只接受 HTTP 日期的三种格式（`http.ParseTime`），Node 的 `Date.parse` 还接受 ISO 日期与 `UTC`、`+0000` 等时区写法；请求头按 UTF-8 解码，Node 按 latin1，`Range` 中含非 ASCII 空白时去除空白的结果可能不同
+- Express 对 JSON 响应默认生成弱 `ETag`，请求带匹配的 `If-None-Match` 时返回 304 空体；本服务的 JSON 响应不带 `ETag`，也不返回 304（不纳入契约）。local 驱动的文件读取与下载（`GET /api/v1/files/private/{id}`、`GET /api/v1/files/{path}`）按 send 1.2.1、fresh 2.0.0、range-parser 1.3.0 移植：弱 `ETag` `W/"<size hex>-<mtime ms hex>"`、`Last-Modified`、304 / 412 条件请求、`Range` 206 / 416（`internal/controller/http/v1/send.go`）；与 Node 的差别：`If-Modified-Since`、`If-Unmodified-Since` 与日期形式的 `If-Range` 只接受 HTTP 日期的三种格式（`http.ParseTime`），Node 的 `Date.parse` 还接受 ISO 日期与 `UTC`、`+0000` 等时区写法；请求头按 UTF-8 解码，Node 按 latin1，`Range` 中含非 ASCII 空白时去除空白的结果可能不同
 - `API_PREFIX` 与排除路由之外的未知路径（如 `/nope`、`POST /docs-json`）nestjs 返回 Express 默认 HTML 404；本服务统一返回 JSON 404 信封
 - nestjs 另接受 `application/x-www-form-urlencoded` 请求体；本服务只解析 `application/json`，其它 content-type 的请求体按空对象校验
 - `METRICS_PATH` 非默认值时 nestjs 的指标路由落到 `/api/<path>`（`setGlobalPrefix` 只排除 `metrics`）；本服务一律为 `/<METRICS_PATH>`，不带前缀
@@ -285,9 +289,7 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 
 **数据**
 
-- 收货地址的省市区校验直接查询 `region` 表（`internal/usecase/address/address.go`、`internal/repo/postgres/addresses.go` 的 `Regions`），不经过行政区划缓存；nestjs 经 `RegionsService` 读取（带缓存），`region` 表变更后本服务立即生效
 - S3 驱动上传对象的 `ContentType` 取用途表中按扩展名确定的 mime；nestjs multer-s3 用 `AUTO_CONTENT_TYPE` 按文件内容嗅探。只影响存储对象的元数据
-- 本期没有 questions / papers 模块：收藏（新增、切换、检查）目标为题目时返回 `questionNotAccessible`，为试卷时返回 `paperNotFound`；收藏列表中这两类收藏的 `targetOffline` 恒为 `true`。与 nestjs 共库时，nestjs 已创建的题目 / 试卷收藏在本服务中显示为已下架
 
 **配置**
 
@@ -305,6 +307,5 @@ parity 证明同一请求在两个服务上得到相同的响应：`make test-pa
 ### 范围与决定
 
 - `/docs-json` 只原样输出 nestjs 完整文档，不提供按 `scope.yaml` 过滤的输出（不设 `DOCS_SCOPE`）
-- parity 用例不抽取为跨语言数据文件，按 fastapi-temp `tests/parity` 的用例清单逐条移植为 Go 代码
 - Express 的弱 `ETag` 与 304 不纳入 JSON 响应的契约（见上）
 - 考试刷题业务（exams、questions、practice、papers、imports、errata、wrong-book、study-stats、question-notes、ai、game-auth、monitor）与 orders、payments、shares 本期不实现，接口见上表

@@ -103,7 +103,7 @@ func (d *Database) prepareTemplate(ctx context.Context) error {
 		return err
 	}
 
-	err = postgres.NewDB(pool, time.Second, log).Seed(ctx, seeds.Data, seeds.Regions, postgres.SeedOptions{
+	err = postgres.NewDB(pool, time.Second, log).Seed(ctx, seeds.Data, postgres.SeedOptions{
 		Production: false, AdminEmail: "", AdminPassword: "", Hash: hasher.Hash,
 	})
 	if err != nil {

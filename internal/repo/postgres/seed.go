@@ -16,9 +16,8 @@ import (
 )
 
 const (
-	_regionCodeLength = 12
-	_demoPassword     = "Secret00"
-	_uniqueViolation  = "23505"
+	_demoPassword    = "Secret00"
+	_uniqueViolation = "23505"
 )
 
 // SeedData is seeds/seed.json.
@@ -36,22 +35,11 @@ type SeedData struct {
 		RoleID       int32  `json:"roleId"`
 		PermissionID string `json:"permissionId"`
 	} `json:"rolePermissions"`
-	Config []struct {
-		Key      string          `json:"key"`
-		Value    json.RawMessage `json:"value"`
-		IsPublic bool            `json:"isPublic"`
-	} `json:"config"`
 }
 
 type namedRow struct {
 	ID   int32  `json:"id"`
 	Name string `json:"name"`
-}
-
-type regionNode struct {
-	Code     string       `json:"code"`
-	Name     string       `json:"name"`
-	Children []regionNode `json:"children"`
 }
 
 // SeedOptions selects the accounts created by Seed.
@@ -68,36 +56,11 @@ func md5Hex(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func regionRows(tree []regionNode) []sqlcgen.SeedRegionsParams {
-	var rows []sqlcgen.SeedRegionsParams
-
-	var walk func(nodes []regionNode, level int32, parent *string)
-
-	walk = func(nodes []regionNode, level int32, parent *string) {
-		for _, n := range nodes {
-			code := n.Code + strings.Repeat("0", max(_regionCodeLength-len(n.Code), 0))
-			rows = append(rows, sqlcgen.SeedRegionsParams{
-				Code: code, Name: n.Name, Level: level, ParentCode: parent, Sort: int32(len(rows)), //nolint:gosec // a few thousand rows
-			})
-			walk(n.Children, level+1, &code)
-		}
-	}
-
-	walk(tree, 1, nil)
-
-	return rows
-}
-
 // Seed inserts the reference data and demo accounts like the nestjs seeds; existing rows stay.
-func (d *DB) Seed(ctx context.Context, data, regions []byte, opts SeedOptions) error {
+func (d *DB) Seed(ctx context.Context, data []byte, opts SeedOptions) error {
 	var seed SeedData
 	if err := json.Unmarshal(data, &seed); err != nil {
 		return fmt.Errorf("seed: %w", err)
-	}
-
-	var tree []regionNode
-	if err := json.Unmarshal(regions, &tree); err != nil {
-		return fmt.Errorf("seed: regions: %w", err)
 	}
 
 	ctx, tx, err := d.Begin(ctx)
@@ -105,7 +68,7 @@ func (d *DB) Seed(ctx context.Context, data, regions []byte, opts SeedOptions) e
 		return err
 	}
 
-	if err := d.seed(ctx, &seed, tree, opts); err != nil {
+	if err := d.seed(ctx, &seed, opts); err != nil {
 		tx.Rollback(ctx)
 
 		return err
@@ -118,45 +81,14 @@ func (d *DB) Seed(ctx context.Context, data, regions []byte, opts SeedOptions) e
 	return nil
 }
 
-func (d *DB) seed(ctx context.Context, seed *SeedData, tree []regionNode, opts SeedOptions) error {
+func (d *DB) seed(ctx context.Context, seed *SeedData, opts SeedOptions) error {
 	return d.queries(ctx, func(q *sqlcgen.Queries) error {
 		if err := seedReference(ctx, q, seed); err != nil {
 			return err
 		}
 
-		if err := seedRegions(ctx, q, tree); err != nil {
-			return err
-		}
-
-		if err := d.seedUsers(ctx, q, opts); err != nil {
-			return err
-		}
-
-		for _, c := range seed.Config {
-			if err := q.SeedConfig(ctx, sqlcgen.SeedConfigParams{Key: c.Key, Value: c.Value, IsPublic: c.IsPublic}); err != nil {
-				return fmt.Errorf("seed: config: %w", err)
-			}
-		}
-
-		return nil
+		return d.seedUsers(ctx, q, opts)
 	})
-}
-
-func seedRegions(ctx context.Context, q *sqlcgen.Queries, tree []regionNode) error {
-	count, err := q.CountRegions(ctx)
-	if err != nil {
-		return fmt.Errorf("seed: regions: %w", err)
-	}
-
-	if count > 0 {
-		return nil
-	}
-
-	if _, err := q.SeedRegions(ctx, regionRows(tree)); err != nil {
-		return fmt.Errorf("seed: regions: %w", err)
-	}
-
-	return nil
 }
 
 func seedReference(ctx context.Context, q *sqlcgen.Queries, seed *SeedData) error {

@@ -35,18 +35,3 @@ func NewInfinity[T any](data []T, limit int) Infinity[T] {
 
 	return Infinity[T]{Data: data, HasNextPage: len(data) == limit}
 }
-
-// OffsetLimit returns (page-1)*limit and limit rounded half away from zero, as PostgreSQL rounds them.
-func OffsetLimit(page, limit float64) (offset, take int64) {
-	return int64(math.Round((page - 1) * limit)), int64(math.Round(limit))
-}
-
-// LazyTotal is skip plus the rows found; ok is false when a count query is needed.
-func LazyTotal(found int, page, limit float64) (total float64, ok bool) {
-	skip := (page - 1) * limit
-	if float64(found) == limit || (found == 0 && skip > 0) {
-		return 0, false
-	}
-
-	return float64(found) + math.Max(skip, 0), true
-}

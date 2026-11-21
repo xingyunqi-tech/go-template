@@ -1,6 +1,7 @@
 # go-template
 
-Go 后端模板，与 nestjs-template（`release/exam-prep`）**API 契约一致**：vite-vue3-temp、uniapp-template 用 Orval 从 `/docs-json` 生成的前端可以无改动切换到本服务。
+Go 后端模板，对外行为遵守 `docs/platform-conventions.md`（跨语言平台约定），导出自身的 OpenAPI 文档供前端生成客户端。
+**v2 迁移进行中**：本文件中与 nestjs 契约相关的内容按批次更新，与约定或 `TEMPLATE_PLAN.md` 冲突时以二者为准。
 模块路径 `github.com/xingyunqi-tech/go-template`，Go 版本见 `go.mod`。完整方案与阶段划分见 `TEMPLATE_PLAN.md`。
 
 ## 命令：一律通过 Makefile
@@ -21,9 +22,7 @@ Go 后端模板，与 nestjs-template（`release/exam-prep`）**API 契约一致
 | 集成测试（testcontainers，需要 Docker） | `make test-integration` |
 | 契约测试 | `make test-contract` |
 | e2e（构建镜像，compose 启动后黑盒测试） | `make test-e2e` |
-| parity（启动 nestjs 参照服务后比对，需要 Docker） | `make test-parity` |
 | 覆盖率门槛（单元 + 集成 + 契约，≥80%） | `make coverage` |
-| 同步共享产物 | `make openapi-sync` |
 | 本地 CI | `make ci` |
 
 `make check` = lint + vet + 单元测试，是 pre-push 钩子。宣称改动完成之前，`make check`、`make test-integration`、`make test-contract` 必须通过；涉及部署形态的改动再跑 `make test-e2e` 与 `make image`。
@@ -33,7 +32,7 @@ Go 后端模板，与 nestjs-template（`release/exam-prep`）**API 契约一致
 ## 契约：spec-first
 
 - `openapi/nestjs-baseline.json` 是 nestjs `/docs-json` 的原始字节，`GET /docs-json` 原样返回。
-- `openapi/{nestjs-baseline.json,validation.json,SOURCE,nest_handlers.json}`、`db/nestjs-schema.sql`、`scripts/{openapi-sync.sh,schema_snapshot.py,gen_validation_cases.py,gen_nest_handlers.py,nestjs/}`、`tests/contract/fixtures/validation-cases.json` 是与 fastapi-temp、springboot-template **逐字节相同的共享产物**，只能通过 `make openapi-sync` 更新，不得手改。接口变更先在 nestjs 落地。
+- `openapi/{nestjs-baseline.json,validation.json,SOURCE,nest_handlers.json}`、`db/nestjs-schema.sql`、`tests/contract/fixtures/validation-cases.json` 是 nestjs 导出的原始产物，不得手改。
 - `openapi/scope.yaml` 列出本期已实现的 operationId；`make generate` 只为它们生成处理器接口与路由注册。新增实现时先把 operationId 加进去，再生成、实现。
 - `openapi/overlay.yaml` 只作用于代码生成输入，不改变对外文档。
 - `openapi/templates/strict-interface.tmpl` 覆盖 oapi-codegen 的 strict 响应写出：成功一律 HTTP 200（仅 `uploadFile` 为 201），body 为 `{code: 200, message: "success", data}`，无内容时不输出 `data`。
@@ -55,7 +54,7 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 | `internal/i18n` | nestjs `src/i18n` 翻译文件与 `Accept-Language` 解析 |
 | `internal/config` | caarlos0/env 解析，变量名与 nestjs 一致，启动时一次性校验并列出全部问题 |
 | `internal/repo` | 端口在 `contracts.go`；`postgres/` 为 sqlc 查询与端口实现（请求事务经 context 传递，`AfterCommit` 登记提交后副作用；`jobs.go` 用 River `InsertTx` 在请求事务内入队，River 表在 `river` schema，由 `rivermigrate` 迁移），`redis/` 为与 nestjs Keyv 兼容的缓存与 `lock:<key>` 分布式锁（Redis 不可用时回落进程内），`webapi/mail` 为 nestjs 邮件模板渲染与 SMTP，`webapi/storage` 为 local / S3 文件存储，`webapi/{sms,wechat,alipay}` 为阿里云短信、微信、支付宝开放平台客户端 |
-| `internal/usecase` | `auth`（邮箱、手机号、短信、微信、支付宝登录）、`user`、`session`、`permission`、`sms`、`file`、`health`、`alert`、`audit`、`accountcleanup`、`notification`、`appconfig`、`region`、`appprofile`、`consent`、`address`、`favorite`、`feedback` 等业务流程，返回 `entity.Error` / `entity.BusinessError` |
+| `internal/usecase` | `auth`（邮箱、手机号、短信、微信、支付宝登录）、`user`、`session`、`permission`、`sms`、`file`、`health`、`alert`、`audit`、`accountcleanup`、`notification` 等业务流程，返回 `entity.Error` / `entity.BusinessError` |
 | `internal/worker` | River workers（`mail`、`notification`、`account-cleanup`）与周期任务（会话清理、已读通知清理、账号清理补偿），由 `worker` 子命令运行 |
 | `internal/metrics` | Prometheus 指标（名称、标签、桶与 nestjs 一致，样本带 `app`），pgx 查询耗时 tracer |
 | `templates/mail` | 从 nestjs 逐字节复制的邮件模板，golden 用例为 `tests/fixtures/nestjs_mail` |
@@ -84,7 +83,6 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 | 集成 | 与源码同目录 `*_integration_test.go`，夹具在 `internal/testutil` | `integration` |
 | e2e | `tests/e2e` | `e2e` |
 | 契约 | `tests/contract` | `contract` |
-| parity | `tests/parity`，`make test-parity` 自动启动 nestjs 参照服务（compose 项目 `go-template-parity-nestjs`） | `parity` |
 
 - 用例调用 `t.Parallel()`（paralleltest）；使用 `t.Setenv` 的用例除外。
 - 集成测试每个包一个 Postgres 容器：`testutil.StartDatabase` 先迁移并写入种子到模板库，用例用 `Clone(t)` 得到独立库，可并行。
@@ -92,7 +90,6 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 - MinIO（`chainguard/minio`，按 digest 固定）同样由 testcontainers 启动；local 文件驱动的用例用 `FILE_LOCAL_ROOT` 指向临时目录。
 - Redis 每个测试包一个容器：`TestMain` 调 `testutil.StartRedisPool`，用例 `pool.Borrow(t)` 独占借一个逻辑库（DB 0–15，全部借出时阻塞），借出前、归还前各 `FLUSHDB`；用例里只用 `FLUSHDB`，不用 `FLUSHALL` 或跨库的全局命令。
 - 端口 mock 由 mockgen 生成（`internal/repo/mocks`、`internal/usecase/<pkg>/mocks`），新增端口时把源文件加入 Makefile `MOCK_SOURCES`；简单端口用手写 fake。
-- parity 两侧都开启限流（`THROTTLE_ENABLED=true`），每个请求带不同的 `X-Forwarded-For`；之后对本服务关闭限流再跑 nestjs `auth.e2e-spec.ts`。
 - testcontainers 起不来时测试失败，不跳过。Docker Desktop 的 socket 不在 `/var/run/docker.sock` 时，夹具自动使用 `~/.docker/run/docker.sock`。
 
 ## 生成文件（不手改）

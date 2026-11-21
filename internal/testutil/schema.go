@@ -49,8 +49,7 @@ func pyRepr(s string) string {
 	return quote + escaped + quote
 }
 
-// SchemaSnapshot is the Go version of scripts/schema_snapshot.py: one line per column,
-// constraint, index and table comment of the given tables, sorted.
+// SchemaSnapshot returns one line per column, constraint, index and table comment of the given tables, sorted.
 func SchemaSnapshot(ctx context.Context, pool *pgxpool.Pool, tables []string) ([]string, error) {
 	wanted := func(t string) bool { return slices.Contains(tables, t) }
 

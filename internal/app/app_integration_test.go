@@ -297,12 +297,12 @@ func TestSeedIsIdempotent(t *testing.T) {
 	}
 
 	before := map[string]int{}
-	for _, table := range []string{"user", "role", "status", "permission", "role_permission", "region", "config"} {
+	for _, table := range []string{"user", "role", "status", "permission", "role_permission"} {
 		before[table] = count(table)
 		assert.Positive(t, before[table], table)
 	}
 
-	err := postgres.NewDB(pool, time.Second, slog.New(slog.DiscardHandler)).Seed(t.Context(), seeds.Data, seeds.Regions,
+	err := postgres.NewDB(pool, time.Second, slog.New(slog.DiscardHandler)).Seed(t.Context(), seeds.Data,
 		postgres.SeedOptions{Production: false, AdminEmail: "", AdminPassword: "", Hash: func(context.Context, string) (string, error) {
 			return "unused", nil
 		}})

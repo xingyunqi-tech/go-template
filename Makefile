@@ -45,7 +45,6 @@ MIGRATIONS_DB := go_template_migrations
 NAMING_SQL := SELECT c.relname || '.' || con.conname FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND con.contype <> 'n' AND c.relname <> 'goose_db_version' UNION ALL SELECT tablename || '.' || indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename <> 'goose_db_version' AND indexname NOT IN (SELECT conname FROM pg_constraint)
 TEST_FLAGS := -race -shuffle=on
 COVERAGE_DIR := $(CURDIR)/coverage
-FASTAPI_DIR ?= $(CURDIR)/../fastapi-temp
 DEV_COMPOSE := docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.postgres.yaml -f docker/docker-compose.redis.yaml -f docker/docker-compose.dev.yaml
 E2E_COMPOSE := docker compose -p go-template-e2e -f docker/docker-compose.base.yaml -f docker/docker-compose.postgres.yaml -f docker/docker-compose.redis.yaml -f docker/docker-compose.ci.yaml
 
@@ -115,14 +114,6 @@ generate: $(OPENAPIGEN) $(SQLC) ## 生成代码：oapi-codegen（scope.yaml 范�
 module: ## 按 OpenAPI 标签生成模块骨架（NAME=orders TAG=Orders）：写入 scope.yaml、处理器桩、用例、仓储与端口
 	$(GO) run ./cmd/modulegen -name $(NAME) -tag '$(TAG)'
 
-.PHONY: openapi-sync
-openapi-sync: ## 从 fastapi-temp 复制共享产物（FASTAPI_DIR）；OPENAPI_SYNC=run 时在 nestjs 上重新导出（需 Docker 与 uv）
-ifeq ($(OPENAPI_SYNC),run)
-	scripts/openapi-sync.sh
-else
-	scripts/copy-shared-artifacts.sh "$(FASTAPI_DIR)"
-endif
-
 ##@ 检查
 
 .PHONY: fmt
@@ -146,8 +137,8 @@ typos: $(TYPOS) ## 拼写检查
 	$(TYPOS)
 
 .PHONY: vet
-vet: ## go vet + go build（含 integration / e2e / contract / parity 标签）
-	$(GO) vet -tags integration,e2e,contract,parity $(PKGS)
+vet: ## go vet + go build（含 integration / e2e / contract 标签）
+	$(GO) vet -tags integration,e2e,contract $(PKGS)
 	$(GO) -C tools vet ./...
 	$(GO) build $(PKGS)
 
@@ -217,10 +208,6 @@ test-migrations: $(SQLC) ## 迁移：空库 up → sqlc vet → down-to 0 → up
 	if [[ -n "$$bad" ]]; then echo "约束 / 索引命名应为 <table>_<column>_key、<table>_<column>_fkey、idx_<table>_<column>：" >&2; echo "$$bad" >&2; exit 1; fi; \
 	$(PSQL) -d postgres -c 'DROP DATABASE $(MIGRATIONS_DB) WITH (FORCE)'
 
-.PHONY: test-parity
-test-parity: ## 第 5 层：parity（启动 nestjs 参照服务与本服务后比对；NESTJS_PORT / PARITY_PORT，默认 3001 / 3000）
-	scripts/parity.sh
-
 .PHONY: test-e2e
 test-e2e: ## 第 3 层：构建镜像并以 compose 启动后黑盒测试（APP_URL，默认 http://localhost:3000）
 	$(E2E_COMPOSE) up -d --build --wait || { $(E2E_COMPOSE) logs; $(E2E_COMPOSE) down -v; exit 1; }
@@ -249,7 +236,7 @@ image-scan: image ## Trivy 扫描生产镜像（HIGH / CRITICAL，仅报告有�
 		image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --no-progress $(IMAGE)
 
 .PHONY: ci
-ci: lint hadolint workflow-lint vet generate-check test test-integration test-contract coverage infra test-migrations security build image-scan test-e2e ## 本地运行 check.yml 中除 parity 外的全部 job
+ci: lint hadolint workflow-lint vet generate-check test test-integration test-contract coverage infra test-migrations security build image-scan test-e2e ## 本地运行 check.yml 中的全部 job
 
 .PHONY: clean
 clean: ## 清理构建与测试产物

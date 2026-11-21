@@ -5,7 +5,6 @@ run:
     - integration
     - e2e
     - contract
-    - parity
 
 linters:
   default: none

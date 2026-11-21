@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -36,22 +35,6 @@ import (
 )
 
 const root = "../.."
-
-// sharedArtifacts are byte-identical across the nestjs-compatible backend templates.
-var sharedArtifacts = []string{ //nolint:gochecknoglobals // fixture list
-	"openapi/nestjs-baseline.json",
-	"openapi/validation.json",
-	"openapi/SOURCE",
-	"openapi/nest_handlers.json",
-	"db/nestjs-schema.sql",
-	"scripts/openapi-sync.sh",
-	"scripts/schema_snapshot.py",
-	"scripts/gen_validation_cases.py",
-	"scripts/gen_nest_handlers.py",
-	"scripts/nestjs/validation-cases.ts",
-	"scripts/nestjs/nestjs.compose.yaml",
-	"tests/contract/fixtures/validation-cases.json",
-}
 
 // undocumentedRoutes may be registered without appearing in the baseline document.
 var undocumentedRoutes = []string{"GET /docs", "GET /docs-json", "GET /metrics"} //nolint:gochecknoglobals // whitelist
@@ -197,28 +180,6 @@ func TestSourceDeclaresContractOrigin(t *testing.T) {
 	assert.Regexp(t, hex, keys["validation_script"])
 	assert.Equal(t, "NODE_ENV=development FILE_DRIVER=local", keys["environment"])
 	assert.Len(t, keys, 5)
-}
-
-func TestSharedArtifactsMatchFastapiTemp(t *testing.T) {
-	t.Parallel()
-
-	dir := os.Getenv("FASTAPI_DIR")
-
-	switch {
-	case dir == "":
-		dir = filepath.Join(root, "..", "fastapi-temp")
-		if _, err := os.Stat(filepath.Join(dir, "openapi", "SOURCE")); err != nil {
-			t.Skipf("fastapi-temp not found at %s; set FASTAPI_DIR to require the comparison", dir)
-		}
-	case !filepath.IsAbs(dir):
-		dir = filepath.Join(root, dir)
-	}
-
-	for _, rel := range sharedArtifacts {
-		theirs, err := exec.CommandContext(t.Context(), "git", "-C", dir, "show", "HEAD:"+rel).Output()
-		require.NoError(t, err, rel)
-		assert.True(t, bytes.Equal(theirs, readFile(t, rel)), "%s differs from fastapi-temp HEAD", rel)
-	}
 }
 
 func TestEveryScopedOperationIsRegistered(t *testing.T) {

@@ -335,6 +335,33 @@ func (e CatalogPaperType) Valid() bool {
 	}
 }
 
+// Defines values for CheckFavoriteDtoTargetType.
+const (
+	CheckFavoriteDtoTargetTypeArticle  CheckFavoriteDtoTargetType = "article"
+	CheckFavoriteDtoTargetTypePaper    CheckFavoriteDtoTargetType = "paper"
+	CheckFavoriteDtoTargetTypeProduct  CheckFavoriteDtoTargetType = "product"
+	CheckFavoriteDtoTargetTypeQuestion CheckFavoriteDtoTargetType = "question"
+	CheckFavoriteDtoTargetTypeStore    CheckFavoriteDtoTargetType = "store"
+)
+
+// Valid indicates whether the value is a known member of the CheckFavoriteDtoTargetType enum.
+func (e CheckFavoriteDtoTargetType) Valid() bool {
+	switch e {
+	case CheckFavoriteDtoTargetTypeArticle:
+		return true
+	case CheckFavoriteDtoTargetTypePaper:
+		return true
+	case CheckFavoriteDtoTargetTypeProduct:
+		return true
+	case CheckFavoriteDtoTargetTypeQuestion:
+		return true
+	case CheckFavoriteDtoTargetTypeStore:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CheckinReason.
 const (
 	DAILYDONE   CheckinReason = "DAILY_DONE"
@@ -389,6 +416,57 @@ func (e ContentStatus) Valid() bool {
 	case ContentStatusOFFLINE:
 		return true
 	case ContentStatusPUBLISHED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateFavoriteDtoTargetType.
+const (
+	CreateFavoriteDtoTargetTypeArticle  CreateFavoriteDtoTargetType = "article"
+	CreateFavoriteDtoTargetTypePaper    CreateFavoriteDtoTargetType = "paper"
+	CreateFavoriteDtoTargetTypeProduct  CreateFavoriteDtoTargetType = "product"
+	CreateFavoriteDtoTargetTypeQuestion CreateFavoriteDtoTargetType = "question"
+	CreateFavoriteDtoTargetTypeStore    CreateFavoriteDtoTargetType = "store"
+)
+
+// Valid indicates whether the value is a known member of the CreateFavoriteDtoTargetType enum.
+func (e CreateFavoriteDtoTargetType) Valid() bool {
+	switch e {
+	case CreateFavoriteDtoTargetTypeArticle:
+		return true
+	case CreateFavoriteDtoTargetTypePaper:
+		return true
+	case CreateFavoriteDtoTargetTypeProduct:
+		return true
+	case CreateFavoriteDtoTargetTypeQuestion:
+		return true
+	case CreateFavoriteDtoTargetTypeStore:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateFeedbackDtoType.
+const (
+	CreateFeedbackDtoTypeBug        CreateFeedbackDtoType = "bug"
+	CreateFeedbackDtoTypeComplaint  CreateFeedbackDtoType = "complaint"
+	CreateFeedbackDtoTypeOther      CreateFeedbackDtoType = "other"
+	CreateFeedbackDtoTypeSuggestion CreateFeedbackDtoType = "suggestion"
+)
+
+// Valid indicates whether the value is a known member of the CreateFeedbackDtoType enum.
+func (e CreateFeedbackDtoType) Valid() bool {
+	switch e {
+	case CreateFeedbackDtoTypeBug:
+		return true
+	case CreateFeedbackDtoTypeComplaint:
+		return true
+	case CreateFeedbackDtoTypeOther:
+		return true
+	case CreateFeedbackDtoTypeSuggestion:
 		return true
 	default:
 		return false
@@ -500,6 +578,33 @@ func (e ExamCategory) Valid() bool {
 	}
 }
 
+// Defines values for FavoriteTargetType.
+const (
+	FavoriteTargetTypeArticle  FavoriteTargetType = "article"
+	FavoriteTargetTypePaper    FavoriteTargetType = "paper"
+	FavoriteTargetTypeProduct  FavoriteTargetType = "product"
+	FavoriteTargetTypeQuestion FavoriteTargetType = "question"
+	FavoriteTargetTypeStore    FavoriteTargetType = "store"
+)
+
+// Valid indicates whether the value is a known member of the FavoriteTargetType enum.
+func (e FavoriteTargetType) Valid() bool {
+	switch e {
+	case FavoriteTargetTypeArticle:
+		return true
+	case FavoriteTargetTypePaper:
+		return true
+	case FavoriteTargetTypeProduct:
+		return true
+	case FavoriteTargetTypeQuestion:
+		return true
+	case FavoriteTargetTypeStore:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FavoriteItemDtoTargetType.
 const (
 	FavoriteItemDtoTargetTypeArticle  FavoriteItemDtoTargetType = "article"
@@ -521,6 +626,60 @@ func (e FavoriteItemDtoTargetType) Valid() bool {
 	case FavoriteItemDtoTargetTypeQuestion:
 		return true
 	case FavoriteItemDtoTargetTypeStore:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FeedbackStatus.
+const (
+	FeedbackStatusClosed     FeedbackStatus = "closed"
+	FeedbackStatusPending    FeedbackStatus = "pending"
+	FeedbackStatusProcessing FeedbackStatus = "processing"
+	FeedbackStatusResolved   FeedbackStatus = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the FeedbackStatus enum.
+func (e FeedbackStatus) Valid() bool {
+	switch e {
+	case FeedbackStatusClosed:
+		return true
+	case FeedbackStatusPending:
+		return true
+	case FeedbackStatusProcessing:
+		return true
+	case FeedbackStatusResolved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FeedbackType.
+const (
+	FeedbackTypeAiContent     FeedbackType = "ai_content"
+	FeedbackTypeBug           FeedbackType = "bug"
+	FeedbackTypeComplaint     FeedbackType = "complaint"
+	FeedbackTypeOther         FeedbackType = "other"
+	FeedbackTypeQuestionError FeedbackType = "question_error"
+	FeedbackTypeSuggestion    FeedbackType = "suggestion"
+)
+
+// Valid indicates whether the value is a known member of the FeedbackType enum.
+func (e FeedbackType) Valid() bool {
+	switch e {
+	case FeedbackTypeAiContent:
+		return true
+	case FeedbackTypeBug:
+		return true
+	case FeedbackTypeComplaint:
+		return true
+	case FeedbackTypeOther:
+		return true
+	case FeedbackTypeQuestionError:
+		return true
+	case FeedbackTypeSuggestion:
 		return true
 	default:
 		return false
@@ -1148,84 +1307,6 @@ func (e WrongQuestionStatus) Valid() bool {
 	}
 }
 
-// Defines values for GetFavoritesParamsTargetType.
-const (
-	GetFavoritesParamsTargetTypeArticle  GetFavoritesParamsTargetType = "article"
-	GetFavoritesParamsTargetTypePaper    GetFavoritesParamsTargetType = "paper"
-	GetFavoritesParamsTargetTypeProduct  GetFavoritesParamsTargetType = "product"
-	GetFavoritesParamsTargetTypeQuestion GetFavoritesParamsTargetType = "question"
-	GetFavoritesParamsTargetTypeStore    GetFavoritesParamsTargetType = "store"
-)
-
-// Valid indicates whether the value is a known member of the GetFavoritesParamsTargetType enum.
-func (e GetFavoritesParamsTargetType) Valid() bool {
-	switch e {
-	case GetFavoritesParamsTargetTypeArticle:
-		return true
-	case GetFavoritesParamsTargetTypePaper:
-		return true
-	case GetFavoritesParamsTargetTypeProduct:
-		return true
-	case GetFavoritesParamsTargetTypeQuestion:
-		return true
-	case GetFavoritesParamsTargetTypeStore:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for GetFeedbacksParamsType.
-const (
-	GetFeedbacksParamsTypeBug           GetFeedbacksParamsType = "bug"
-	GetFeedbacksParamsTypeComplaint     GetFeedbacksParamsType = "complaint"
-	GetFeedbacksParamsTypeOther         GetFeedbacksParamsType = "other"
-	GetFeedbacksParamsTypeQuestionError GetFeedbacksParamsType = "question_error"
-	GetFeedbacksParamsTypeSuggestion    GetFeedbacksParamsType = "suggestion"
-)
-
-// Valid indicates whether the value is a known member of the GetFeedbacksParamsType enum.
-func (e GetFeedbacksParamsType) Valid() bool {
-	switch e {
-	case GetFeedbacksParamsTypeBug:
-		return true
-	case GetFeedbacksParamsTypeComplaint:
-		return true
-	case GetFeedbacksParamsTypeOther:
-		return true
-	case GetFeedbacksParamsTypeQuestionError:
-		return true
-	case GetFeedbacksParamsTypeSuggestion:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for GetFeedbacksParamsStatus.
-const (
-	GetFeedbacksParamsStatusClosed     GetFeedbacksParamsStatus = "closed"
-	GetFeedbacksParamsStatusPending    GetFeedbacksParamsStatus = "pending"
-	GetFeedbacksParamsStatusProcessing GetFeedbacksParamsStatus = "processing"
-	GetFeedbacksParamsStatusResolved   GetFeedbacksParamsStatus = "resolved"
-)
-
-// Valid indicates whether the value is a known member of the GetFeedbacksParamsStatus enum.
-func (e GetFeedbacksParamsStatus) Valid() bool {
-	switch e {
-	case GetFeedbacksParamsStatusClosed:
-		return true
-	case GetFeedbacksParamsStatusPending:
-		return true
-	case GetFeedbacksParamsStatusProcessing:
-		return true
-	case GetFeedbacksParamsStatusResolved:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for UploadFileParamsPurpose.
 const (
 	Audio        UploadFileParamsPurpose = "audio"
@@ -1287,7 +1368,44 @@ func (e GetNotificationsParamsCategory) Valid() bool {
 }
 
 // Address defines model for Address.
-type Address = view.Address
+type Address struct {
+	// Address Example: 建国路88号SOHO现代城
+	Address string `json:"address"`
+
+	// City Example: 北京市
+	City string `json:"city"`
+
+	// CityCode Example: 110100000000
+	CityCode  *string       `json:"cityCode,omitempty"`
+	CreatedAt jsontime.Time `json:"createdAt"`
+	DeletedAt jsontime.Time `json:"deletedAt"`
+
+	// District Example: 朝阳区
+	District string `json:"district"`
+
+	// DistrictCode Example: 110101000000
+	DistrictCode *string `json:"districtCode,omitempty"`
+	Id           float64 `json:"id"`
+
+	// IsDefault Example: false
+	IsDefault bool `json:"isDefault"`
+
+	// Name Example: John Doe
+	Name string `json:"name"`
+
+	// Phone Example: 13800138000
+	Phone string `json:"phone"`
+
+	// Province Example: 北京市
+	Province string `json:"province"`
+
+	// ProvinceCode Example: 110000000000
+	ProvinceCode *string       `json:"provinceCode,omitempty"`
+	UpdatedAt    jsontime.Time `json:"updatedAt"`
+
+	// UserId User ID who owns this address
+	UserId float64 `json:"userId"`
+}
 
 // AdminAlert defines model for AdminAlert.
 type AdminAlert struct {
@@ -1566,7 +1684,14 @@ type AdminQuestionVersionDto struct {
 }
 
 // AgreeConsentDto defines model for AgreeConsentDto.
-type AgreeConsentDto = any
+type AgreeConsentDto struct {
+	Type ConsentType `json:"type"`
+
+	// Version 须为该协议的当前版本
+	//
+	// Example: 2026-10-01
+	Version string `json:"version"`
+}
 
 // AiContextType 当前只支持 QUESTION
 type AiContextType string
@@ -1833,7 +1958,40 @@ type ApiErrorResponse struct {
 }
 
 // AppProfile defines model for AppProfile.
-type AppProfile = view.AppProfile
+type AppProfile struct {
+	// AppName 产品名称
+	//
+	// Example: 备考刷题
+	AppName *string `json:"appName"`
+
+	// CompanyName 公司名称
+	CompanyName *string `json:"companyName"`
+
+	// Copyright 版权信息
+	Copyright *string `json:"copyright"`
+
+	// IcpLicense ICP 备案号
+	IcpLicense *string `json:"icpLicense"`
+
+	// ServiceEmail 客服邮箱
+	ServiceEmail *string `json:"serviceEmail"`
+
+	// ServiceHours 客服服务时间
+	//
+	// Example: 工作日 9:00-18:00
+	ServiceHours *string `json:"serviceHours"`
+
+	// ServicePhone 客服电话
+	ServicePhone *string `json:"servicePhone"`
+
+	// ShareTitle 分享标题，为 null 时客户端使用产品名称
+	ShareTitle *string `json:"shareTitle"`
+
+	// Slogan 宣传语
+	//
+	// Example: 刷题、模考、错题本，一站式高效备考
+	Slogan *string `json:"slogan"`
+}
 
 // AuthAlipayLoginDto defines model for AuthAlipayLoginDto.
 type AuthAlipayLoginDto struct {
@@ -2085,10 +2243,20 @@ type BatchUpdateQuestionsDto struct {
 type CatalogPaperType string
 
 // CheckFavoriteDto defines model for CheckFavoriteDto.
-type CheckFavoriteDto = any
+type CheckFavoriteDto struct {
+	// TargetId Example: 123
+	TargetId   string                     `json:"targetId"`
+	TargetType CheckFavoriteDtoTargetType `json:"targetType"`
+}
+
+// CheckFavoriteDtoTargetType defines model for CheckFavoriteDto.TargetType.
+type CheckFavoriteDtoTargetType string
 
 // CheckFavoriteResponseDto defines model for CheckFavoriteResponseDto.
-type CheckFavoriteResponseDto = view.FavoriteCheck
+type CheckFavoriteResponseDto struct {
+	FavoriteId  *string `json:"favoriteId,omitempty"`
+	IsFavorited bool    `json:"isFavorited"`
+}
 
 // CheckinCalendarDto defines model for CheckinCalendarDto.
 type CheckinCalendarDto struct {
@@ -2112,10 +2280,39 @@ type CheckinDayDto struct {
 type CheckinReason string
 
 // Config defines model for Config.
-type Config = view.Config
+type Config struct {
+	// CreatedAt 未写入过的登记项返回默认值，时间为 null
+	CreatedAt *jsontime.Time `json:"createdAt"`
+
+	// IsPublic 公开配置可被所有登录用户读取
+	//
+	// Example: true
+	IsPublic bool `json:"isPublic"`
+
+	// Key Example: app.theme
+	Key       string         `json:"key"`
+	UpdatedAt *jsontime.Time `json:"updatedAt"`
+
+	// Value Example: {"primaryColor":"#1890ff"}
+	Value map[string]interface{} `json:"value"`
+}
 
 // ConsentStatusDto defines model for ConsentStatusDto.
-type ConsentStatusDto = view.ConsentStatus
+type ConsentStatusDto struct {
+	// Agreed 已同意当前版本
+	Agreed   bool           `json:"agreed"`
+	AgreedAt *jsontime.Time `json:"agreedAt"`
+
+	// AgreedVersion 最近一次同意的版本，从未同意时为 null
+	AgreedVersion *string `json:"agreedVersion"`
+
+	// CurrentVersion 当前版本，未配置时为 null
+	CurrentVersion *string `json:"currentVersion"`
+
+	// NeedsConsent 已配置当前版本且尚未同意；agreedVersion 不为 null 时为版本升级后的重新同意
+	NeedsConsent bool        `json:"needsConsent"`
+	Type         ConsentType `json:"type"`
+}
 
 // ConsentType defines model for ConsentType.
 type ConsentType string
@@ -2124,7 +2321,53 @@ type ConsentType string
 type ContentStatus string
 
 // CreateAddressDto defines model for CreateAddressDto.
-type CreateAddressDto = any
+type CreateAddressDto struct {
+	// Address Example: 建国路88号SOHO现代城
+	Address string `json:"address"`
+
+	// City 城市名称（提供区划代码时可省略）
+	//
+	// Example: 北京市
+	City *string `json:"city,omitempty"`
+
+	// CityCode 城市区划代码（12位），提供后自动填充城市名称
+	//
+	// Example: 110100000000
+	CityCode *string `json:"cityCode,omitempty"`
+
+	// District 区县名称（提供区划代码时可省略）
+	//
+	// Example: 朝阳区
+	District *string `json:"district,omitempty"`
+
+	// DistrictCode 区县区划代码（12位），提供后自动填充区县名称
+	//
+	// Example: 110101000000
+	DistrictCode *string `json:"districtCode,omitempty"`
+
+	// IsDefault Example: false
+	IsDefault *bool `json:"isDefault,omitempty"`
+
+	// Name 收件人姓名
+	//
+	// Example: John Doe
+	Name string `json:"name"`
+
+	// Phone 手机号码
+	//
+	// Example: 13800138000
+	Phone string `json:"phone"`
+
+	// Province 省份名称（提供区划代码时可省略）
+	//
+	// Example: 北京市
+	Province *string `json:"province,omitempty"`
+
+	// ProvinceCode 省份区划代码（12位），提供后自动填充省份名称
+	//
+	// Example: 110000000000
+	ProvinceCode *string `json:"provinceCode,omitempty"`
+}
 
 // CreateAiConversationDto defines model for CreateAiConversationDto.
 type CreateAiConversationDto struct {
@@ -2169,10 +2412,55 @@ type CreateExamDto struct {
 }
 
 // CreateFavoriteDto defines model for CreateFavoriteDto.
-type CreateFavoriteDto = any
+type CreateFavoriteDto struct {
+	// Extra Additional data in JSON format
+	Extra *string `json:"extra,omitempty"`
+
+	// Image Example: https://example.com/image.jpg
+	Image *string `json:"image,omitempty"`
+
+	// TargetId ID of the item to favorite
+	//
+	// Example: 123
+	TargetId string `json:"targetId"`
+
+	// TargetType Type of the item to favorite
+	TargetType CreateFavoriteDtoTargetType `json:"targetType"`
+
+	// Title Example: Product Name
+	Title *string `json:"title,omitempty"`
+}
+
+// CreateFavoriteDtoTargetType Type of the item to favorite
+type CreateFavoriteDtoTargetType string
 
 // CreateFeedbackDto defines model for CreateFeedbackDto.
-type CreateFeedbackDto = any
+type CreateFeedbackDto struct {
+	// Contact Contact information for follow-up
+	//
+	// Example: 13800138000
+	Contact *string `json:"contact,omitempty"`
+
+	// Content Feedback content
+	//
+	// Example: I found a bug in the checkout process
+	Content string `json:"content"`
+
+	// Images Screenshot URLs (max 5)
+	//
+	// Example: ["https://example.com/image1.jpg"]
+	Images *[]string `json:"images,omitempty"`
+
+	// Type Type of feedback
+	//
+	// Example: suggestion
+	Type CreateFeedbackDtoType `json:"type"`
+}
+
+// CreateFeedbackDtoType Type of feedback
+//
+// Example: suggestion
+type CreateFeedbackDtoType string
 
 // CreateImportDto defines model for CreateImportDto.
 type CreateImportDto struct {
@@ -2632,7 +2920,34 @@ type ExamGroupDto struct {
 }
 
 // Favorite defines model for Favorite.
-type Favorite = view.Favorite
+type Favorite struct {
+	CreatedAt jsontime.Time `json:"createdAt"`
+
+	// Extra Additional data in JSON format
+	Extra *string `json:"extra,omitempty"`
+	Id    float64 `json:"id"`
+
+	// Image Image URL of the favorited item
+	Image *string `json:"image,omitempty"`
+
+	// SubjectId 题目、试卷所属科目
+	SubjectId *string `json:"subjectId"`
+
+	// TargetId ID of the favorited item
+	TargetId string `json:"targetId"`
+
+	// TargetType Type of the favorited item
+	TargetType FavoriteTargetType `json:"targetType"`
+
+	// Title Title/name of the favorited item
+	Title *string `json:"title,omitempty"`
+
+	// UserId User ID who owns this favorite
+	UserId float64 `json:"userId"`
+}
+
+// FavoriteTargetType Type of the favorited item
+type FavoriteTargetType string
 
 // FavoriteItemDto defines model for FavoriteItemDto.
 type FavoriteItemDto struct {
@@ -2668,7 +2983,40 @@ type FavoriteItemDto struct {
 type FavoriteItemDtoTargetType string
 
 // Feedback defines model for Feedback.
-type Feedback = view.Feedback
+type Feedback struct {
+	Contact   *string       `json:"contact,omitempty"`
+	Content   string        `json:"content"`
+	CreatedAt jsontime.Time `json:"createdAt"`
+
+	// ErrataId 关联的勘误任务
+	ErrataId *string   `json:"errataId,omitempty"`
+	Id       float64   `json:"id"`
+	Images   *[]string `json:"images,omitempty"`
+
+	// MessageId 被举报的 AI 消息
+	MessageId *string `json:"messageId,omitempty"`
+
+	// MessageSnapshot 举报时的 AI 消息内容，消息删除后仍保留
+	MessageSnapshot *AiMessageSnapshot `json:"messageSnapshot,omitempty"`
+	QuestionId      *string            `json:"questionId,omitempty"`
+
+	// QuestionVersion 提交时题目的当前版本
+	QuestionVersion *float64              `json:"questionVersion,omitempty"`
+	Reason          *QuestionReportReason `json:"reason,omitempty"`
+	Reply           *string               `json:"reply,omitempty"`
+	Status          FeedbackStatus        `json:"status"`
+	Type            FeedbackType          `json:"type"`
+	UpdatedAt       *jsontime.Time        `json:"updatedAt,omitempty"`
+
+	// UserId 提交人注销后为空
+	UserId *float64 `json:"userId"`
+}
+
+// FeedbackStatus defines model for Feedback.Status.
+type FeedbackStatus string
+
+// FeedbackType defines model for Feedback.Type.
+type FeedbackType string
 
 // FileDto defines model for FileDto.
 type FileDto struct {
@@ -3016,7 +3364,30 @@ type OrderPaymentChannel string
 type OrderStatus string
 
 // PaginationAddressResponseDto defines model for PaginationAddressResponseDto.
-type PaginationAddressResponseDto = view.AddressPage
+type PaginationAddressResponseDto struct {
+	// Limit Number of items per page
+	//
+	// Example: 10
+	Limit float64 `json:"limit"`
+
+	// List List of items
+	List []Address `json:"list"`
+
+	// Page Current page number
+	//
+	// Example: 1
+	Page float64 `json:"page"`
+
+	// Total Total number of items
+	//
+	// Example: 100
+	Total float64 `json:"total"`
+
+	// TotalPages Total number of pages
+	//
+	// Example: 10
+	TotalPages float64 `json:"totalPages"`
+}
 
 // PaginationAdminAlertResponseDto defines model for PaginationAdminAlertResponseDto.
 type PaginationAdminAlertResponseDto struct {
@@ -3175,10 +3546,56 @@ type PaginationExamResponseDto struct {
 }
 
 // PaginationFavoriteItemDtoResponseDto defines model for PaginationFavoriteItemDtoResponseDto.
-type PaginationFavoriteItemDtoResponseDto = view.FavoritePage
+type PaginationFavoriteItemDtoResponseDto struct {
+	// Limit Number of items per page
+	//
+	// Example: 10
+	Limit float64 `json:"limit"`
+
+	// List List of items
+	List []FavoriteItemDto `json:"list"`
+
+	// Page Current page number
+	//
+	// Example: 1
+	Page float64 `json:"page"`
+
+	// Total Total number of items
+	//
+	// Example: 100
+	Total float64 `json:"total"`
+
+	// TotalPages Total number of pages
+	//
+	// Example: 10
+	TotalPages float64 `json:"totalPages"`
+}
 
 // PaginationFeedbackResponseDto defines model for PaginationFeedbackResponseDto.
-type PaginationFeedbackResponseDto = view.FeedbackPage
+type PaginationFeedbackResponseDto struct {
+	// Limit Number of items per page
+	//
+	// Example: 10
+	Limit float64 `json:"limit"`
+
+	// List List of items
+	List []Feedback `json:"list"`
+
+	// Page Current page number
+	//
+	// Example: 1
+	Page float64 `json:"page"`
+
+	// Total Total number of items
+	//
+	// Example: 100
+	Total float64 `json:"total"`
+
+	// TotalPages Total number of pages
+	//
+	// Example: 10
+	TotalPages float64 `json:"totalPages"`
+}
 
 // PaginationImportJobResponseDto defines model for PaginationImportJobResponseDto.
 type PaginationImportJobResponseDto struct {
@@ -4179,10 +4596,65 @@ type RefundDto struct {
 }
 
 // Region defines model for Region.
-type Region = view.Region
+type Region struct {
+	// Code Administrative division code (12 digits)
+	//
+	// Example: 110000000000
+	Code      string        `json:"code"`
+	CreatedAt jsontime.Time `json:"createdAt"`
+	Id        float64       `json:"id"`
+
+	// Level Level: 1-Province, 2-City, 3-District
+	//
+	// Example: 1
+	Level float64 `json:"level"`
+
+	// Name Region name
+	//
+	// Example: 北京市
+	Name string `json:"name"`
+
+	// ParentCode Parent region code
+	ParentCode *string `json:"parentCode"`
+
+	// Sort Sort order
+	//
+	// Example: 0
+	Sort      float64       `json:"sort"`
+	UpdatedAt jsontime.Time `json:"updatedAt"`
+}
 
 // RegionTreeDto defines model for RegionTreeDto.
-type RegionTreeDto = view.RegionTree
+type RegionTreeDto struct {
+	// Children Child regions
+	Children *[]RegionTreeDto `json:"children,omitempty"`
+
+	// Code Administrative division code (12 digits)
+	//
+	// Example: 110000000000
+	Code      string        `json:"code"`
+	CreatedAt jsontime.Time `json:"createdAt"`
+	Id        float64       `json:"id"`
+
+	// Level Level: 1-Province, 2-City, 3-District
+	//
+	// Example: 1
+	Level float64 `json:"level"`
+
+	// Name Region name
+	//
+	// Example: 北京市
+	Name string `json:"name"`
+
+	// ParentCode Parent region code
+	ParentCode *string `json:"parentCode"`
+
+	// Sort Sort order
+	//
+	// Example: 0
+	Sort      float64       `json:"sort"`
+	UpdatedAt jsontime.Time `json:"updatedAt"`
+}
 
 // RejectQuestionDto defines model for RejectQuestionDto.
 type RejectQuestionDto struct {
@@ -4514,10 +4986,58 @@ type TypeAccuracyDto struct {
 }
 
 // UpdateAddressDto defines model for UpdateAddressDto.
-type UpdateAddressDto = any
+type UpdateAddressDto struct {
+	// Address Example: 建国路88号SOHO现代城
+	Address *string `json:"address,omitempty"`
+
+	// City Example: 北京市
+	City *string `json:"city,omitempty"`
+
+	// CityCode City region code (12 digits)
+	//
+	// Example: 110100000000
+	CityCode *string `json:"cityCode,omitempty"`
+
+	// District Example: 朝阳区
+	District *string `json:"district,omitempty"`
+
+	// DistrictCode District region code (12 digits)
+	//
+	// Example: 110101000000
+	DistrictCode *string `json:"districtCode,omitempty"`
+
+	// IsDefault Example: false
+	IsDefault *bool `json:"isDefault,omitempty"`
+
+	// Name Example: John Doe
+	Name *string `json:"name,omitempty"`
+
+	// Phone Example: 13800138000
+	Phone *string `json:"phone,omitempty"`
+
+	// Province Example: 北京市
+	Province *string `json:"province,omitempty"`
+
+	// ProvinceCode Province region code (12 digits)
+	//
+	// Example: 110000000000
+	ProvinceCode *string `json:"provinceCode,omitempty"`
+}
 
 // UpdateAppProfileDto defines model for UpdateAppProfileDto.
-type UpdateAppProfileDto = any
+type UpdateAppProfileDto struct {
+	AppName      *string              `json:"appName,omitempty"`
+	CompanyName  *string              `json:"companyName,omitempty"`
+	Copyright    *string              `json:"copyright,omitempty"`
+	IcpLicense   *string              `json:"icpLicense,omitempty"`
+	ServiceEmail *openapi_types.Email `json:"serviceEmail,omitempty"`
+	ServiceHours *string              `json:"serviceHours,omitempty"`
+
+	// ServicePhone 只允许数字、-、+ 与空格
+	ServicePhone *string `json:"servicePhone,omitempty"`
+	ShareTitle   *string `json:"shareTitle,omitempty"`
+	Slogan       *string `json:"slogan,omitempty"`
+}
 
 // UpdateExamDto defines model for UpdateExamDto.
 type UpdateExamDto struct {
@@ -4627,7 +5147,13 @@ type UpdateSubjectDto struct {
 type UpdateUserDto = any
 
 // UpsertConfigDto defines model for UpsertConfigDto.
-type UpsertConfigDto = any
+type UpsertConfigDto struct {
+	// IsPublic 是否公开，新建时默认 false，更新时不传则保持不变
+	IsPublic *bool `json:"isPublic,omitempty"`
+
+	// Value Example: {"darkMode":false,"primaryColor":"#1890ff"}
+	Value map[string]interface{} `json:"value"`
+}
 
 // UpsertExamProfileDto defines model for UpsertExamProfileDto.
 type UpsertExamProfileDto struct {
@@ -4858,41 +5384,6 @@ type WrongQuestionStateDto struct {
 // WrongQuestionStatus defines model for WrongQuestionStatus.
 type WrongQuestionStatus string
 
-// GetAddressesParams defines parameters for GetAddresses.
-type GetAddressesParams struct {
-	Page    *float64 `form:"page,omitempty" json:"page,omitempty"`
-	Limit   *float64 `form:"limit,omitempty" json:"limit,omitempty"`
-	Filters *string  `form:"filters,omitempty" json:"filters,omitempty"`
-	Sort    *string  `form:"sort,omitempty" json:"sort,omitempty"`
-}
-
-// GetFavoritesParams defines parameters for GetFavorites.
-type GetFavoritesParams struct {
-	TargetType *GetFavoritesParamsTargetType `form:"targetType,omitempty" json:"targetType,omitempty"`
-
-	// SubjectId 题目、试卷所属科目
-	SubjectId *string  `form:"subjectId,omitempty" json:"subjectId,omitempty"`
-	Page      *float64 `form:"page,omitempty" json:"page,omitempty"`
-	Limit     *float64 `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
-// GetFavoritesParamsTargetType defines parameters for GetFavorites.
-type GetFavoritesParamsTargetType string
-
-// GetFeedbacksParams defines parameters for GetFeedbacks.
-type GetFeedbacksParams struct {
-	Type   *GetFeedbacksParamsType   `form:"type,omitempty" json:"type,omitempty"`
-	Status *GetFeedbacksParamsStatus `form:"status,omitempty" json:"status,omitempty"`
-	Page   *float64                  `form:"page,omitempty" json:"page,omitempty"`
-	Limit  *float64                  `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
-// GetFeedbacksParamsType defines parameters for GetFeedbacks.
-type GetFeedbacksParamsType string
-
-// GetFeedbacksParamsStatus defines parameters for GetFeedbacks.
-type GetFeedbacksParamsStatus string
-
 // UploadFileParams defines parameters for UploadFile.
 type UploadFileParams struct {
 	// Purpose 上传用途，决定允许的文件类型、大小上限与可见性
@@ -4917,18 +5408,6 @@ type GetNotificationsParams struct {
 // GetNotificationsParamsCategory defines parameters for GetNotifications.
 type GetNotificationsParamsCategory string
 
-// QueryRegionsParams defines parameters for QueryRegions.
-type QueryRegionsParams struct {
-	// Level Level: 1-Province, 2-City, 3-District
-	Level *float64 `form:"level,omitempty" json:"level,omitempty"`
-
-	// ParentCode Parent region code
-	ParentCode *string `form:"parentCode,omitempty" json:"parentCode,omitempty"`
-
-	// Keyword Search keyword
-	Keyword *string `form:"keyword,omitempty" json:"keyword,omitempty"`
-}
-
 // GetUsersParams defines parameters for GetUsers.
 type GetUsersParams struct {
 	Page    *float64 `form:"page,omitempty" json:"page,omitempty"`
@@ -4936,15 +5415,6 @@ type GetUsersParams struct {
 	Filters *string  `form:"filters,omitempty" json:"filters,omitempty"`
 	Sort    *string  `form:"sort,omitempty" json:"sort,omitempty"`
 }
-
-// CreateAddressJSONRequestBody defines body for CreateAddress for application/json ContentType.
-type CreateAddressJSONRequestBody = CreateAddressDto
-
-// UpdateAddressJSONRequestBody defines body for UpdateAddress for application/json ContentType.
-type UpdateAddressJSONRequestBody = UpdateAddressDto
-
-// AdminUpdateAppProfileJSONRequestBody defines body for AdminUpdateAppProfile for application/json ContentType.
-type AdminUpdateAppProfileJSONRequestBody = UpdateAppProfileDto
 
 // LoginWithAlipayJSONRequestBody defines body for LoginWithAlipay for application/json ContentType.
 type LoginWithAlipayJSONRequestBody = AuthAlipayLoginDto
@@ -4997,24 +5467,6 @@ type LoginWithWechatJSONRequestBody = AuthWechatLoginDto
 // LoginWithWechatPhoneJSONRequestBody defines body for LoginWithWechatPhone for application/json ContentType.
 type LoginWithWechatPhoneJSONRequestBody = AuthWechatPhoneLoginDto
 
-// UpsertConfigJSONRequestBody defines body for UpsertConfig for application/json ContentType.
-type UpsertConfigJSONRequestBody = UpsertConfigDto
-
-// CreateFavoriteJSONRequestBody defines body for CreateFavorite for application/json ContentType.
-type CreateFavoriteJSONRequestBody = CreateFavoriteDto
-
-// CheckFavoriteJSONRequestBody defines body for CheckFavorite for application/json ContentType.
-type CheckFavoriteJSONRequestBody = CheckFavoriteDto
-
-// ToggleFavoriteJSONRequestBody defines body for ToggleFavorite for application/json ContentType.
-type ToggleFavoriteJSONRequestBody = CreateFavoriteDto
-
-// CreateFeedbackJSONRequestBody defines body for CreateFeedback for application/json ContentType.
-type CreateFeedbackJSONRequestBody = CreateFeedbackDto
-
-// AgreeConsentJSONRequestBody defines body for AgreeConsent for application/json ContentType.
-type AgreeConsentJSONRequestBody = AgreeConsentDto
-
 // UpdateNotificationSettingsJSONRequestBody defines body for UpdateNotificationSettings for application/json ContentType.
 type UpdateNotificationSettingsJSONRequestBody = UpdateNotificationSettingsDto
 
@@ -5032,36 +5484,9 @@ type ServerInterface interface {
 	// SimpleHealthCheck 简单健康检查
 	// (GET /api/health)
 	SimpleHealthCheck(w http.ResponseWriter, r *http.Request)
-	// GetAddresses 获取地址列表
-	// (GET /api/v1/addresses)
-	GetAddresses(w http.ResponseWriter, r *http.Request, params GetAddressesParams)
-	// CreateAddress 创建地址
-	// (POST /api/v1/addresses)
-	CreateAddress(w http.ResponseWriter, r *http.Request)
-	// GetDefaultAddress 获取默认地址
-	// (GET /api/v1/addresses/default)
-	GetDefaultAddress(w http.ResponseWriter, r *http.Request)
-	// DeleteAddress 删除地址
-	// (DELETE /api/v1/addresses/{id})
-	DeleteAddress(w http.ResponseWriter, r *http.Request, id int32)
-	// GetAddress 获取地址详情
-	// (GET /api/v1/addresses/{id})
-	GetAddress(w http.ResponseWriter, r *http.Request, id int32)
-	// UpdateAddress 更新地址
-	// (PUT /api/v1/addresses/{id})
-	UpdateAddress(w http.ResponseWriter, r *http.Request, id int32)
-	// SetDefaultAddress 设为默认地址
-	// (PUT /api/v1/addresses/{id}/default)
-	SetDefaultAddress(w http.ResponseWriter, r *http.Request, id int32)
-	// AdminUpdateAppProfile 保存小程序站点信息：整体覆盖，未传或空白的字段保存为未配置（null）
-	// (PUT /api/v1/admin/app-profile)
-	AdminUpdateAppProfile(w http.ResponseWriter, r *http.Request)
 	// AdminRetriggerAccountCleanup 重新触发已注销用户的数据清理；已有清理任务在排队或执行时不重复入队
 	// (POST /api/v1/admin/users/{id}/cleanup)
 	AdminRetriggerAccountCleanup(w http.ResponseWriter, r *http.Request, id int32)
-	// GetAppProfile 小程序站点信息，未配置的字段为 null
-	// (GET /api/v1/app-profile)
-	GetAppProfile(w http.ResponseWriter, r *http.Request)
 	// LoginWithAlipay 支付宝登录（小程序）
 	// (POST /api/v1/auth/alipay/login)
 	LoginWithAlipay(w http.ResponseWriter, r *http.Request)
@@ -5131,39 +5556,6 @@ type ServerInterface interface {
 	// LoginWithWechatPhone 微信手机号快捷登录（小程序）
 	// (POST /api/v1/auth/wechat/phone-login)
 	LoginWithWechatPhone(w http.ResponseWriter, r *http.Request)
-	// GetConfigAsAdmin 获取配置（管理员）
-	// (GET /api/v1/config/admin/{key})
-	GetConfigAsAdmin(w http.ResponseWriter, r *http.Request, key string)
-	// GetConfig 获取公开配置
-	// (GET /api/v1/config/{key})
-	GetConfig(w http.ResponseWriter, r *http.Request, key string)
-	// UpsertConfig 写入配置（管理员）
-	// (PUT /api/v1/config/{key})
-	UpsertConfig(w http.ResponseWriter, r *http.Request, key string)
-	// GetFavorites 获取收藏列表，可按类型与科目筛选；题目、试卷附带下架状态
-	// (GET /api/v1/favorites)
-	GetFavorites(w http.ResponseWriter, r *http.Request, params GetFavoritesParams)
-	// CreateFavorite 添加收藏；题目、试卷由服务端校验并写入标题快照与科目，忽略传入的 title、image
-	// (POST /api/v1/favorites)
-	CreateFavorite(w http.ResponseWriter, r *http.Request)
-	// CheckFavorite 检查是否已收藏
-	// (POST /api/v1/favorites/check)
-	CheckFavorite(w http.ResponseWriter, r *http.Request)
-	// ToggleFavorite 切换收藏状态
-	// (POST /api/v1/favorites/toggle)
-	ToggleFavorite(w http.ResponseWriter, r *http.Request)
-	// DeleteFavorite 取消收藏
-	// (DELETE /api/v1/favorites/{id})
-	DeleteFavorite(w http.ResponseWriter, r *http.Request, id int32)
-	// GetFeedbacks 获取反馈列表
-	// (GET /api/v1/feedbacks)
-	GetFeedbacks(w http.ResponseWriter, r *http.Request, params GetFeedbacksParams)
-	// CreateFeedback 提交反馈
-	// (POST /api/v1/feedbacks)
-	CreateFeedback(w http.ResponseWriter, r *http.Request)
-	// GetFeedback 获取反馈详情
-	// (GET /api/v1/feedbacks/{id})
-	GetFeedback(w http.ResponseWriter, r *http.Request, id int32)
 	// UploadFile 上传文件
 	// (POST /api/v1/files/upload)
 	UploadFile(w http.ResponseWriter, r *http.Request, params UploadFileParams)
@@ -5176,12 +5568,6 @@ type ServerInterface interface {
 	// ReadinessProbe 就绪探针（Kubernetes）
 	// (GET /api/v1/health/ready)
 	ReadinessProbe(w http.ResponseWriter, r *http.Request)
-	// GetMyConsents 各协议当前版本与同意状态
-	// (GET /api/v1/me/consents)
-	GetMyConsents(w http.ResponseWriter, r *http.Request)
-	// AgreeConsent 同意协议的当前版本，重复同意同一版本保留首次记录
-	// (POST /api/v1/me/consents)
-	AgreeConsent(w http.ResponseWriter, r *http.Request)
 	// GetNotifications 获取通知列表
 	// (GET /api/v1/notifications)
 	GetNotifications(w http.ResponseWriter, r *http.Request, params GetNotificationsParams)
@@ -5206,24 +5592,6 @@ type ServerInterface interface {
 	// MarkNotificationAsRead 标记通知为已读
 	// (POST /api/v1/notifications/{id}/read)
 	MarkNotificationAsRead(w http.ResponseWriter, r *http.Request, id int32)
-	// QueryRegions 查询地区（支持按级别、父级代码、关键词搜索）
-	// (GET /api/v1/regions)
-	QueryRegions(w http.ResponseWriter, r *http.Request, params QueryRegionsParams)
-	// GetCities 获取指定省份下的城市
-	// (GET /api/v1/regions/cities/{provinceCode})
-	GetCities(w http.ResponseWriter, r *http.Request, provinceCode string)
-	// GetRegionByCode 根据 code 获取地区详情
-	// (GET /api/v1/regions/code/{code})
-	GetRegionByCode(w http.ResponseWriter, r *http.Request, code string)
-	// GetDistricts 获取指定城市下的区县
-	// (GET /api/v1/regions/districts/{cityCode})
-	GetDistricts(w http.ResponseWriter, r *http.Request, cityCode string)
-	// GetProvinces 获取所有省份
-	// (GET /api/v1/regions/provinces)
-	GetProvinces(w http.ResponseWriter, r *http.Request)
-	// GetRegionTree 获取完整的省市区树形结构
-	// (GET /api/v1/regions/tree)
-	GetRegionTree(w http.ResponseWriter, r *http.Request)
 	// GetUsers 获取用户列表（管理员）
 	// (GET /api/v1/users)
 	GetUsers(w http.ResponseWriter, r *http.Request, params GetUsersParams)
@@ -5257,63 +5625,9 @@ func (_ Unimplemented) SimpleHealthCheck(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// GetAddresses 获取地址列表
-// (GET /api/v1/addresses)
-func (_ Unimplemented) GetAddresses(w http.ResponseWriter, r *http.Request, params GetAddressesParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// CreateAddress 创建地址
-// (POST /api/v1/addresses)
-func (_ Unimplemented) CreateAddress(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetDefaultAddress 获取默认地址
-// (GET /api/v1/addresses/default)
-func (_ Unimplemented) GetDefaultAddress(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// DeleteAddress 删除地址
-// (DELETE /api/v1/addresses/{id})
-func (_ Unimplemented) DeleteAddress(w http.ResponseWriter, r *http.Request, id int32) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetAddress 获取地址详情
-// (GET /api/v1/addresses/{id})
-func (_ Unimplemented) GetAddress(w http.ResponseWriter, r *http.Request, id int32) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// UpdateAddress 更新地址
-// (PUT /api/v1/addresses/{id})
-func (_ Unimplemented) UpdateAddress(w http.ResponseWriter, r *http.Request, id int32) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// SetDefaultAddress 设为默认地址
-// (PUT /api/v1/addresses/{id}/default)
-func (_ Unimplemented) SetDefaultAddress(w http.ResponseWriter, r *http.Request, id int32) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// AdminUpdateAppProfile 保存小程序站点信息：整体覆盖，未传或空白的字段保存为未配置（null）
-// (PUT /api/v1/admin/app-profile)
-func (_ Unimplemented) AdminUpdateAppProfile(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // AdminRetriggerAccountCleanup 重新触发已注销用户的数据清理；已有清理任务在排队或执行时不重复入队
 // (POST /api/v1/admin/users/{id}/cleanup)
 func (_ Unimplemented) AdminRetriggerAccountCleanup(w http.ResponseWriter, r *http.Request, id int32) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetAppProfile 小程序站点信息，未配置的字段为 null
-// (GET /api/v1/app-profile)
-func (_ Unimplemented) GetAppProfile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5455,72 +5769,6 @@ func (_ Unimplemented) LoginWithWechatPhone(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// GetConfigAsAdmin 获取配置（管理员）
-// (GET /api/v1/config/admin/{key})
-func (_ Unimplemented) GetConfigAsAdmin(w http.ResponseWriter, r *http.Request, key string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetConfig 获取公开配置
-// (GET /api/v1/config/{key})
-func (_ Unimplemented) GetConfig(w http.ResponseWriter, r *http.Request, key string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// UpsertConfig 写入配置（管理员）
-// (PUT /api/v1/config/{key})
-func (_ Unimplemented) UpsertConfig(w http.ResponseWriter, r *http.Request, key string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetFavorites 获取收藏列表，可按类型与科目筛选；题目、试卷附带下架状态
-// (GET /api/v1/favorites)
-func (_ Unimplemented) GetFavorites(w http.ResponseWriter, r *http.Request, params GetFavoritesParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// CreateFavorite 添加收藏；题目、试卷由服务端校验并写入标题快照与科目，忽略传入的 title、image
-// (POST /api/v1/favorites)
-func (_ Unimplemented) CreateFavorite(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// CheckFavorite 检查是否已收藏
-// (POST /api/v1/favorites/check)
-func (_ Unimplemented) CheckFavorite(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// ToggleFavorite 切换收藏状态
-// (POST /api/v1/favorites/toggle)
-func (_ Unimplemented) ToggleFavorite(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// DeleteFavorite 取消收藏
-// (DELETE /api/v1/favorites/{id})
-func (_ Unimplemented) DeleteFavorite(w http.ResponseWriter, r *http.Request, id int32) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetFeedbacks 获取反馈列表
-// (GET /api/v1/feedbacks)
-func (_ Unimplemented) GetFeedbacks(w http.ResponseWriter, r *http.Request, params GetFeedbacksParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// CreateFeedback 提交反馈
-// (POST /api/v1/feedbacks)
-func (_ Unimplemented) CreateFeedback(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetFeedback 获取反馈详情
-// (GET /api/v1/feedbacks/{id})
-func (_ Unimplemented) GetFeedback(w http.ResponseWriter, r *http.Request, id int32) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // UploadFile 上传文件
 // (POST /api/v1/files/upload)
 func (_ Unimplemented) UploadFile(w http.ResponseWriter, r *http.Request, params UploadFileParams) {
@@ -5542,18 +5790,6 @@ func (_ Unimplemented) LivenessProbe(w http.ResponseWriter, r *http.Request) {
 // ReadinessProbe 就绪探针（Kubernetes）
 // (GET /api/v1/health/ready)
 func (_ Unimplemented) ReadinessProbe(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetMyConsents 各协议当前版本与同意状态
-// (GET /api/v1/me/consents)
-func (_ Unimplemented) GetMyConsents(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// AgreeConsent 同意协议的当前版本，重复同意同一版本保留首次记录
-// (POST /api/v1/me/consents)
-func (_ Unimplemented) AgreeConsent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5602,42 +5838,6 @@ func (_ Unimplemented) GetNotification(w http.ResponseWriter, r *http.Request, i
 // MarkNotificationAsRead 标记通知为已读
 // (POST /api/v1/notifications/{id}/read)
 func (_ Unimplemented) MarkNotificationAsRead(w http.ResponseWriter, r *http.Request, id int32) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// QueryRegions 查询地区（支持按级别、父级代码、关键词搜索）
-// (GET /api/v1/regions)
-func (_ Unimplemented) QueryRegions(w http.ResponseWriter, r *http.Request, params QueryRegionsParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetCities 获取指定省份下的城市
-// (GET /api/v1/regions/cities/{provinceCode})
-func (_ Unimplemented) GetCities(w http.ResponseWriter, r *http.Request, provinceCode string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetRegionByCode 根据 code 获取地区详情
-// (GET /api/v1/regions/code/{code})
-func (_ Unimplemented) GetRegionByCode(w http.ResponseWriter, r *http.Request, code string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetDistricts 获取指定城市下的区县
-// (GET /api/v1/regions/districts/{cityCode})
-func (_ Unimplemented) GetDistricts(w http.ResponseWriter, r *http.Request, cityCode string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetProvinces 获取所有省份
-// (GET /api/v1/regions/provinces)
-func (_ Unimplemented) GetProvinces(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetRegionTree 获取完整的省市区树形结构
-// (GET /api/v1/regions/tree)
-func (_ Unimplemented) GetRegionTree(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5708,224 +5908,6 @@ func (siw *ServerInterfaceWrapper) SimpleHealthCheck(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
-// GetAddresses operation middleware
-func (siw *ServerInterfaceWrapper) GetAddresses(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetAddressesParams
-
-	// ------------- Optional query parameter "page" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "filters" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "filters", r.URL.Query(), &params.Filters, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "filters"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "filters", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "sort" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAddresses(w, r, params)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateAddress operation middleware
-func (siw *ServerInterfaceWrapper) CreateAddress(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateAddress(w, r)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetDefaultAddress operation middleware
-func (siw *ServerInterfaceWrapper) GetDefaultAddress(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetDefaultAddress(w, r)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteAddress operation middleware
-func (siw *ServerInterfaceWrapper) DeleteAddress(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id int32
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "number", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteAddress(w, r, id)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetAddress operation middleware
-func (siw *ServerInterfaceWrapper) GetAddress(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id int32
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "number", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAddress(w, r, id)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateAddress operation middleware
-func (siw *ServerInterfaceWrapper) UpdateAddress(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id int32
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "number", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateAddress(w, r, id)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SetDefaultAddress operation middleware
-func (siw *ServerInterfaceWrapper) SetDefaultAddress(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id int32
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "number", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SetDefaultAddress(w, r, id)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// AdminUpdateAppProfile operation middleware
-func (siw *ServerInterfaceWrapper) AdminUpdateAppProfile(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.AdminUpdateAppProfile(w, r)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // AdminRetriggerAccountCleanup operation middleware
 func (siw *ServerInterfaceWrapper) AdminRetriggerAccountCleanup(w http.ResponseWriter, r *http.Request) {
 
@@ -5943,20 +5925,6 @@ func (siw *ServerInterfaceWrapper) AdminRetriggerAccountCleanup(w http.ResponseW
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AdminRetriggerAccountCleanup(w, r, id)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetAppProfile operation middleware
-func (siw *ServerInterfaceWrapper) GetAppProfile(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAppProfile(w, r)
 	}))
 
 	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
@@ -6300,336 +6268,6 @@ func (siw *ServerInterfaceWrapper) LoginWithWechatPhone(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
-// GetConfigAsAdmin operation middleware
-func (siw *ServerInterfaceWrapper) GetConfigAsAdmin(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "key" -------------
-	var key string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "key", chi.URLParam(r, "key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetConfigAsAdmin(w, r, key)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetConfig operation middleware
-func (siw *ServerInterfaceWrapper) GetConfig(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "key" -------------
-	var key string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "key", chi.URLParam(r, "key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetConfig(w, r, key)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpsertConfig operation middleware
-func (siw *ServerInterfaceWrapper) UpsertConfig(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "key" -------------
-	var key string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "key", chi.URLParam(r, "key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpsertConfig(w, r, key)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetFavorites operation middleware
-func (siw *ServerInterfaceWrapper) GetFavorites(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetFavoritesParams
-
-	// ------------- Optional query parameter "targetType" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "targetType", r.URL.Query(), &params.TargetType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "targetType"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetType", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "subjectId" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "subjectId", r.URL.Query(), &params.SubjectId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "subjectId"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subjectId", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "page" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetFavorites(w, r, params)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateFavorite operation middleware
-func (siw *ServerInterfaceWrapper) CreateFavorite(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateFavorite(w, r)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CheckFavorite operation middleware
-func (siw *ServerInterfaceWrapper) CheckFavorite(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CheckFavorite(w, r)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ToggleFavorite operation middleware
-func (siw *ServerInterfaceWrapper) ToggleFavorite(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ToggleFavorite(w, r)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteFavorite operation middleware
-func (siw *ServerInterfaceWrapper) DeleteFavorite(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id int32
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "number", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteFavorite(w, r, id)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetFeedbacks operation middleware
-func (siw *ServerInterfaceWrapper) GetFeedbacks(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetFeedbacksParams
-
-	// ------------- Optional query parameter "type" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "status" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "page" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetFeedbacks(w, r, params)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateFeedback operation middleware
-func (siw *ServerInterfaceWrapper) CreateFeedback(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateFeedback(w, r)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetFeedback operation middleware
-func (siw *ServerInterfaceWrapper) GetFeedback(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id int32
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "number", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetFeedback(w, r, id)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // UploadFile operation middleware
 func (siw *ServerInterfaceWrapper) UploadFile(w http.ResponseWriter, r *http.Request) {
 
@@ -6696,34 +6334,6 @@ func (siw *ServerInterfaceWrapper) ReadinessProbe(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReadinessProbe(w, r)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetMyConsents operation middleware
-func (siw *ServerInterfaceWrapper) GetMyConsents(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetMyConsents(w, r)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// AgreeConsent operation middleware
-func (siw *ServerInterfaceWrapper) AgreeConsent(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.AgreeConsent(w, r)
 	}))
 
 	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
@@ -6930,171 +6540,6 @@ func (siw *ServerInterfaceWrapper) MarkNotificationAsRead(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.MarkNotificationAsRead(w, r, id)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// QueryRegions operation middleware
-func (siw *ServerInterfaceWrapper) QueryRegions(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params QueryRegionsParams
-
-	// ------------- Optional query parameter "level" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "level", r.URL.Query(), &params.Level, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "level"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "level", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "parentCode" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "parentCode", r.URL.Query(), &params.ParentCode, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "parentCode"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "parentCode", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "keyword" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "keyword", r.URL.Query(), &params.Keyword, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "keyword"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyword", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.QueryRegions(w, r, params)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetCities operation middleware
-func (siw *ServerInterfaceWrapper) GetCities(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "provinceCode" -------------
-	var provinceCode string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "provinceCode", chi.URLParam(r, "provinceCode"), &provinceCode, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provinceCode", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetCities(w, r, provinceCode)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetRegionByCode operation middleware
-func (siw *ServerInterfaceWrapper) GetRegionByCode(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "code" -------------
-	var code string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "code", chi.URLParam(r, "code"), &code, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "code", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRegionByCode(w, r, code)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetDistricts operation middleware
-func (siw *ServerInterfaceWrapper) GetDistricts(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "cityCode" -------------
-	var cityCode string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "cityCode", chi.URLParam(r, "cityCode"), &cityCode, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cityCode", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetDistricts(w, r, cityCode)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetProvinces operation middleware
-func (siw *ServerInterfaceWrapper) GetProvinces(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetProvinces(w, r)
-	}))
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		handler = siw.HandlerMiddlewares[i](handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetRegionTree operation middleware
-func (siw *ServerInterfaceWrapper) GetRegionTree(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRegionTree(w, r)
 	}))
 
 	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
@@ -7388,34 +6833,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/api/health", wrapper.SimpleHealthCheck)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/addresses", wrapper.GetAddresses)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/api/v1/addresses", wrapper.CreateAddress)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/api/v1/addresses/{id}", wrapper.DeleteAddress)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/addresses/{id}", wrapper.GetAddress)
-	})
-	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/api/v1/addresses/{id}", wrapper.UpdateAddress)
-	})
-	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/api/v1/addresses/{id}/default", wrapper.SetDefaultAddress)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/addresses/default", wrapper.GetDefaultAddress)
-	})
-	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/api/v1/admin/app-profile", wrapper.AdminUpdateAppProfile)
-	})
-	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/admin/users/{id}/cleanup", wrapper.AdminRetriggerAccountCleanup)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/app-profile", wrapper.GetAppProfile)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/alipay/login", wrapper.LoginWithAlipay)
@@ -7487,39 +6905,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/auth/wechat/phone-login", wrapper.LoginWithWechatPhone)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/config/{key}", wrapper.GetConfig)
-	})
-	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/api/v1/config/{key}", wrapper.UpsertConfig)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/config/admin/{key}", wrapper.GetConfigAsAdmin)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/favorites", wrapper.GetFavorites)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/api/v1/favorites", wrapper.CreateFavorite)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/api/v1/favorites/{id}", wrapper.DeleteFavorite)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/api/v1/favorites/check", wrapper.CheckFavorite)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/api/v1/favorites/toggle", wrapper.ToggleFavorite)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/feedbacks", wrapper.GetFeedbacks)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/api/v1/feedbacks", wrapper.CreateFeedback)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/feedbacks/{id}", wrapper.GetFeedback)
-	})
-	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/files/upload", wrapper.UploadFile)
 	})
 	r.Group(func(r chi.Router) {
@@ -7530,12 +6915,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/health/ready", wrapper.ReadinessProbe)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/me/consents", wrapper.GetMyConsents)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/api/v1/me/consents", wrapper.AgreeConsent)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/notifications", wrapper.GetNotifications)
@@ -7560,24 +6939,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/notifications/unread-count", wrapper.GetUnreadCount)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/regions", wrapper.QueryRegions)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/regions/cities/{provinceCode}", wrapper.GetCities)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/regions/code/{code}", wrapper.GetRegionByCode)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/regions/districts/{cityCode}", wrapper.GetDistricts)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/regions/provinces", wrapper.GetProvinces)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/v1/regions/tree", wrapper.GetRegionTree)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/users", wrapper.GetUsers)
@@ -7629,123 +6990,6 @@ func (resp SimpleHealthCheck200JSONResponse) VisitSimpleHealthCheckResponse(w ht
 	return response.WriteData(w, http.StatusOK, view.HealthCheck(resp))
 }
 
-type GetAddressesRequestObject struct {
-	Params GetAddressesParams
-}
-
-type GetAddressesResponseObject interface {
-	VisitGetAddressesResponse(w http.ResponseWriter) error
-}
-
-type GetAddresses200JSONResponse PaginationAddressResponseDto
-
-func (resp GetAddresses200JSONResponse) VisitGetAddressesResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, PaginationAddressResponseDto(resp))
-}
-
-type CreateAddressRequestObject struct {
-	Body *CreateAddressJSONRequestBody
-}
-
-type CreateAddressResponseObject interface {
-	VisitCreateAddressResponse(w http.ResponseWriter) error
-}
-
-type CreateAddress201JSONResponse Address
-
-func (resp CreateAddress201JSONResponse) VisitCreateAddressResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Address(resp))
-}
-
-type GetDefaultAddressRequestObject struct {
-}
-
-type GetDefaultAddressResponseObject interface {
-	VisitGetDefaultAddressResponse(w http.ResponseWriter) error
-}
-
-type GetDefaultAddress200JSONResponse Address
-
-func (resp GetDefaultAddress200JSONResponse) VisitGetDefaultAddressResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Address(resp))
-}
-
-type DeleteAddressRequestObject struct {
-	Id int32 `json:"id"`
-}
-
-type DeleteAddressResponseObject interface {
-	VisitDeleteAddressResponse(w http.ResponseWriter) error
-}
-
-type DeleteAddress200Response struct {
-	Body any
-}
-
-func (resp DeleteAddress200Response) VisitDeleteAddressResponse(w http.ResponseWriter) error {
-	if resp.Body == nil {
-		return response.WriteOK(w, http.StatusOK)
-	}
-	return response.WriteData(w, http.StatusOK, resp.Body)
-}
-
-type GetAddressRequestObject struct {
-	Id int32 `json:"id"`
-}
-
-type GetAddressResponseObject interface {
-	VisitGetAddressResponse(w http.ResponseWriter) error
-}
-
-type GetAddress200JSONResponse Address
-
-func (resp GetAddress200JSONResponse) VisitGetAddressResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Address(resp))
-}
-
-type UpdateAddressRequestObject struct {
-	Id   int32 `json:"id"`
-	Body *UpdateAddressJSONRequestBody
-}
-
-type UpdateAddressResponseObject interface {
-	VisitUpdateAddressResponse(w http.ResponseWriter) error
-}
-
-type UpdateAddress200JSONResponse Address
-
-func (resp UpdateAddress200JSONResponse) VisitUpdateAddressResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Address(resp))
-}
-
-type SetDefaultAddressRequestObject struct {
-	Id int32 `json:"id"`
-}
-
-type SetDefaultAddressResponseObject interface {
-	VisitSetDefaultAddressResponse(w http.ResponseWriter) error
-}
-
-type SetDefaultAddress200JSONResponse Address
-
-func (resp SetDefaultAddress200JSONResponse) VisitSetDefaultAddressResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Address(resp))
-}
-
-type AdminUpdateAppProfileRequestObject struct {
-	Body *AdminUpdateAppProfileJSONRequestBody
-}
-
-type AdminUpdateAppProfileResponseObject interface {
-	VisitAdminUpdateAppProfileResponse(w http.ResponseWriter) error
-}
-
-type AdminUpdateAppProfile200JSONResponse AppProfile
-
-func (resp AdminUpdateAppProfile200JSONResponse) VisitAdminUpdateAppProfileResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, AppProfile(resp))
-}
-
 type AdminRetriggerAccountCleanupRequestObject struct {
 	Id int32 `json:"id"`
 }
@@ -7763,19 +7007,6 @@ func (resp AdminRetriggerAccountCleanup200Response) VisitAdminRetriggerAccountCl
 		return response.WriteOK(w, http.StatusOK)
 	}
 	return response.WriteData(w, http.StatusOK, resp.Body)
-}
-
-type GetAppProfileRequestObject struct {
-}
-
-type GetAppProfileResponseObject interface {
-	VisitGetAppProfileResponse(w http.ResponseWriter) error
-}
-
-type GetAppProfile200JSONResponse AppProfile
-
-func (resp GetAppProfile200JSONResponse) VisitGetAppProfileResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, AppProfile(resp))
 }
 
 type LoginWithAlipayRequestObject struct {
@@ -8155,166 +7386,6 @@ func (resp LoginWithWechatPhone200JSONResponse) VisitLoginWithWechatPhoneRespons
 	return response.WriteData(w, http.StatusOK, LoginResponseDto(resp))
 }
 
-type GetConfigAsAdminRequestObject struct {
-	Key string `json:"key"`
-}
-
-type GetConfigAsAdminResponseObject interface {
-	VisitGetConfigAsAdminResponse(w http.ResponseWriter) error
-}
-
-type GetConfigAsAdmin200JSONResponse Config
-
-func (resp GetConfigAsAdmin200JSONResponse) VisitGetConfigAsAdminResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Config(resp))
-}
-
-type GetConfigRequestObject struct {
-	Key string `json:"key"`
-}
-
-type GetConfigResponseObject interface {
-	VisitGetConfigResponse(w http.ResponseWriter) error
-}
-
-type GetConfig200JSONResponse Config
-
-func (resp GetConfig200JSONResponse) VisitGetConfigResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Config(resp))
-}
-
-type UpsertConfigRequestObject struct {
-	Key  string `json:"key"`
-	Body *UpsertConfigJSONRequestBody
-}
-
-type UpsertConfigResponseObject interface {
-	VisitUpsertConfigResponse(w http.ResponseWriter) error
-}
-
-type UpsertConfig200JSONResponse Config
-
-func (resp UpsertConfig200JSONResponse) VisitUpsertConfigResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Config(resp))
-}
-
-type GetFavoritesRequestObject struct {
-	Params GetFavoritesParams
-}
-
-type GetFavoritesResponseObject interface {
-	VisitGetFavoritesResponse(w http.ResponseWriter) error
-}
-
-type GetFavorites200JSONResponse PaginationFavoriteItemDtoResponseDto
-
-func (resp GetFavorites200JSONResponse) VisitGetFavoritesResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, PaginationFavoriteItemDtoResponseDto(resp))
-}
-
-type CreateFavoriteRequestObject struct {
-	Body *CreateFavoriteJSONRequestBody
-}
-
-type CreateFavoriteResponseObject interface {
-	VisitCreateFavoriteResponse(w http.ResponseWriter) error
-}
-
-type CreateFavorite201JSONResponse Favorite
-
-func (resp CreateFavorite201JSONResponse) VisitCreateFavoriteResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Favorite(resp))
-}
-
-type CheckFavoriteRequestObject struct {
-	Body *CheckFavoriteJSONRequestBody
-}
-
-type CheckFavoriteResponseObject interface {
-	VisitCheckFavoriteResponse(w http.ResponseWriter) error
-}
-
-type CheckFavorite200JSONResponse CheckFavoriteResponseDto
-
-func (resp CheckFavorite200JSONResponse) VisitCheckFavoriteResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, CheckFavoriteResponseDto(resp))
-}
-
-type ToggleFavoriteRequestObject struct {
-	Body *ToggleFavoriteJSONRequestBody
-}
-
-type ToggleFavoriteResponseObject interface {
-	VisitToggleFavoriteResponse(w http.ResponseWriter) error
-}
-
-type ToggleFavorite200JSONResponse view.FavoriteToggle
-
-func (resp ToggleFavorite200JSONResponse) VisitToggleFavoriteResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, view.FavoriteToggle(resp))
-}
-
-type DeleteFavoriteRequestObject struct {
-	Id int32 `json:"id"`
-}
-
-type DeleteFavoriteResponseObject interface {
-	VisitDeleteFavoriteResponse(w http.ResponseWriter) error
-}
-
-type DeleteFavorite200Response struct {
-	Body any
-}
-
-func (resp DeleteFavorite200Response) VisitDeleteFavoriteResponse(w http.ResponseWriter) error {
-	if resp.Body == nil {
-		return response.WriteOK(w, http.StatusOK)
-	}
-	return response.WriteData(w, http.StatusOK, resp.Body)
-}
-
-type GetFeedbacksRequestObject struct {
-	Params GetFeedbacksParams
-}
-
-type GetFeedbacksResponseObject interface {
-	VisitGetFeedbacksResponse(w http.ResponseWriter) error
-}
-
-type GetFeedbacks200JSONResponse PaginationFeedbackResponseDto
-
-func (resp GetFeedbacks200JSONResponse) VisitGetFeedbacksResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, PaginationFeedbackResponseDto(resp))
-}
-
-type CreateFeedbackRequestObject struct {
-	Body *CreateFeedbackJSONRequestBody
-}
-
-type CreateFeedbackResponseObject interface {
-	VisitCreateFeedbackResponse(w http.ResponseWriter) error
-}
-
-type CreateFeedback201JSONResponse Feedback
-
-func (resp CreateFeedback201JSONResponse) VisitCreateFeedbackResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Feedback(resp))
-}
-
-type GetFeedbackRequestObject struct {
-	Id int32 `json:"id"`
-}
-
-type GetFeedbackResponseObject interface {
-	VisitGetFeedbackResponse(w http.ResponseWriter) error
-}
-
-type GetFeedback200JSONResponse Feedback
-
-func (resp GetFeedback200JSONResponse) VisitGetFeedbackResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Feedback(resp))
-}
-
 type UploadFileRequestObject struct {
 	Params UploadFileParams
 }
@@ -8366,33 +7437,6 @@ type ReadinessProbe200JSONResponse view.Health
 
 func (resp ReadinessProbe200JSONResponse) VisitReadinessProbeResponse(w http.ResponseWriter) error {
 	return response.WriteData(w, http.StatusOK, view.Health(resp))
-}
-
-type GetMyConsentsRequestObject struct {
-}
-
-type GetMyConsentsResponseObject interface {
-	VisitGetMyConsentsResponse(w http.ResponseWriter) error
-}
-
-type GetMyConsents200JSONResponse []ConsentStatusDto
-
-func (resp GetMyConsents200JSONResponse) VisitGetMyConsentsResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, []ConsentStatusDto(resp))
-}
-
-type AgreeConsentRequestObject struct {
-	Body *AgreeConsentJSONRequestBody
-}
-
-type AgreeConsentResponseObject interface {
-	VisitAgreeConsentResponse(w http.ResponseWriter) error
-}
-
-type AgreeConsent200JSONResponse ConsentStatusDto
-
-func (resp AgreeConsent200JSONResponse) VisitAgreeConsentResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, ConsentStatusDto(resp))
 }
 
 type GetNotificationsRequestObject struct {
@@ -8514,88 +7558,6 @@ func (resp MarkNotificationAsRead200JSONResponse) VisitMarkNotificationAsReadRes
 	return response.WriteData(w, http.StatusOK, Notification(resp))
 }
 
-type QueryRegionsRequestObject struct {
-	Params QueryRegionsParams
-}
-
-type QueryRegionsResponseObject interface {
-	VisitQueryRegionsResponse(w http.ResponseWriter) error
-}
-
-type QueryRegions200JSONResponse []Region
-
-func (resp QueryRegions200JSONResponse) VisitQueryRegionsResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, []Region(resp))
-}
-
-type GetCitiesRequestObject struct {
-	ProvinceCode string `json:"provinceCode"`
-}
-
-type GetCitiesResponseObject interface {
-	VisitGetCitiesResponse(w http.ResponseWriter) error
-}
-
-type GetCities200JSONResponse []Region
-
-func (resp GetCities200JSONResponse) VisitGetCitiesResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, []Region(resp))
-}
-
-type GetRegionByCodeRequestObject struct {
-	Code string `json:"code"`
-}
-
-type GetRegionByCodeResponseObject interface {
-	VisitGetRegionByCodeResponse(w http.ResponseWriter) error
-}
-
-type GetRegionByCode200JSONResponse Region
-
-func (resp GetRegionByCode200JSONResponse) VisitGetRegionByCodeResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, Region(resp))
-}
-
-type GetDistrictsRequestObject struct {
-	CityCode string `json:"cityCode"`
-}
-
-type GetDistrictsResponseObject interface {
-	VisitGetDistrictsResponse(w http.ResponseWriter) error
-}
-
-type GetDistricts200JSONResponse []Region
-
-func (resp GetDistricts200JSONResponse) VisitGetDistrictsResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, []Region(resp))
-}
-
-type GetProvincesRequestObject struct {
-}
-
-type GetProvincesResponseObject interface {
-	VisitGetProvincesResponse(w http.ResponseWriter) error
-}
-
-type GetProvinces200JSONResponse []Region
-
-func (resp GetProvinces200JSONResponse) VisitGetProvincesResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, []Region(resp))
-}
-
-type GetRegionTreeRequestObject struct {
-}
-
-type GetRegionTreeResponseObject interface {
-	VisitGetRegionTreeResponse(w http.ResponseWriter) error
-}
-
-type GetRegionTree200JSONResponse []RegionTreeDto
-
-func (resp GetRegionTree200JSONResponse) VisitGetRegionTreeResponse(w http.ResponseWriter) error {
-	return response.WriteData(w, http.StatusOK, []RegionTreeDto(resp))
-}
-
 type GetUsersRequestObject struct {
 	Params GetUsersParams
 }
@@ -8680,36 +7642,9 @@ type StrictServerInterface interface {
 	// SimpleHealthCheck 简单健康检查
 	// (GET /api/health)
 	SimpleHealthCheck(ctx context.Context, request SimpleHealthCheckRequestObject) (SimpleHealthCheckResponseObject, error)
-	// GetAddresses 获取地址列表
-	// (GET /api/v1/addresses)
-	GetAddresses(ctx context.Context, request GetAddressesRequestObject) (GetAddressesResponseObject, error)
-	// CreateAddress 创建地址
-	// (POST /api/v1/addresses)
-	CreateAddress(ctx context.Context, request CreateAddressRequestObject) (CreateAddressResponseObject, error)
-	// GetDefaultAddress 获取默认地址
-	// (GET /api/v1/addresses/default)
-	GetDefaultAddress(ctx context.Context, request GetDefaultAddressRequestObject) (GetDefaultAddressResponseObject, error)
-	// DeleteAddress 删除地址
-	// (DELETE /api/v1/addresses/{id})
-	DeleteAddress(ctx context.Context, request DeleteAddressRequestObject) (DeleteAddressResponseObject, error)
-	// GetAddress 获取地址详情
-	// (GET /api/v1/addresses/{id})
-	GetAddress(ctx context.Context, request GetAddressRequestObject) (GetAddressResponseObject, error)
-	// UpdateAddress 更新地址
-	// (PUT /api/v1/addresses/{id})
-	UpdateAddress(ctx context.Context, request UpdateAddressRequestObject) (UpdateAddressResponseObject, error)
-	// SetDefaultAddress 设为默认地址
-	// (PUT /api/v1/addresses/{id}/default)
-	SetDefaultAddress(ctx context.Context, request SetDefaultAddressRequestObject) (SetDefaultAddressResponseObject, error)
-	// AdminUpdateAppProfile 保存小程序站点信息：整体覆盖，未传或空白的字段保存为未配置（null）
-	// (PUT /api/v1/admin/app-profile)
-	AdminUpdateAppProfile(ctx context.Context, request AdminUpdateAppProfileRequestObject) (AdminUpdateAppProfileResponseObject, error)
 	// AdminRetriggerAccountCleanup 重新触发已注销用户的数据清理；已有清理任务在排队或执行时不重复入队
 	// (POST /api/v1/admin/users/{id}/cleanup)
 	AdminRetriggerAccountCleanup(ctx context.Context, request AdminRetriggerAccountCleanupRequestObject) (AdminRetriggerAccountCleanupResponseObject, error)
-	// GetAppProfile 小程序站点信息，未配置的字段为 null
-	// (GET /api/v1/app-profile)
-	GetAppProfile(ctx context.Context, request GetAppProfileRequestObject) (GetAppProfileResponseObject, error)
 	// LoginWithAlipay 支付宝登录（小程序）
 	// (POST /api/v1/auth/alipay/login)
 	LoginWithAlipay(ctx context.Context, request LoginWithAlipayRequestObject) (LoginWithAlipayResponseObject, error)
@@ -8779,39 +7714,6 @@ type StrictServerInterface interface {
 	// LoginWithWechatPhone 微信手机号快捷登录（小程序）
 	// (POST /api/v1/auth/wechat/phone-login)
 	LoginWithWechatPhone(ctx context.Context, request LoginWithWechatPhoneRequestObject) (LoginWithWechatPhoneResponseObject, error)
-	// GetConfigAsAdmin 获取配置（管理员）
-	// (GET /api/v1/config/admin/{key})
-	GetConfigAsAdmin(ctx context.Context, request GetConfigAsAdminRequestObject) (GetConfigAsAdminResponseObject, error)
-	// GetConfig 获取公开配置
-	// (GET /api/v1/config/{key})
-	GetConfig(ctx context.Context, request GetConfigRequestObject) (GetConfigResponseObject, error)
-	// UpsertConfig 写入配置（管理员）
-	// (PUT /api/v1/config/{key})
-	UpsertConfig(ctx context.Context, request UpsertConfigRequestObject) (UpsertConfigResponseObject, error)
-	// GetFavorites 获取收藏列表，可按类型与科目筛选；题目、试卷附带下架状态
-	// (GET /api/v1/favorites)
-	GetFavorites(ctx context.Context, request GetFavoritesRequestObject) (GetFavoritesResponseObject, error)
-	// CreateFavorite 添加收藏；题目、试卷由服务端校验并写入标题快照与科目，忽略传入的 title、image
-	// (POST /api/v1/favorites)
-	CreateFavorite(ctx context.Context, request CreateFavoriteRequestObject) (CreateFavoriteResponseObject, error)
-	// CheckFavorite 检查是否已收藏
-	// (POST /api/v1/favorites/check)
-	CheckFavorite(ctx context.Context, request CheckFavoriteRequestObject) (CheckFavoriteResponseObject, error)
-	// ToggleFavorite 切换收藏状态
-	// (POST /api/v1/favorites/toggle)
-	ToggleFavorite(ctx context.Context, request ToggleFavoriteRequestObject) (ToggleFavoriteResponseObject, error)
-	// DeleteFavorite 取消收藏
-	// (DELETE /api/v1/favorites/{id})
-	DeleteFavorite(ctx context.Context, request DeleteFavoriteRequestObject) (DeleteFavoriteResponseObject, error)
-	// GetFeedbacks 获取反馈列表
-	// (GET /api/v1/feedbacks)
-	GetFeedbacks(ctx context.Context, request GetFeedbacksRequestObject) (GetFeedbacksResponseObject, error)
-	// CreateFeedback 提交反馈
-	// (POST /api/v1/feedbacks)
-	CreateFeedback(ctx context.Context, request CreateFeedbackRequestObject) (CreateFeedbackResponseObject, error)
-	// GetFeedback 获取反馈详情
-	// (GET /api/v1/feedbacks/{id})
-	GetFeedback(ctx context.Context, request GetFeedbackRequestObject) (GetFeedbackResponseObject, error)
 	// UploadFile 上传文件
 	// (POST /api/v1/files/upload)
 	UploadFile(ctx context.Context, request UploadFileRequestObject) (UploadFileResponseObject, error)
@@ -8824,12 +7726,6 @@ type StrictServerInterface interface {
 	// ReadinessProbe 就绪探针（Kubernetes）
 	// (GET /api/v1/health/ready)
 	ReadinessProbe(ctx context.Context, request ReadinessProbeRequestObject) (ReadinessProbeResponseObject, error)
-	// GetMyConsents 各协议当前版本与同意状态
-	// (GET /api/v1/me/consents)
-	GetMyConsents(ctx context.Context, request GetMyConsentsRequestObject) (GetMyConsentsResponseObject, error)
-	// AgreeConsent 同意协议的当前版本，重复同意同一版本保留首次记录
-	// (POST /api/v1/me/consents)
-	AgreeConsent(ctx context.Context, request AgreeConsentRequestObject) (AgreeConsentResponseObject, error)
 	// GetNotifications 获取通知列表
 	// (GET /api/v1/notifications)
 	GetNotifications(ctx context.Context, request GetNotificationsRequestObject) (GetNotificationsResponseObject, error)
@@ -8854,24 +7750,6 @@ type StrictServerInterface interface {
 	// MarkNotificationAsRead 标记通知为已读
 	// (POST /api/v1/notifications/{id}/read)
 	MarkNotificationAsRead(ctx context.Context, request MarkNotificationAsReadRequestObject) (MarkNotificationAsReadResponseObject, error)
-	// QueryRegions 查询地区（支持按级别、父级代码、关键词搜索）
-	// (GET /api/v1/regions)
-	QueryRegions(ctx context.Context, request QueryRegionsRequestObject) (QueryRegionsResponseObject, error)
-	// GetCities 获取指定省份下的城市
-	// (GET /api/v1/regions/cities/{provinceCode})
-	GetCities(ctx context.Context, request GetCitiesRequestObject) (GetCitiesResponseObject, error)
-	// GetRegionByCode 根据 code 获取地区详情
-	// (GET /api/v1/regions/code/{code})
-	GetRegionByCode(ctx context.Context, request GetRegionByCodeRequestObject) (GetRegionByCodeResponseObject, error)
-	// GetDistricts 获取指定城市下的区县
-	// (GET /api/v1/regions/districts/{cityCode})
-	GetDistricts(ctx context.Context, request GetDistrictsRequestObject) (GetDistrictsResponseObject, error)
-	// GetProvinces 获取所有省份
-	// (GET /api/v1/regions/provinces)
-	GetProvinces(ctx context.Context, request GetProvincesRequestObject) (GetProvincesResponseObject, error)
-	// GetRegionTree 获取完整的省市区树形结构
-	// (GET /api/v1/regions/tree)
-	GetRegionTree(ctx context.Context, request GetRegionTreeRequestObject) (GetRegionTreeResponseObject, error)
 	// GetUsers 获取用户列表（管理员）
 	// (GET /api/v1/users)
 	GetUsers(ctx context.Context, request GetUsersRequestObject) (GetUsersResponseObject, error)
@@ -8976,229 +7854,6 @@ func (sh *strictHandler) SimpleHealthCheck(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// GetAddresses operation middleware
-func (sh *strictHandler) GetAddresses(w http.ResponseWriter, r *http.Request, params GetAddressesParams) {
-	var request GetAddressesRequestObject
-
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetAddresses(ctx, request.(GetAddressesRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetAddresses")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetAddressesResponseObject); ok {
-		if err := validResponse.VisitGetAddressesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// CreateAddress operation middleware
-func (sh *strictHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
-	var request CreateAddressRequestObject
-
-	var body CreateAddressJSONRequestBody
-	if err := runtime.BindJSONBody(r, &body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateAddress(ctx, request.(CreateAddressRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateAddress")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateAddressResponseObject); ok {
-		if err := validResponse.VisitCreateAddressResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetDefaultAddress operation middleware
-func (sh *strictHandler) GetDefaultAddress(w http.ResponseWriter, r *http.Request) {
-	var request GetDefaultAddressRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetDefaultAddress(ctx, request.(GetDefaultAddressRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetDefaultAddress")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetDefaultAddressResponseObject); ok {
-		if err := validResponse.VisitGetDefaultAddressResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DeleteAddress operation middleware
-func (sh *strictHandler) DeleteAddress(w http.ResponseWriter, r *http.Request, id int32) {
-	var request DeleteAddressRequestObject
-
-	request.Id = id
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteAddress(ctx, request.(DeleteAddressRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteAddress")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteAddressResponseObject); ok {
-		if err := validResponse.VisitDeleteAddressResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetAddress operation middleware
-func (sh *strictHandler) GetAddress(w http.ResponseWriter, r *http.Request, id int32) {
-	var request GetAddressRequestObject
-
-	request.Id = id
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetAddress(ctx, request.(GetAddressRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetAddress")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetAddressResponseObject); ok {
-		if err := validResponse.VisitGetAddressResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpdateAddress operation middleware
-func (sh *strictHandler) UpdateAddress(w http.ResponseWriter, r *http.Request, id int32) {
-	var request UpdateAddressRequestObject
-
-	request.Id = id
-
-	var body UpdateAddressJSONRequestBody
-	if err := runtime.BindJSONBody(r, &body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateAddress(ctx, request.(UpdateAddressRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdateAddress")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UpdateAddressResponseObject); ok {
-		if err := validResponse.VisitUpdateAddressResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// SetDefaultAddress operation middleware
-func (sh *strictHandler) SetDefaultAddress(w http.ResponseWriter, r *http.Request, id int32) {
-	var request SetDefaultAddressRequestObject
-
-	request.Id = id
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.SetDefaultAddress(ctx, request.(SetDefaultAddressRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "SetDefaultAddress")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(SetDefaultAddressResponseObject); ok {
-		if err := validResponse.VisitSetDefaultAddressResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// AdminUpdateAppProfile operation middleware
-func (sh *strictHandler) AdminUpdateAppProfile(w http.ResponseWriter, r *http.Request) {
-	var request AdminUpdateAppProfileRequestObject
-
-	var body AdminUpdateAppProfileJSONRequestBody
-	if err := runtime.BindJSONBody(r, &body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.AdminUpdateAppProfile(ctx, request.(AdminUpdateAppProfileRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "AdminUpdateAppProfile")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(AdminUpdateAppProfileResponseObject); ok {
-		if err := validResponse.VisitAdminUpdateAppProfileResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // AdminRetriggerAccountCleanup operation middleware
 func (sh *strictHandler) AdminRetriggerAccountCleanup(w http.ResponseWriter, r *http.Request, id int32) {
 	var request AdminRetriggerAccountCleanupRequestObject
@@ -9218,30 +7873,6 @@ func (sh *strictHandler) AdminRetriggerAccountCleanup(w http.ResponseWriter, r *
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AdminRetriggerAccountCleanupResponseObject); ok {
 		if err := validResponse.VisitAdminRetriggerAccountCleanupResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetAppProfile operation middleware
-func (sh *strictHandler) GetAppProfile(w http.ResponseWriter, r *http.Request) {
-	var request GetAppProfileRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetAppProfile(ctx, request.(GetAppProfileRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetAppProfile")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetAppProfileResponseObject); ok {
-		if err := validResponse.VisitGetAppProfileResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -9922,319 +8553,6 @@ func (sh *strictHandler) LoginWithWechatPhone(w http.ResponseWriter, r *http.Req
 	}
 }
 
-// GetConfigAsAdmin operation middleware
-func (sh *strictHandler) GetConfigAsAdmin(w http.ResponseWriter, r *http.Request, key string) {
-	var request GetConfigAsAdminRequestObject
-
-	request.Key = key
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetConfigAsAdmin(ctx, request.(GetConfigAsAdminRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetConfigAsAdmin")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetConfigAsAdminResponseObject); ok {
-		if err := validResponse.VisitGetConfigAsAdminResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetConfig operation middleware
-func (sh *strictHandler) GetConfig(w http.ResponseWriter, r *http.Request, key string) {
-	var request GetConfigRequestObject
-
-	request.Key = key
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetConfig(ctx, request.(GetConfigRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetConfig")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetConfigResponseObject); ok {
-		if err := validResponse.VisitGetConfigResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpsertConfig operation middleware
-func (sh *strictHandler) UpsertConfig(w http.ResponseWriter, r *http.Request, key string) {
-	var request UpsertConfigRequestObject
-
-	request.Key = key
-
-	var body UpsertConfigJSONRequestBody
-	if err := runtime.BindJSONBody(r, &body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UpsertConfig(ctx, request.(UpsertConfigRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpsertConfig")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UpsertConfigResponseObject); ok {
-		if err := validResponse.VisitUpsertConfigResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetFavorites operation middleware
-func (sh *strictHandler) GetFavorites(w http.ResponseWriter, r *http.Request, params GetFavoritesParams) {
-	var request GetFavoritesRequestObject
-
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetFavorites(ctx, request.(GetFavoritesRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetFavorites")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetFavoritesResponseObject); ok {
-		if err := validResponse.VisitGetFavoritesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// CreateFavorite operation middleware
-func (sh *strictHandler) CreateFavorite(w http.ResponseWriter, r *http.Request) {
-	var request CreateFavoriteRequestObject
-
-	var body CreateFavoriteJSONRequestBody
-	if err := runtime.BindJSONBody(r, &body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateFavorite(ctx, request.(CreateFavoriteRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateFavorite")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateFavoriteResponseObject); ok {
-		if err := validResponse.VisitCreateFavoriteResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// CheckFavorite operation middleware
-func (sh *strictHandler) CheckFavorite(w http.ResponseWriter, r *http.Request) {
-	var request CheckFavoriteRequestObject
-
-	var body CheckFavoriteJSONRequestBody
-	if err := runtime.BindJSONBody(r, &body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CheckFavorite(ctx, request.(CheckFavoriteRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CheckFavorite")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CheckFavoriteResponseObject); ok {
-		if err := validResponse.VisitCheckFavoriteResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ToggleFavorite operation middleware
-func (sh *strictHandler) ToggleFavorite(w http.ResponseWriter, r *http.Request) {
-	var request ToggleFavoriteRequestObject
-
-	var body ToggleFavoriteJSONRequestBody
-	if err := runtime.BindJSONBody(r, &body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ToggleFavorite(ctx, request.(ToggleFavoriteRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ToggleFavorite")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ToggleFavoriteResponseObject); ok {
-		if err := validResponse.VisitToggleFavoriteResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DeleteFavorite operation middleware
-func (sh *strictHandler) DeleteFavorite(w http.ResponseWriter, r *http.Request, id int32) {
-	var request DeleteFavoriteRequestObject
-
-	request.Id = id
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteFavorite(ctx, request.(DeleteFavoriteRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteFavorite")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteFavoriteResponseObject); ok {
-		if err := validResponse.VisitDeleteFavoriteResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetFeedbacks operation middleware
-func (sh *strictHandler) GetFeedbacks(w http.ResponseWriter, r *http.Request, params GetFeedbacksParams) {
-	var request GetFeedbacksRequestObject
-
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetFeedbacks(ctx, request.(GetFeedbacksRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetFeedbacks")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetFeedbacksResponseObject); ok {
-		if err := validResponse.VisitGetFeedbacksResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// CreateFeedback operation middleware
-func (sh *strictHandler) CreateFeedback(w http.ResponseWriter, r *http.Request) {
-	var request CreateFeedbackRequestObject
-
-	var body CreateFeedbackJSONRequestBody
-	if err := runtime.BindJSONBody(r, &body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateFeedback(ctx, request.(CreateFeedbackRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateFeedback")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateFeedbackResponseObject); ok {
-		if err := validResponse.VisitCreateFeedbackResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetFeedback operation middleware
-func (sh *strictHandler) GetFeedback(w http.ResponseWriter, r *http.Request, id int32) {
-	var request GetFeedbackRequestObject
-
-	request.Id = id
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetFeedback(ctx, request.(GetFeedbackRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetFeedback")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetFeedbackResponseObject); ok {
-		if err := validResponse.VisitGetFeedbackResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // UploadFile operation middleware
 func (sh *strictHandler) UploadFile(w http.ResponseWriter, r *http.Request, params UploadFileParams) {
 	var request UploadFileRequestObject
@@ -10326,61 +8644,6 @@ func (sh *strictHandler) ReadinessProbe(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReadinessProbeResponseObject); ok {
 		if err := validResponse.VisitReadinessProbeResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetMyConsents operation middleware
-func (sh *strictHandler) GetMyConsents(w http.ResponseWriter, r *http.Request) {
-	var request GetMyConsentsRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetMyConsents(ctx, request.(GetMyConsentsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetMyConsents")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetMyConsentsResponseObject); ok {
-		if err := validResponse.VisitGetMyConsentsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// AgreeConsent operation middleware
-func (sh *strictHandler) AgreeConsent(w http.ResponseWriter, r *http.Request) {
-	var request AgreeConsentRequestObject
-
-	var body AgreeConsentJSONRequestBody
-	if err := runtime.BindJSONBody(r, &body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.AgreeConsent(ctx, request.(AgreeConsentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "AgreeConsent")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(AgreeConsentResponseObject); ok {
-		if err := validResponse.VisitAgreeConsentResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -10588,158 +8851,6 @@ func (sh *strictHandler) MarkNotificationAsRead(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(MarkNotificationAsReadResponseObject); ok {
 		if err := validResponse.VisitMarkNotificationAsReadResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// QueryRegions operation middleware
-func (sh *strictHandler) QueryRegions(w http.ResponseWriter, r *http.Request, params QueryRegionsParams) {
-	var request QueryRegionsRequestObject
-
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.QueryRegions(ctx, request.(QueryRegionsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "QueryRegions")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(QueryRegionsResponseObject); ok {
-		if err := validResponse.VisitQueryRegionsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetCities operation middleware
-func (sh *strictHandler) GetCities(w http.ResponseWriter, r *http.Request, provinceCode string) {
-	var request GetCitiesRequestObject
-
-	request.ProvinceCode = provinceCode
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetCities(ctx, request.(GetCitiesRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetCities")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetCitiesResponseObject); ok {
-		if err := validResponse.VisitGetCitiesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetRegionByCode operation middleware
-func (sh *strictHandler) GetRegionByCode(w http.ResponseWriter, r *http.Request, code string) {
-	var request GetRegionByCodeRequestObject
-
-	request.Code = code
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetRegionByCode(ctx, request.(GetRegionByCodeRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetRegionByCode")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetRegionByCodeResponseObject); ok {
-		if err := validResponse.VisitGetRegionByCodeResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetDistricts operation middleware
-func (sh *strictHandler) GetDistricts(w http.ResponseWriter, r *http.Request, cityCode string) {
-	var request GetDistrictsRequestObject
-
-	request.CityCode = cityCode
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetDistricts(ctx, request.(GetDistrictsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetDistricts")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetDistrictsResponseObject); ok {
-		if err := validResponse.VisitGetDistrictsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetProvinces operation middleware
-func (sh *strictHandler) GetProvinces(w http.ResponseWriter, r *http.Request) {
-	var request GetProvincesRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetProvinces(ctx, request.(GetProvincesRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetProvinces")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetProvincesResponseObject); ok {
-		if err := validResponse.VisitGetProvincesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetRegionTree operation middleware
-func (sh *strictHandler) GetRegionTree(w http.ResponseWriter, r *http.Request) {
-	var request GetRegionTreeRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetRegionTree(ctx, request.(GetRegionTreeRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetRegionTree")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetRegionTreeResponseObject); ok {
-		if err := validResponse.VisitGetRegionTreeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
