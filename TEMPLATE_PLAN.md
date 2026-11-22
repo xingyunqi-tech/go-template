@@ -119,8 +119,8 @@ UUID 类型：标准库 `uuid.UUID`（`[16]byte`）没有 `sql.Scanner` / `drive
 
 做法：
 
-- `openapi/src/openapi.yaml`（根文档）+ `openapi/src/paths/<module>.yaml` + `openapi/src/schemas/<module>.yaml`；公共部分 `openapi/src/common.yaml`：`ErrorResponse`、`ValidationErrorResponse`、分页、`bearerAuth`、`Accept-Language` / `Idempotency-Key` 参数
-- 成功响应在源文件中写 `x-envelope: true` + 数据 schema，`tools/openapigen bundle` 展开为约定 §2.1 的信封 schema（`<Name>Envelope`）并解析外部 `$ref`，输出排序稳定的 `openapi/openapi.json`（入库，保留 `components` 引用）
+- `openapi/src/openapi.yaml`（根文档，含 `bearerAuth`）+ `openapi/src/paths/<module>.yaml` + `openapi/src/schemas/<module>.yaml`；公共部分 `openapi/src/common.yaml`：`ErrorResponse`、`ValidationErrorResponse`（422 共用：`data` 为字段列表或 null）、分页与 `Idempotency-Key` 参数、公共错误响应。除根文档外，各文件只含 `paths` 与 `components`，`$ref` 一律为文档内引用
+- 成功响应在源文件中写 `x-envelope: true` + 数据 schema，`tools/openapigen` 合并各文件（同名 path 或 component 报错）后展开为约定 §2.1 的信封 schema（`<Name>Envelope`；数组 `<Name>ListEnvelope`；`type: 'null'` 为 `NullEnvelope`），并为每个 `/api` 操作补上未声明的 429（`TooManyRequests`）与 503（`ServiceUnavailable`），输出排序稳定的 `openapi/openapi.json`（入库，保留 `components` 引用）
 - bundler 另输出全内联、无 `$ref` 的校验文档 `internal/controller/http/validation.json`（生成文件，embed），供 `openapi3filter` 使用，使所有 schema 走同一个校验器、产生同一种错误结构（§17）
 - `make generate` = bundle → oapi-codegen → sqlc → mockgen；生成结果入库，`scripts/check-generated.sh` 的列表包含 `openapi/openapi.json` 与校验文档
 - 运行时 `GET /openapi.json` 用 `embed` 返回 `openapi/openapi.json`，`GET /docs` 为 Scalar；`DOCS_ENABLED` 控制（约定 §1）
@@ -352,9 +352,9 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 | `session` | user_id、refresh_hash、auth_time、expires_at、revoked_at、user_agent、ip、last_active_at | identity |
 | `session_refresh_history` | refresh_hash（主键）、session_id、rotated_at | identity |
 | `user_token` | user_id、purpose（`email_verify` / `password_reset`）、token_hash、expires_at、used_at、invalidated_at | identity |
-| `file` | owner_sub、purpose、name、content_type、size、sha256、storage、object_key、deleted_at | core |
-| `audit_log` | actor_sub、action、resource_type、resource_id、request_id、ip、data（jsonb） | core |
-| `note` | owner_sub、title、content、deleted_at | core |
+| `file` | owner_sub、purpose、name、content_type、size、sha256、storage、object_key、deleted_at | core（B5 加入） |
+| `audit_log` | actor_sub、action、resource_type、resource_id、request_id、ip、data（jsonb） | core（`00001`） |
+| `note` | owner_sub、title、content、deleted_at | core（`00002`） |
 | River 表 | `rivermigrate` 管理 | — |
 
 - `User` 由 `app_user` + `user_role` 组装：`emailVerified` = `email_verified_at IS NOT NULL`，`hasPassword` = `password_hash IS NOT NULL`，`avatarUrl` 由 `avatar_file_id` 生成签名地址
@@ -385,12 +385,12 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 | 日志 | 约定 §8 字段；访问日志每请求一条，`route` 取路由模板；`ReplaceAttr` 删除 `Authorization`、令牌、密码、验证码字段，邮箱 / 手机号按约定掩码；`LOG_FORMAT=text` 用于本地 |
 | OTel 初始化 | `pkg/tracing`（改名 `pkg/telemetry`）：resource 用 `resource.WithFromEnv`（读 `OTEL_SERVICE_NAME`、`OTEL_RESOURCE_ATTRIBUTES`）；trace / log exporter 由 `autoexport` 按 `OTEL_TRACES_EXPORTER`、`OTEL_LOGS_EXPORTER` 与 `OTEL_EXPORTER_OTLP_*` 构造，不再有自定义开关与 endpoint 覆盖；`OTEL_SDK_DISABLED=true` 全部关闭；新增 MeterProvider |
 | 指标 | `OTEL_METRICS_EXPORTER=prometheus`（默认）：OTel Prometheus exporter + `promhttp` 在 `/metrics` 提供（`METRICS_TOKEN` Bearer，或设 `METRICS_PORT` 走独立端口）；`otlp`：推送，不挂载 `/metrics`。HTTP 指标来自 otelhttp，`http.route` 由操作查找设置的 `r.Pattern` 提供；River 指标来自 otelriver；pgx 指标来自 otelpgx。名称与标签按约定 §8 |
-| worker 指标 | `worker` 进程在 `prometheus` 模式下于 `WORKER_METRICS_PORT` 提供 `/metrics` |
-| 健康 | `/health/live` 总是 200；`/health/ready` 检查 Postgres、Redis（已配置时），不检查第三方与 JWKS，失败 503 + `Retry-After`；停机期间 ready 返回 503 |
+| worker 指标 | `worker` 进程在 `prometheus` 模式下于 `WORKER_METRICS_PORT` 提供 `/metrics`（`METRICS_TOKEN` 设置时校验）；未注册任何任务时 worker 只保持运行，不启动 River 客户端（River 要求至少一个 worker），B3 起随任务启用 |
+| 健康 | `/health/live` 总是 200 `{status: "ok"}`；`/health/ready` 检查 Postgres、Redis（已配置时），不检查第三方与 JWKS，返回 `{status, checks: {database, redis}}`，失败 503 + `Retry-After`；停机期间 ready 返回 503 |
 | Redis 键 | 只有 `auth:revoked:sid:` 与 `rl:` 按约定原样使用，其余（缓存、锁、短信、幂等、宽限期暂存）一律带 `{OTEL_SERVICE_NAME}:` 前缀 |
 | 缓存 / 锁 | 普通字符串 / JSON 值；锁 `SET NX PX` + Lua 比较 token 释放；Redis 未配置时进程内实现 |
 | 限流 | `pkg/ratelimit`：GCRA Lua 脚本内用 `TIME` 取 now，键与值按约定 §7；脚本两种模式：`consume`（判定并写入）与 `peek`（只判定不写入，用于只计失败的规则在校验前检查是否已超限）；`Reset(key)` 用于成功后清除。共享规则按约定 §11.6；私有规则 `{OTEL_SERVICE_NAME}-ip`（IP，300 次 / 分钟，突发 100，所有 `/api/v1`）与 `{OTEL_SERVICE_NAME}-user`（用户，120 次 / 分钟，突发 60，已登录请求），键为 `rl:{规则名}:{主体}`；Redis 出错时共享规则 503、私有规则放行；`RATE_LIMIT_ENABLED=false` 只用于测试 |
-| 幂等键 | spec 中声明 `Idempotency-Key` 参数的 operation 启用；键 `{service}:idem:{u:sub 或 ip:IP}:{method}:{实际请求路径}:{key}` 存请求体 SHA-256 与处理状态；首次结果为 2xx / 4xx 时保存状态码与响应体 24 小时，5xx 删除该键；进行中 409 `common.idempotencyInProgress`，请求体不同 422 `common.idempotencyKeyMismatch` |
+| 幂等键 | spec 中声明 `Idempotency-Key` 参数的 operation 启用；键 `{service}:idem:{u:sub 或 ip:IP}:{method}:{实际请求路径}:{key}` 存请求体 SHA-256 与处理状态；进行中的占位带请求自己的 owner 标识，TTL 为 `max(SHUTDOWN_TIMEOUT, HTTP 写超时) + 30s`（经验上限：写超时不取消处理器，处理器运行更久时占位会过期，同键重试会再次执行；处理器截止时间随 B6 的请求超时与 `statement_timeout` 一起确定），保存与删除只对 owner 仍持有的占位生效；首次结果为 2xx / 4xx 时保存状态码与响应体 24 小时（保存失败时占位留到过期），5xx 删除该键；进行中 409 `common.idempotencyInProgress`，请求体不同 422 `common.idempotencyKeyMismatch` |
 | 队列 | River：`mail`、`account`、`default`；默认 5 次尝试、指数退避；事务内 `InsertTx` |
 | 定时任务 | River 周期任务（leader 选举）：清理过期会话及其 refresh 历史、过期 `user_token`、`AUDIT_RETENTION` 之前的审计日志、账号注销补偿扫描 |
 | 账号注销 | `deleteMe` / `deleteUser`：同事务做最后管理员检查（§6.5）、软删用户、删除第三方身份、吊销全部会话、入队 `account.purge`（延时 `ACCOUNT_DELETION_GRACE`，River 唯一任务按 user_id 去重）；任务依次调用登记的 `Purger`（文件、笔记、审计匿名化、身份），全部成功后物理删除用户并经 `events.Publisher` 发布 `user.deleted`（CloudEvents 1.0 JSON）；补偿扫描重新入队超期未清理的用户 |
@@ -515,15 +515,15 @@ CI 不再访问 nestjs-template 与 fastapi-temp。
 | B1 | `scripts/bench/{run.sh,auth.js}`、`docs/benchmark.md` | nestjs 对比压测，B6 重写 |
 | B1 | `seeds/seed.json` 的 `config` 段、`queries/seed.sql` 的 `SeedConfig`、`internal/repo/postgres/seed.go` 的配置写入 | `appconfig` 删除后无读取方 |
 | B1 | `pkg/pagination.{LazyTotal,OffsetLimit}` | 调用方只有 address、favorite、feedback |
-| B2 | `internal/usecase/{alert,notification,accountcleanup}/` 与 mocks、`internal/entity/{alert,notification}.go`、`internal/worker/notification.go`、`v1/{notifications,account_cleanup}.go`、`v1/view/notification*.go`、`internal/repo/postgres/{alerts,notifications,account_cleanups}.go` 与 queries、`internal/app/{notifications,notification_delivery,infra}_*test.go`、`internal/worker/worker_internal_test.go` 中告警用例 | 与 alert 注入、`metrics.AlertLevel`、`EnqueueNotification` 一起移除 |
+| B2 | `internal/usecase/{alert,notification,accountcleanup}/` 与 mocks、`internal/entity/{alert,notification}.go`、`internal/worker/notification.go`、`v1/{notifications,account_cleanup}.go`、`v1/view/notification*.go`、`internal/repo/postgres/{alerts,notifications,account_cleanups}.go` 与 queries、`internal/app/{notifications,notification_delivery,infra}_*test.go`、`internal/worker/worker_internal_test.go` 中告警与清理用例、`internal/worker/schedule.go`、`internal/repo/postgres/{maintenance.go,infra_integration_test.go}`、`internal/app/{integrations,jobs}.go`、`internal/app/jobs_integration_test.go` 、`internal/metrics/`（由 OTel 指标替代）、`internal/app/throttle.go`、`internal/app/worker_metrics_internal_test.go` | 与 alert 注入、`metrics` 告警计数、`repo.{Jobs,Alerts,AccountCleanups,Maintenance}` 端口一起移除；worker 只留 River 客户端骨架（`default` 队列、任务计数中间件），B3 起按 §8 加队列与周期任务 |
 | B2 | `openapi/{nestjs-baseline.json,validation.json,SOURCE,nest_handlers.json,overlay.yaml,scope.yaml}`、`openapi/templates/` | 由 `openapi/src/` 与 bundler 替代 |
-| B2 | `pkg/validatorx/`、`.golangci.yml` 中 `pkg/validatorx/` 排除项、`tests/contract/{validation_test.go,unimplemented_test.go,fixtures/}` | 由 `openapi3filter` 替代 |
-| B2 | `internal/controller/http/{operation.go,routing.go,upload.go}`、`httperr/translate.go`、`v1/{send,input,home}.go`、`v1/view/{home,health}*.go` | Express 语义、multer 语义、nestjs 信封与过滤器 |
-| B2 | `db/`、`internal/app/migrate.go` 的 `CheckSchema`、`internal/config/groups.go` 的 `DB_SCHEMA_OWNER`、`internal/app/app_integration_test.go` 的 `TestMigrationsMatchNestjsSchemaSnapshot`、`internal/testutil/schema.go`、`.dockerignore` 的 `!db/`、`_typos.toml` 的排除项 | nestjs 结构快照 |
+| B2 | `pkg/validatorx/`、`.golangci.yml` 中 `pkg/validatorx/` 排除项、`tests/contract/{validation_test.go,unimplemented_test.go,fixtures/}`、`tests/e2e/probes_test.go` | 由 `openapi3filter` 替代 |
+| B2 | `internal/controller/http/{operation.go,routing.go,upload.go}`、`httperr/translate.go`、`v1/{send,input,home}.go`、`v1/view/{home,health}*.go` 、旧 `controller/http` 包其余文件（`guard`、`throttle`、`observe`、`docs`、`audit`、`tx` 等）与 `v1/view/` | Express 语义、multer 语义、nestjs 信封与过滤器 |
+| B2 | `db/`、`internal/app/migrate.go` 的 `CheckSchema`、`internal/config/groups.go` 的 `DB_SCHEMA_OWNER`、`internal/app/app_integration_test.go` 的 `TestMigrationsMatchNestjsSchemaSnapshot`、`internal/testutil/schema.go`、`.dockerignore` 的 `!db/`、`_typos.toml` 的排除项 、`internal/config/{groups,infra,integrations}.go`（短信、微信、支付宝、文件、邮件变量随 B3–B5 的功能重新加入）、`pkg/postgres` 的 TLS 选项（`DATABASE_URL` 的 `sslmode` 等参数由 pgx 解析） | nestjs 结构快照 |
 | B2 | `migrations/00001_initial_schema.sql` | 由 `migrations/{core,identity}/` 替代 |
-| B2 | v1 身份代码：`v1/{auth,phone_auth,users,files}.go`、`v1/view/user*.go`、`internal/usecase/{auth,user,session,permission,sms,file}/` 与 mocks、`internal/entity/{user,permission,social,jobs}.go`、`internal/repo/postgres/{users,sessions,user_bindings,files,seed}.go` 与 `queries/{users,sessions,user_bindings,files,permissions,seed}.sql`、`internal/app/{phone_auth,files,superuser}_integration_test.go`、`internal/app/cleanup_internal_test.go` | 依赖旧表结构；按新模型在 B3–B5 重写（git 历史可查） |
+| B2 | v1 身份代码：`v1/{auth,phone_auth,users,files}.go`、`v1/view/user*.go`、`internal/usecase/{auth,user,session,permission,sms,file}/` 与 mocks、`internal/entity/{user,permission,jobs}.go`、`internal/repo/postgres/{users,sessions,user_bindings,files,seed}.go` 与 `queries/{users,sessions,user_bindings,files,permissions,seed}.sql`、`internal/app/{phone_auth,files,superuser,shutdown}_integration_test.go`、`internal/app/cleanup_internal_test.go`、`internal/controller/http/upload.go`、`v1/{input,send}.go`，`reqctx` 的主体 / 客户端 / 上传、`guard.go` 的 JWT 与权限守卫 | 依赖旧表结构；按新模型在 B3–B5 重写（git 历史可查）。`entity/social.go` 被保留到 B4 的 `webapi/{sms,wechat,alipay}` 引用，随其在 B4 删除；`shutdown_integration_test.go` 依赖上传接口保持请求在途，notes 步骤用慢速请求体的 `createNote` 重写 |
 | B2 | `internal/repo/webapi/mail/`、`templates/mail/*.hbs`、`templates/templates.go`、`tests/fixtures/nestjs_mail/`、`internal/i18n/locales/{zh,en}/*.json` | 邮件无调用方后整体移除，B3 重建 |
-| B2 | `cmd/modulegen/`、`templates/module/` | 读取 nestjs 基线与 `scope.yaml`；B6 重写 |
+| B2 | `cmd/modulegen/`、`templates/module/`、Makefile `module` 目标 | 读取 nestjs 基线与 `scope.yaml`；B6 重写 |
 | B2 | `pkg/msduration/` | 唯一调用方 `internal/config/groups.go` 同批改写 |
 | B2 | `cmd/app` 的 `permissions clear-cache`、`createsuperuser`（依赖 `validatorx.IsEmail`、`app.ClearPermissionCache`） | `createsuperuser` 在 B3 重建 |
 | B2 | `tests/e2e/auth_test.go` | B3 重写 |
@@ -544,35 +544,36 @@ CI 不再访问 nestjs-template 与 fastapi-temp。
 | B1 | `README.md`、`docs/{architecture,cli,contract,database,deploy,testing}.md` | 删除指向 B1 已删模块、脚本、Make 目标、parity、drift、region / config 种子的内容；其余按 §14.5 在 B2 / B6 更新 |
 | B2 | `openapi/` | 新建 `src/`、`openapi.json`；`oapi-codegen.yaml` 去掉 include-operation-ids / overlay / user-templates，加 uuid 类型映射；`openapi.go` embed 新文件 |
 | B2 | `tools/openapigen`、`tools/go.mod` | bundler（展开 `x-envelope`、输出入库文档与全内联校验文档）；kin-openapi 0.153.0 |
-| B2 | `internal/controller/http/{router,middleware,pipeline,policy,guard,throttle,tx,audit,observe,docs}.go` | §5.2 中间件链、操作表、policy 字段（去掉只剩测试使用的 `Params`）、校验适配器与格式注册、幂等键、`/openapi.json` 与 Scalar |
+| B2 | `internal/controller/http/{router,operations,middleware,pipeline,auth,ratelimit,validate,execute,ops,policy}.go` | §5.2 中间件链（otelhttp 的 `http.route` 来自操作查找写入的 `r.Pattern`）、由校验文档建的操作表（缺 policy、缺处理器、policy 用到按账号或会话计数的规则时启动失败）、policy 字段、校验适配器与格式注册、限流（`X-RateLimit-*` 取最紧的规则）、幂等键、事务与审计（三者缓冲响应，提交后才发出）、ops 路由；`Options.MeterProvider` 供测试注入；`v1.Register` 挂载生成的处理器 |
 | B2 | `internal/controller/http/{httperr,response}/` | 约定 §2 信封、码表、401 头 |
 | B2 | `internal/controller/http/reqctx/` | 去掉对 `validatorx`、`usecase/auth`、`usecase/file` 的引用，只保留请求 ID、语言、主体、操作 |
 | B2 | `internal/entity/errors.go` | 约定 §2.4 码表；删除已无生产调用方的 `NewBusinessError` 与 `httperr` 业务键表 |
 | B2 | `internal/usecase/health/`（含 `disk*.go` 删除磁盘检查）、`v1/{health,server}.go`、`internal/repo/postgres/{db,health,jobs,maintenance,audits}.go`、`internal/repo/contracts.go` 与 `internal/repo/mocks/` | ready 检查项；生成接口实现入口；事务与 River 入队（去掉通知 / 清理任务）；周期清理 SQL；审计按新表写入；端口按新模型重写 |
 | B2 | `internal/i18n/` | go-i18n bundle，`locales/{zh,en}.json` 按 errorKey 与 `validation.<rule>` 组织 |
-| B2 | `internal/metrics/`、`internal/app/{observability,worker_metrics,throttle,worker,app,infra,jobs,migrate,seed}.go`、`internal/worker/worker.go` | OTel meter 与 `OTEL_METRICS_EXPORTER`；otelriver；去掉 alert / notification / accountcleanup 注入；迁移流程（§7.3） |
+| B2 | `internal/app/{observability,worker_metrics,worker,app,infra,migrate,seed,auth}.go`、`internal/worker/worker.go` | OTel meter 与 `OTEL_METRICS_EXPORTER`；otelriver；去掉 alert / notification / accountcleanup 注入；迁移流程（§7.3） |
 | B2 | `pkg/tracing` → `pkg/telemetry` | §8「OTel 初始化」 |
 | B2 | `internal/config/` | 约定 §9 变量与 §10 本服务变量；时长用 `time.ParseDuration` |
 | B2 | `internal/repo/redis/{cache,lock}.go` | 去掉 Keyv 格式，键加 `{service}:` 前缀 |
 | B2 | `internal/testutil/{postgres,database}.go` | 镜像 18.7；按 `DATABASE_SCHEMA` 与两个 provider 迁移 |
 | B2 | `migrations/migrations.go`、`seeds/seed.json`、`seeds/seeds.go` | 两个目录的 embed；演示账号定义 |
-| B2 | `pkg/{ratelimit,logger,pagination,jsontime,jwtx}` | 约定 §7 键值、Redis `TIME`、`peek`；约定 §8 字段与脱敏；页码 + 游标；毫秒格式；jwx 验签（签发在 B3）；`pagination` 删除无调用方的 `NewInfinity` |
+| B2 | `pkg/{ratelimit,logger,pagination,jsontime,jwtx}` | 约定 §7 键值、Redis `TIME`、`peek`、共享规则表 `ratelimit.Shared()`；约定 §8 字段与脱敏；页码 + 游标；毫秒格式；jwx 验签与 `Signer`（`testutil.IssueAccessToken` 与 e2e 需要签名；登录签发流程在 B3）、`RemoteKeys`（`jwk.Cache`，未知 `kid` 最多每 30 秒刷新一次）；`pagination` 删除无调用方的 `NewInfinity` |
 | B2 | `cmd/app/main.go` | 去掉已删除子命令；`healthcheck` 路径 `/health/live` / `/health/ready` |
 | B2 | `Makefile`（`test-migrations`、`openapi`、`generate`、去掉 `module` 与 `MOCK_SOURCES` 中已删条目）、`sqlc.yaml`、`.pre-commit-config.yaml`、`scripts/check-generated.sh`、`.golangci.yml` depguard、`.testcoverage.yml` | §7.3、§11 |
-| B2 | `tests/contract/contract_test.go`、`tests/e2e/{e2e,probes}_test.go` | §12；e2e 夹具不再读取 nestjs 基线 |
+| B2 | `tests/contract/contract_test.go`、`tests/e2e/e2e_test.go`、`docker/docker-compose.{base,redis,postgres,ci}.yaml`、`docker/infra.compose.yaml`、`.env.example`、`.dockerignore` | §12；e2e 以 compose ci 的固定测试签名密钥签发 access；compose 与 `.env.example` 改为 `DATABASE_URL` / `REDIS_URL` 等新变量（e2e 需要），镜像 `postgres:18.7-alpine` |
 | B3 | `pkg/{jwtx,password}` | EdDSA 签发与 JWKS；仅 argon2id、假哈希 |
 | B3 | `cmd/app/main.go` | 新增 `keys generate`、重建 `createsuperuser` |
-| B4 | `internal/repo/webapi/{sms,wechat,alipay}/` | `Provider` 实现；支付宝响应验签（`ALIPAY_PUBLIC_KEY`）；unionid；错误映射为 `auth.providerCodeInvalid` / `common.badGateway` |
+| B4 | `internal/repo/webapi/{sms,wechat,alipay}/`、删除 `internal/entity/social.go` | `Provider` 实现；支付宝响应验签（`ALIPAY_PUBLIC_KEY`）；unionid；错误映射为 `auth.providerCodeInvalid` / `common.badGateway` |
 | B5 | `internal/repo/webapi/storage/` | 流式写入、签名地址、`DetectContentType` |
 | B5 | `internal/usecase/audit/`、`internal/worker/` | 查询接口与保留期清理；队列与周期任务（§8） |
 | B6 | `deploy/manage.sh`、`Dockerfile`、`docker/*.yaml`、`docker/.env.ecs.example`、`.env.example`、`.github/workflows/check.yml`、`scripts/commit-msg.sh` | §11、§13 |
 | B6 | `scripts/bench/` | 本服务自身压测 |
+| B6 | `pkg/logger`、`pkg/ratelimit` | `MaskEmail` 按字符而非字节截取本地部分；进程内限流器满 10000 键后的淘汰改为不全表扫描 |
 
 ### 14.3 新建
 
 | 批 | 路径 |
 |---|---|
-| B2 | `internal/usecase/contracts.go`、`internal/usecase/note/`、`migrations/core/`、`internal/controller/http/v1/notes.go`、`internal/controller/http/validation.json`（生成）、`pkg/phone`、`testutil.IssueAccessToken` |
+| B2 | `internal/usecase/contracts.go`、`internal/usecase/note/`、`migrations/core/`、`internal/controller/http/v1/notes.go`、`internal/controller/http/validation.json`（生成）、`pkg/phone`、`testutil.IssueAccessToken`、`internal/entity/note.go`、`internal/entity/nest_error.go`（B4 客户端沿用的旧错误类型，随 B4 删除）、`internal/repo/postgres/notes.go`、`internal/repo/redis/{revocations,idempotency}.go`、`pkg/clientip`、`pkg/telemetry`、`internal/controller/http/testdata/spec.yaml`（路由测试用 spec） |
 | B3 | `migrations/identity/`、`internal/entity/{user,rbac}.go`、`internal/usecase/{auth,user,session}/`、`internal/controller/http/v1/{auth,me,users,roles,jwks}.go`、`internal/repo/webapi/mail/`、`templates/templates.go`、`templates/mail/*.tmpl`、`internal/i18n/locales` 中邮件文案 |
 | B4 | `internal/usecase/{sms,account}/`、`internal/usecase/auth/provider.go`、`internal/events/` |
 | B5 | `internal/usecase/file/`、`internal/controller/http/v1/{files,audit}.go` |

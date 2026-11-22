@@ -39,8 +39,8 @@ func MaskPhone(phone string) string {
 	}
 }
 
-// UnprocessableKey is a 422 with an "error" key and errors, like nestjs
+// NestUnprocessable is a 422 with an "error" key and errors, like nestjs
 // UnprocessableEntityException({status, error, errors}).
-func UnprocessableKey(key string, fields ...Detail) *Error {
-	return &Error{Status: StatusUnprocessable, Message: "", ErrorKey: key, Fields: fields}
+func NestUnprocessable(key string, fields ...Detail) *NestError {
+	return &NestError{Status: StatusUnprocessable, Message: "", ErrorKey: key, Fields: fields}
 }

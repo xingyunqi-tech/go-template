@@ -14,44 +14,81 @@ import (
 	"github.com/xingyunqi-tech/go-template/pkg/ratelimit"
 )
 
-func TestRedisScriptFollowsGcra(t *testing.T) {
-	t.Parallel()
+func client(t *testing.T) *goredis.Client {
+	t.Helper()
 
 	db := _redis.Borrow(t)
-	client := goredis.NewClient(&goredis.Options{Addr: db.Addr, DB: db.DB}) //nolint:exhaustruct // defaults
+	c := goredis.NewClient(&goredis.Options{Addr: db.Addr, DB: db.DB}) //nolint:exhaustruct // defaults
 
-	t.Cleanup(func() { _ = client.Close() })
+	t.Cleanup(func() { _ = c.Close() })
 
-	o := &observer{}
-	l := ratelimit.New(client, o)
+	return c
+}
 
-	first := l.Consume(t.Context(), "throttle:a:default:gcra", time.Minute, 1)
-	assert.True(t, first.Allowed)
-	assert.Equal(t, int64(60), first.ResetSeconds())
+func TestRedisStoresTheTATInMilliseconds(t *testing.T) {
+	t.Parallel()
 
-	second := l.Consume(t.Context(), "throttle:a:default:gcra", time.Minute, 1)
-	assert.False(t, second.Allowed)
-	assert.Equal(t, int64(60), second.RetryAfterSeconds())
+	c := client(t)
+	l := ratelimit.New(c)
+	rule := ratelimit.Rule{Name: "auth-login", Rate: 20, Period: time.Minute, Burst: 10}
 
-	stored, err := client.Get(t.Context(), "throttle:a:default:gcra").Result()
+	before := time.Now().UnixMilli()
+
+	d, err := l.Consume(t.Context(), rule, "ip:203.0.113.7")
+	require.NoError(t, err)
+	assert.True(t, d.Allowed)
+	assert.Equal(t, 9, d.Remaining)
+	assert.Equal(t, int64(3), d.ResetSeconds())
+
+	stored, err := c.Get(t.Context(), "rl:auth-login:ip:203.0.113.7").Result()
 	require.NoError(t, err)
 
-	tat, err := ratelimit.ParseTAT(stored)
+	tat, err := strconv.ParseInt(stored, 10, 64)
 	require.NoError(t, err)
-	assert.InDelta(t, time.Now().Add(time.Minute).UnixMicro(), tat, float64(5*time.Second.Microseconds()))
+	assert.InDelta(t, before+3000, tat, 1000)
 
-	ttl, err := client.PTTL(t.Context(), "throttle:a:default:gcra").Result()
+	ttl, err := c.PTTL(t.Context(), "rl:auth-login:ip:203.0.113.7").Result()
 	require.NoError(t, err)
-	assert.Greater(t, ttl, 55*time.Second)
+	assert.InDelta(t, 3000, ttl.Milliseconds(), 1000)
+}
 
-	future := float64(time.Now().Add(30*time.Second).UnixMicro()) / 1000
-	require.NoError(t, client.Set(t.Context(), "throttle:b:default:gcra", strconv.FormatFloat(future, 'f', 8, 64), time.Minute).Err())
+func TestRedisBurstPeekAndReset(t *testing.T) {
+	t.Parallel()
 
-	blocked := l.Consume(t.Context(), "throttle:b:default:gcra", time.Minute, 1)
-	assert.False(t, blocked.Allowed)
-	assert.InDelta(t, 30, blocked.RetryAfterSeconds(), 2)
+	c := client(t)
+	l := ratelimit.New(c)
+	rule := ratelimit.Rule{Name: "auth-login-account", Rate: 10, Period: time.Hour, Burst: 5}
 
-	allowed := l.Consume(t.Context(), "throttle:b:default:gcra", time.Minute, 3)
-	assert.True(t, allowed.Allowed)
-	assert.Zero(t, o.fallbacks)
+	for range 5 {
+		d, err := l.Consume(t.Context(), rule, "a:0123456789abcdef")
+		require.NoError(t, err)
+		assert.True(t, d.Allowed)
+	}
+
+	d, err := l.Peek(t.Context(), rule, "a:0123456789abcdef")
+	require.NoError(t, err)
+	assert.False(t, d.Allowed)
+	assert.Equal(t, int64(360), d.RetryAfterSeconds())
+
+	require.NoError(t, l.Reset(t.Context(), rule, "a:0123456789abcdef"))
+
+	d, err = l.Peek(t.Context(), rule, "a:0123456789abcdef")
+	require.NoError(t, err)
+	assert.True(t, d.Allowed)
+	assert.Equal(t, 5, d.Remaining)
+
+	exists, err := c.Exists(t.Context(), "rl:auth-login-account:a:0123456789abcdef").Result()
+	require.NoError(t, err)
+	assert.Zero(t, exists)
+}
+
+func TestRedisFailureIsReturned(t *testing.T) {
+	t.Parallel()
+
+	c := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1", MaxRetries: -1}) //nolint:exhaustruct // defaults
+
+	t.Cleanup(func() { _ = c.Close() })
+
+	_, err := ratelimit.New(c).Consume(t.Context(), ratelimit.Rule{Name: "x", Rate: 1, Period: time.Second, Burst: 1}, "ip:1")
+	require.Error(t, err)
 }

@@ -1,9 +1,8 @@
 [files]
 extend-exclude = [
   "openapi/*.json",
-  "tests/contract/fixtures/",
-  "db/nestjs-schema.sql",
-  "migrations/*.sql",
+  "internal/controller/http/validation.json",
+  "migrations/**/*.sql",
   "seeds/*.json",
   "internal/controller/http/gen/",
   "go.mod",

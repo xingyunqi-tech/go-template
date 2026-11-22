@@ -1,448 +1,124 @@
 package http
 
 import (
-	"bytes"
+	"context"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
-	"net/url"
-	"regexp"
-	"strconv"
 	"strings"
-	"unicode/utf8"
 
-	"github.com/xingyunqi-tech/go-template/internal/controller/http/httperr"
+	"github.com/go-chi/chi/v5"
+
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/reqctx"
-	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
+	"github.com/xingyunqi-tech/go-template/internal/entity"
 )
 
-const (
-	_maxID          = 2_147_483_647
-	_maxQueryKeys   = 1000
-	_hexDigitsAfter = 2
-)
-
-var (
-	_idPattern = regexp.MustCompile(`^\d+$`)
-
-	errMalformedURI = errors.New("URIError: URI malformed")
-	errPolicy       = errors.New("operation policy")
-)
-
-// Guard authenticates a request for one Auth kind and returns the request carrying the identity.
-type Guard func(r *http.Request) (*http.Request, error)
-
-// PermissionGuard checks the RBAC permissions of a policy.
-type PermissionGuard func(r *http.Request, policy Policy) error
-
-// pipeline runs, in front of the generated handlers, what nestjs does between routing and the
-// handler: path parameter decoding, guards, ParseIdPipe and the global ValidationPipe.
+// pipeline runs, in front of the generated handlers, everything a documented operation needs.
 type pipeline struct {
-	ops        map[string]*operation
-	policies   map[string]Policy
-	guards     map[Auth]Guard
-	permission PermissionGuard
-	validator  *validatorx.Validator
-	errs       *errorWriter
-	throttle   *throttler
-	uploads    UploadOptions
-	auditing   bool
+	opts *Options
+	ops  *operations
+	mux  *chi.Mux
+	errs *errorWriter
 }
 
-// check reports operations that are registered but cannot run: missing policy, missing guard,
-// or a request DTO absent from validation.json.
-func (p *pipeline) check(registered []*operation) error {
-	var errs []error
+func (p *pipeline) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	pattern, params, allowed := lookup(p.mux, r.Method, r.URL.Path)
 
-	for _, op := range registered {
-		errs = append(errs, p.checkOperation(op)...)
+	switch {
+	case pattern == "" && len(allowed) > 0:
+		p.errs.write(w, r, methodNotAllowed(w, allowed))
+
+		return
+	case pattern == "":
+		p.errs.write(w, r, notFound())
+
+		return
 	}
 
-	return errors.Join(errs...)
-}
+	setRoute(r.Context(), r.Method, pattern)
 
-func (p *pipeline) checkOperation(op *operation) []error {
-	policy, ok := p.policies[op.id]
-	if !ok {
-		return []error{fmt.Errorf("%w: %s has no policy", errPolicy, op.id)}
+	op, documented := p.ops.byRoute[routeKey(r.Method, pattern)]
+	if !documented {
+		p.mux.ServeHTTP(w, r)
+
+		return
 	}
 
-	var errs []error
+	r = r.WithContext(context.WithValue(reqctx.WithOperation(r.Context(), op.id), paramsKey{}, params))
 
-	for _, what := range p.missingDependencies(&policy) {
-		errs = append(errs, fmt.Errorf("%w: %s needs %s", errPolicy, op.id, what))
+	r, err := p.prepare(w, r, op, params)
+	if err != nil {
+		p.errs.write(w, r, err)
+
+		return
 	}
 
-	for _, dto := range []string{op.bodyDTO, policy.Query, policy.Params} {
-		if dto != "" && !p.validator.Has(dto) {
-			errs = append(errs, fmt.Errorf("%w: %s uses %s, which is not in validation.json", errPolicy, op.id, dto))
-		}
+	p.execute(w, r, op)
+}
+
+// prepare runs the checks that precede the handler and returns the request to hand over.
+func (p *pipeline) prepare(w http.ResponseWriter, r *http.Request, op *operation, params map[string]string) (*http.Request, error) {
+	limits := newLimitHeaders(w)
+	defer limits.write()
+
+	if err := p.limitIP(r, limits); err != nil {
+		return r, err
 	}
 
-	return errs
-}
-
-// missingDependencies names what the policy uses but the router was not given.
-func (p *pipeline) missingDependencies(policy *Policy) []string {
-	var missing []string
-
-	for _, dep := range []struct {
-		lacks bool
-		what  string
-	}{
-		{policy.Auth != AuthNone && p.guards[policy.Auth] == nil, "a " + policy.Auth.String() + " guard"},
-		{policy.Audit != nil && !p.auditing, "the auditor"},
-		{policy.Upload && (p.uploads.Files == nil || p.uploads.Permissions == nil), "the upload options"},
-		{needsPermission(policy) && p.permission == nil, "the permission guard"},
-	} {
-		if dep.lacks {
-			missing = append(missing, dep.what)
-		}
-	}
-
-	return missing
-}
-
-func needsPermission(policy *Policy) bool {
-	return policy.RBAC || len(policy.Permissions) > 0
-}
-
-func (p *pipeline) middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		match := matchedRoute(r)
-		if match == nil {
-			if raw, failed := undecodable(r); failed {
-				p.errs.write(w, r, paramDecodeError(raw))
-
-				return
-			}
-
-			next.ServeHTTP(w, r)
-
-			return
-		}
-
-		op := p.ops[operationKey(match.method, match.pattern)]
-		if op == nil {
-			next.ServeHTTP(w, r)
-
-			return
-		}
-
-		prepared, err := p.prepare(w, r, op, match)
-		if err != nil {
-			p.errs.write(w, r, err)
-
-			return
-		}
-
-		if p.policies[op.id].NoCache {
-			w = &noCacheWriter{ResponseWriter: w, started: false}
-		}
-
-		next.ServeHTTP(w, prepared)
-	})
-}
-
-func (p *pipeline) prepare(w http.ResponseWriter, r *http.Request, op *operation, match *routeMatch) (*http.Request, error) {
-	params, err := decodeParams(op, match)
+	r, err := p.authenticate(r, &op.policy)
 	if err != nil {
 		return r, err
 	}
 
-	if len(op.pathParams) > 0 {
-		// The generated parameter binding unescapes path values only when RawPath is set.
-		r.URL.RawPath = r.URL.EscapedPath()
-	}
-
-	policy := p.policies[op.id]
-
-	if err := p.throttle.check(w, r, op.id, &policy); err != nil {
+	if err := p.limitPolicy(r, &op.policy, limits); err != nil {
 		return r, err
 	}
 
-	if r, err = p.guard(r, &policy); err != nil {
+	if err := p.authorize(r, &op.policy); err != nil {
 		return r, err
 	}
 
-	if err := p.validateParams(op, params, policy.Params); err != nil {
+	if r, err = p.readBody(r, op); err != nil {
 		return r, err
 	}
 
-	if policy.Upload {
-		return p.prepareUpload(r, &policy)
-	}
-
-	return p.validate(r, op.bodyDTO, policy.Query)
+	return r, p.validate(r, op, params)
 }
 
-// validate runs the global ValidationPipe on the body and the query string.
-func (p *pipeline) validate(r *http.Request, bodyDTO, queryDTO string) (*http.Request, error) {
-	validated := &reqctx.Validated{Body: validatorx.Undefined{}, Query: validatorx.Undefined{}}
+// execute runs the handler under the idempotency key and the transaction of the operation.
+func (p *pipeline) execute(w http.ResponseWriter, r *http.Request, op *operation) {
+	handler := http.Handler(p.mux)
+	handler = p.audited(op, handler)
+	handler = p.transactional(op, handler)
+	handler = p.idempotent(op, handler)
 
-	var err error
-
-	if bodyDTO != "" {
-		if validated.Body, err = p.validateBody(r, bodyDTO); err != nil {
-			return r, err
-		}
-	}
-
-	if queryDTO != "" {
-		if validated.Query, err = p.validateQuery(r, queryDTO); err != nil {
-			return r, err
-		}
-	}
-
-	return r.WithContext(reqctx.WithValidated(r.Context(), validated)), nil
+	handler.ServeHTTP(w, r)
 }
 
-// decodeParams decodes path parameters like Express does while routing.
-func decodeParams(op *operation, match *routeMatch) (map[string]string, error) {
-	params := make(map[string]string, len(op.pathParams))
+type paramsKey struct{}
 
-	for _, param := range op.pathParams {
-		raw := match.param(param.name)
+// pathParam returns a path parameter of the matched route.
+func pathParam(ctx context.Context, name string) string {
+	params, _ := ctx.Value(paramsKey{}).(map[string]string)
 
-		decoded, err := decodeURIComponent(raw)
-		if err != nil {
-			return nil, paramDecodeError(raw)
-		}
-
-		params[param.name] = decoded
-	}
-
-	return params, nil
+	return params[name]
 }
 
-func paramDecodeError(raw string) error {
-	return httperr.New(http.StatusBadRequest, "Failed to decode param '"+raw+"'")
-}
-
-// guard runs the authentication guard and then the permission guard of the policy.
-func (p *pipeline) guard(r *http.Request, policy *Policy) (*http.Request, error) {
-	outer := r.Context()
-
-	if policy.Auth != AuthNone {
-		authed, err := p.guards[policy.Auth](r)
-		if err != nil {
-			return r, err
-		}
-
-		if principal := reqctx.Principal(authed.Context()); principal != nil { //nolint:contextcheck // reads the identity the guard stored
-			setUserID(outer, strconv.Itoa(principal.UserID))
-		}
-
-		r = authed
-	}
-
-	if needsPermission(policy) {
-		if err := p.permission(r, *policy); err != nil {
-			return r, err
-		}
-	}
-
-	return r, nil
-}
-
-func (p *pipeline) validateBody(r *http.Request, dto string) (validatorx.Value, error) {
-	value, err := p.validator.Run(dto, "body", reqctx.Body(r.Context()))
-	if err != nil {
-		return nil, err
-	}
-
-	body, _ := validatorx.Stringify(value)
-	r.Body = io.NopCloser(bytes.NewReader([]byte(body)))
-	r.ContentLength = int64(len(body))
-	r.Header.Set("Content-Type", _jsonMediaType)
-
-	return value, nil
-}
-
-// validateParams runs ParseIdPipe on numeric parameters and then the path parameter DTO, if any.
-func (p *pipeline) validateParams(op *operation, params map[string]string, dto string) error {
-	for _, param := range op.pathParams {
-		if param.numeric && !validID(params[param.name]) {
-			return httperr.InvalidID()
-		}
-	}
-
-	if dto == "" {
-		return nil
-	}
-
-	o := validatorx.NewObject()
-	for _, param := range op.pathParams {
-		o.Set(param.name, params[param.name])
-	}
-
-	_, err := p.validator.Run(dto, "param", o)
-
-	return err //nolint:wrapcheck // validation errors are HTTP errors
-}
-
-func (p *pipeline) validateQuery(r *http.Request, dto string) (validatorx.Value, error) {
-	value, err := p.validator.Run(dto, "query", parseQueryString(r.URL.RawQuery))
-	if err != nil {
-		return nil, err
-	}
-
-	r.URL.RawQuery = encodeQuery(value)
-
-	return value, nil
-}
-
-// validID is nestjs ParseIdPipe: digits only, 1 <= id <= 2147483647.
-func validID(s string) bool {
-	if !_idPattern.MatchString(s) {
-		return false
-	}
-
-	n, err := strconv.ParseUint(s, 10, 64)
-
-	return err == nil && n >= 1 && n <= _maxID
-}
-
-func isHex(c byte) bool {
-	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
-}
-
-// decodeURIComponent follows the JavaScript function: malformed escapes and invalid UTF-8 fail.
-func decodeURIComponent(s string) (string, error) {
-	if !strings.Contains(s, "%") {
-		return s, nil
-	}
-
-	buf := make([]byte, 0, len(s))
-
-	for i := 0; i < len(s); i++ {
-		if s[i] != '%' {
-			buf = append(buf, s[i])
-
-			continue
-		}
-
-		if i+_hexDigitsAfter >= len(s) || !isHex(s[i+1]) || !isHex(s[i+2]) {
-			return "", errMalformedURI
-		}
-
-		b, _ := strconv.ParseUint(s[i+1:i+3], 16, 8)
-		buf = append(buf, byte(b))
-		i += _hexDigitsAfter
-	}
-
-	if !utf8.Valid(buf) {
-		return "", errMalformedURI
-	}
-
-	return string(buf), nil
-}
-
-// queryUnescape is Node querystring.unescape: decodeURIComponent, else byte-wise decoding.
-func queryUnescape(s string) string {
-	if decoded, err := decodeURIComponent(s); err == nil {
-		return decoded
-	}
-
-	buf := make([]byte, 0, len(s))
-
-	for i := 0; i < len(s); i++ {
-		if s[i] == '%' && i+_hexDigitsAfter < len(s) && isHex(s[i+1]) && isHex(s[i+2]) {
-			b, _ := strconv.ParseUint(s[i+1:i+3], 16, 8)
-			buf = append(buf, byte(b))
-			i += _hexDigitsAfter
-
-			continue
-		}
-
-		buf = append(buf, s[i])
-	}
-
-	return validatorx.DecodeUTF8Lossy(buf)
-}
-
-// parseQueryString is Node querystring.parse: "+" is a space, repeated keys become arrays, and
-// at most 1000 pairs are read.
-func parseQueryString(query string) *validatorx.Object {
-	out := validatorx.NewObject()
-	if query == "" {
-		return out
-	}
-
-	pairs := strings.Split(query, "&")
-	if len(pairs) > _maxQueryKeys {
-		pairs = pairs[:_maxQueryKeys]
-	}
-
-	for _, pair := range pairs {
-		if pair == "" {
-			continue
-		}
-
-		key, value, _ := strings.Cut(pair, "=")
-		name := queryUnescape(strings.ReplaceAll(key, "+", " "))
-		decoded := queryUnescape(strings.ReplaceAll(value, "+", " "))
-
-		existing, ok := out.Get(name)
-		if !ok {
-			out.Set(name, decoded)
-
-			continue
-		}
-
-		if arr, isArray := existing.(*validatorx.Array); isArray {
-			arr.Items = append(arr.Items, decoded)
-		} else {
-			out.Set(name, &validatorx.Array{Items: []validatorx.Value{existing, decoded}})
-		}
-	}
-
-	return out
-}
-
-// encodeQuery writes the validated query back for the generated parameter binding; objects are
-// JSON, arrays repeat the key, null and undefined are omitted.
-func encodeQuery(value validatorx.Value) string {
-	o, ok := value.(*validatorx.Object)
-	if !ok {
-		return ""
-	}
-
-	var parts []string
-
-	add := func(key string, v validatorx.Value) {
-		s, ok := queryText(v)
-		if ok {
-			parts = append(parts, url.QueryEscape(key)+"="+url.QueryEscape(s))
-		}
-	}
-
-	for _, k := range o.Keys() {
-		v, _ := o.Get(k)
-		if arr, isArray := v.(*validatorx.Array); isArray {
-			for _, item := range arr.Items {
-				add(k, item)
-			}
-
-			continue
-		}
-
-		add(k, v)
-	}
-
-	return strings.Join(parts, "&")
-}
-
-func queryText(v validatorx.Value) (string, bool) {
-	switch x := v.(type) {
-	case nil, validatorx.Undefined:
+// bearer returns the token of an Authorization: Bearer header and whether the header was sent.
+func bearer(r *http.Request) (token string, present bool) {
+	header := r.Header.Get("Authorization")
+	if header == "" {
 		return "", false
-	case string:
-		return x, true
-	case *validatorx.Object, *validatorx.Array:
-		return validatorx.Stringify(x)
-	default:
-		return validatorx.ToString(x), true
 	}
+
+	scheme, token, ok := strings.Cut(strings.TrimSpace(header), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return "", true
+	}
+
+	return strings.TrimSpace(token), true
+}
+
+// isServiceUnavailable reports an error answered with 503.
+func isServiceUnavailable(err error) bool {
+	return errors.Is(err, entity.New(entity.KeyServiceUnavailable))
 }

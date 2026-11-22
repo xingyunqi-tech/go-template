@@ -22,17 +22,17 @@ func TestLocksAreSharedThroughRedis(t *testing.T) {
 
 	t.Cleanup(func() { _ = client.Close() })
 
-	first := redis.NewLocks(client, slog.New(slog.DiscardHandler))
-	second := redis.NewLocks(client, slog.New(slog.DiscardHandler))
+	first := redis.NewLocks(client, "svc", slog.New(slog.DiscardHandler))
+	second := redis.NewLocks(client, "svc", slog.New(slog.DiscardHandler))
 
 	token, ok := first.TryAcquire(t.Context(), "account-cleanup:user-1", time.Minute)
 	require.True(t, ok)
 
-	stored, err := client.Get(t.Context(), "lock:account-cleanup:user-1").Result()
+	stored, err := client.Get(t.Context(), "svc:lock:account-cleanup:user-1").Result()
 	require.NoError(t, err)
 	assert.Equal(t, token, stored)
 
-	ttl, err := client.PTTL(t.Context(), "lock:account-cleanup:user-1").Result()
+	ttl, err := client.PTTL(t.Context(), "svc:lock:account-cleanup:user-1").Result()
 	require.NoError(t, err)
 	assert.Greater(t, ttl, 50*time.Second)
 
@@ -40,10 +40,10 @@ func TestLocksAreSharedThroughRedis(t *testing.T) {
 	assert.False(t, ok)
 
 	second.Release(t.Context(), "account-cleanup:user-1", "not-the-holder")
-	assert.Equal(t, int64(1), client.Exists(t.Context(), "lock:account-cleanup:user-1").Val())
+	assert.Equal(t, int64(1), client.Exists(t.Context(), "svc:lock:account-cleanup:user-1").Val())
 
 	first.Release(t.Context(), "account-cleanup:user-1", token)
-	assert.Equal(t, int64(0), client.Exists(t.Context(), "lock:account-cleanup:user-1").Val())
+	assert.Equal(t, int64(0), client.Exists(t.Context(), "svc:lock:account-cleanup:user-1").Val())
 
 	_, ok = second.TryAcquire(t.Context(), "account-cleanup:user-1", time.Minute)
 	assert.True(t, ok)
@@ -56,7 +56,7 @@ func TestLocksFallBackToProcessWhenRedisFails(t *testing.T) {
 
 	t.Cleanup(func() { _ = client.Close() })
 
-	l := redis.NewLocks(client, slog.New(slog.DiscardHandler))
+	l := redis.NewLocks(client, "svc", slog.New(slog.DiscardHandler))
 
 	token, ok := l.TryAcquire(t.Context(), "k", time.Minute)
 	require.True(t, ok)

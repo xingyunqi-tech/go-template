@@ -10,10 +10,12 @@ import (
 	"time"
 )
 
+// WriteTimeout bounds the time from reading the request headers to the end of the response.
+const WriteTimeout = 60 * time.Second
+
 const (
 	_readHeaderTimeout = 10 * time.Second
 	_readTimeout       = 60 * time.Second
-	_writeTimeout      = 60 * time.Second
 	_idleTimeout       = 120 * time.Second
 )
 
@@ -29,7 +31,7 @@ func New(addr string, handler http.Handler) *Server {
 		Handler:           handler,
 		ReadHeaderTimeout: _readHeaderTimeout,
 		ReadTimeout:       _readTimeout,
-		WriteTimeout:      _writeTimeout,
+		WriteTimeout:      WriteTimeout,
 		IdleTimeout:       _idleTimeout,
 	}}
 }

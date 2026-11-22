@@ -4,11 +4,13 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
@@ -18,6 +20,8 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/repo/postgres"
 	"github.com/xingyunqi-tech/go-template/internal/testutil"
 )
+
+const _insertAudit = `INSERT INTO audit_log (action, resource_type) VALUES ($1, 'test')`
 
 var _db *testutil.Database //nolint:gochecknoglobals // one container per package
 
@@ -46,6 +50,15 @@ func newDB(t *testing.T) (*postgres.DB, *pgxpool.Pool) {
 	return postgres.NewDB(pool, time.Second, slog.New(slog.DiscardHandler)), pool
 }
 
+func countAudits(t *testing.T, pool *pgxpool.Pool, action string) int {
+	t.Helper()
+
+	var n int
+	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM audit_log WHERE action = $1`, action).Scan(&n))
+
+	return n
+}
+
 func TestAfterCommitRunsOnlyAfterCommit(t *testing.T) {
 	t.Parallel()
 
@@ -65,11 +78,10 @@ func TestAfterCommitRunsOnlyAfterCommit(t *testing.T) {
 
 	db.AfterCommit(ctx, func(ctx context.Context) {
 		committed = true
-		_, inside = postgres.NewUsers(db).Get(ctx, repo.UserQuery{Email: ptr("john.doe@example.com")})
+		inside = postgres.Exec(ctx, db, _insertAudit, "after")
 	})
 
-	_, err = postgres.NewSessions(db).DeleteAllForUser(ctx, 2, nil)
-	require.NoError(t, err)
+	require.NoError(t, postgres.Exec(ctx, db, _insertAudit, "inside"))
 	assert.False(t, committed)
 
 	ok, err := tx.Commit(ctx)
@@ -77,6 +89,8 @@ func TestAfterCommitRunsOnlyAfterCommit(t *testing.T) {
 	assert.True(t, ok)
 	assert.True(t, committed)
 	require.NoError(t, inside)
+	assert.Equal(t, 1, countAudits(t, pool, "inside"))
+	assert.Equal(t, 1, countAudits(t, pool, "after"))
 
 	ctx, tx, err = db.Begin(t.Context())
 	require.NoError(t, err)
@@ -97,21 +111,34 @@ func TestCommitOfFailedTransactionReportsRollback(t *testing.T) {
 	ctx, tx, err := db.Begin(t.Context())
 	require.NoError(t, err)
 
-	users := postgres.NewUsers(db)
-	_, err = users.Create(ctx, &repo.NewUser{FirstName: ptr("kept?"), Provider: "email"}) //nolint:exhaustruct // other columns default
-	require.NoError(t, err)
+	require.NoError(t, postgres.Exec(ctx, db, _insertAudit, "kept?"))
 
-	_, err = users.Create(ctx, &repo.NewUser{Email: ptr("john.doe@example.com"), Provider: "email"}) //nolint:exhaustruct // other columns default
+	err = postgres.Exec(ctx, db, _insertAudit, nil)
 	require.Error(t, err)
 	assert.True(t, postgres.IsDatabaseError(err))
 
 	ok, err := tx.Commit(ctx)
 	require.NoError(t, err)
 	assert.False(t, ok)
+	assert.Zero(t, countAudits(t, pool, "kept?"))
+}
 
-	var n int
-	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM "user" WHERE "firstName" = 'kept?'`).Scan(&n))
-	assert.Zero(t, n)
+func TestInTxRollsBackOnError(t *testing.T) {
+	t.Parallel()
+
+	db, pool := newDB(t)
+	boom := errors.New("boom")
+
+	var inside error
+
+	err := db.InTx(t.Context(), func(ctx context.Context) error {
+		inside = postgres.Exec(ctx, db, _insertAudit, "rolled back")
+
+		return boom
+	})
+	require.NoError(t, inside)
+	require.ErrorIs(t, err, boom)
+	assert.Zero(t, countAudits(t, pool, "rolled back"))
 }
 
 func TestAcquireTimesOut(t *testing.T) {
@@ -134,29 +161,29 @@ func TestAcquireTimesOut(t *testing.T) {
 	db := postgres.NewDB(pool, 100*time.Millisecond, slog.New(slog.DiscardHandler))
 
 	start := time.Now()
-	_, err = postgres.NewUsers(db).Get(t.Context(), repo.UserQuery{ID: ptr(1)})
+	err = postgres.NewHealth(db).Ping(t.Context())
+
 	require.Error(t, err)
 	assert.Less(t, time.Since(start), 2*time.Second)
 }
 
-func TestListOrdersAndRejectsUnknownProperties(t *testing.T) {
+func TestAuditsWriteTheAuditLog(t *testing.T) {
 	t.Parallel()
 
-	db, _ := newDB(t)
-	users := postgres.NewUsers(db)
+	db, pool := newDB(t)
+	actor := uuid.NewV7()
 
-	list, err := users.List(t.Context(), &repo.UserList{Sort: []repo.SortField{{Property: "email", Descending: true}}, Offset: 0, Limit: 10, RoleIDs: nil})
-	require.NoError(t, err)
-	require.Len(t, list, 2)
-	assert.Equal(t, "john.doe@example.com", *list[0].Email)
+	require.NoError(t, postgres.NewAudits(db).Create(t.Context(), &repo.AuditLog{
+		ActorSub: &actor, Action: "note.create", ResourceType: "note", ResourceID: "r1", RequestID: "req-1", IP: "203.0.113.7",
+		Data: map[string]any{"operationId": "createNote"},
+	}))
 
-	_, err = users.List(t.Context(), &repo.UserList{Sort: []repo.SortField{{Property: "nope", Descending: false}}, Offset: 0, Limit: 10, RoleIDs: nil})
+	var (
+		gotActor uuid.UUID
+		data     map[string]any
+	)
 
-	var unknown *postgres.ErrUnknownSortProperty
-	require.ErrorAs(t, err, &unknown)
-	assert.Equal(t, `Property "nope" was not found in "UserEntity"`, err.Error())
-}
-
-func ptr[T any](v T) *T {
-	return &v
+	require.NoError(t, pool.QueryRow(t.Context(), `SELECT actor_sub, data FROM audit_log WHERE request_id = 'req-1'`).Scan(&gotActor, &data))
+	assert.Equal(t, actor, gotActor)
+	assert.Equal(t, map[string]any{"operationId": "createNote"}, data)
 }

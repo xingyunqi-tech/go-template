@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	_lockPrefix         = "lock:"
 	_lockCommandTimeout = time.Second
 	_releaseScript      = `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end`
 )
@@ -23,10 +22,11 @@ type localLock struct {
 	expires time.Time
 }
 
-// Locks implements repo.Locks like nestjs LockService: SET NX PX on lock:<key>, released by a
-// token compare script; without Redis, or when a command fails, the lock holds in this process.
+// Locks implements repo.Locks: SET NX PX on {service}:lock:{key}, released by a token compare
+// script; without Redis, or when a command fails, the lock holds in this process.
 type Locks struct {
 	client  *goredis.Client
+	prefix  string
 	release *goredis.Script
 	log     *slog.Logger
 	now     func() time.Time
@@ -36,9 +36,9 @@ type Locks struct {
 }
 
 // NewLocks returns Locks; client may be nil to lock in process only.
-func NewLocks(client *goredis.Client, log *slog.Logger) *Locks {
+func NewLocks(client *goredis.Client, service string, log *slog.Logger) *Locks {
 	return &Locks{
-		client: client, release: goredis.NewScript(_releaseScript), log: log, now: time.Now,
+		client: client, prefix: service + ":lock:", release: goredis.NewScript(_releaseScript), log: log, now: time.Now,
 		mu: sync.Mutex{}, local: map[string]localLock{},
 	}
 }
@@ -51,7 +51,7 @@ func (l *Locks) TryAcquire(ctx context.Context, key string, ttl time.Duration) (
 
 	if l.client != nil {
 		cmdCtx, cancel := context.WithTimeout(ctx, _lockCommandTimeout)
-		ok, err := l.client.SetNX(cmdCtx, _lockPrefix+key, token, ttl).Result()
+		ok, err := l.client.SetNX(cmdCtx, l.prefix+key, token, ttl).Result()
 
 		cancel()
 
@@ -100,7 +100,7 @@ func (l *Locks) Release(ctx context.Context, key, token string) {
 	cmdCtx, cancel := context.WithTimeout(ctx, _lockCommandTimeout)
 	defer cancel()
 
-	if err := l.release.Run(cmdCtx, l.client, []string{_lockPrefix + key}, token).Err(); err != nil {
+	if err := l.release.Run(cmdCtx, l.client, []string{l.prefix + key}, token).Err(); err != nil {
 		l.log.WarnContext(ctx, "failed to release lock", "key", key, "error", err.Error())
 	}
 }

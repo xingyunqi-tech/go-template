@@ -3,135 +3,12 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"time"
 	"uuid"
 
 	"github.com/xingyunqi-tech/go-template/internal/entity"
 )
-
-// Optional is a value a request may leave out: Set is false for undefined, Value nil for null.
-type Optional[T any] struct {
-	Set   bool
-	Value *T
-}
-
-// Some returns a set, non-null Optional.
-func Some[T any](v T) Optional[T] {
-	return Optional[T]{Set: true, Value: &v}
-}
-
-// Null returns a set Optional holding null.
-func Null[T any]() Optional[T] {
-	return Optional[T]{Set: true, Value: nil}
-}
-
-// UserQuery selects one active user by a unique key; exactly one field is set.
-type UserQuery struct {
-	ID           *int
-	Email        *string
-	Phone        *string
-	WechatOpenID *string
-	AlipayOpenID *string
-}
-
-// NewUser is the row a user is created from.
-type NewUser struct {
-	FirstName     *string
-	LastName      *string
-	Email         *string
-	Phone         *string
-	Nickname      *string
-	Gender        *int
-	Birthday      *time.Time
-	Password      *string
-	Provider      string
-	WechatOpenID  *string
-	WechatUnionID *string
-	AlipayOpenID  *string
-	PhotoID       *uuid.UUID
-	RoleID        *int
-	StatusID      *int
-}
-
-// UserChanges is a partial update; RoleID and StatusID change only when non-nil.
-type UserChanges struct {
-	FirstName Optional[string]
-	LastName  Optional[string]
-	Email     Optional[string]
-	Phone     Optional[string]
-	Nickname  Optional[string]
-	Gender    Optional[int]
-	Birthday  Optional[time.Time]
-	Password  Optional[string]
-	Provider  Optional[string]
-	PhotoID   Optional[uuid.UUID]
-	RoleID    *int
-	StatusID  *int
-}
-
-// SortField orders a user list by a user property.
-type SortField struct {
-	Property   string
-	Descending bool
-}
-
-// UserList selects a page of active users.
-type UserList struct {
-	RoleIDs []int
-	Sort    []SortField
-	Offset  int64
-	Limit   int64
-}
-
-// Users stores users.
-type Users interface {
-	Get(ctx context.Context, q UserQuery) (*entity.User, error)
-	Create(ctx context.Context, u *NewUser) (int, error)
-	Update(ctx context.Context, id int, c *UserChanges) (bool, error)
-	ReplacePassword(ctx context.Context, id int, old *string, hash string) (bool, error)
-	RehashPassword(ctx context.Context, id int, old, hash string) error
-	Remove(ctx context.Context, id int) error
-	List(ctx context.Context, q *UserList) ([]entity.User, error)
-	CountByRole(ctx context.Context, roleID int) (int, error)
-}
-
-// SessionAuth is what the access-token guard reads in one query.
-type SessionAuth struct {
-	SessionID int
-	UserID    int
-	StatusID  int
-	RoleID    *int
-}
-
-// Sessions stores sessions.
-type Sessions interface {
-	Get(ctx context.Context, id int) (*entity.Session, error)
-	Create(ctx context.Context, userID int, hash string, userAgent, ip *string) (*entity.Session, error)
-	Rotate(ctx context.Context, id int, current, next string) (bool, error)
-	ListActive(ctx context.Context, userID int) ([]entity.Session, error)
-	// Authenticate loads the session and its user and touches lastActiveAt on one connection.
-	Authenticate(ctx context.Context, id int) (*SessionAuth, error)
-	DeleteForUser(ctx context.Context, id, userID int) (bool, error)
-	Delete(ctx context.Context, id int) error
-	DeleteAllForUser(ctx context.Context, userID int, except *int) ([]int, error)
-}
-
-// Files reads uploaded files.
-type Files interface {
-	GetMany(ctx context.Context, ids []uuid.UUID) ([]entity.File, error)
-	Create(ctx context.Context, f *entity.File) (*entity.File, error)
-	// Get and GetByPath return nil when the file does not exist.
-	Get(ctx context.Context, id uuid.UUID) (*entity.File, error)
-	GetByPath(ctx context.Context, path string) (*entity.File, error)
-	// ListByOwner returns up to limit files of the owner after afterID, by id.
-	ListByOwner(ctx context.Context, ownerID int, afterID *uuid.UUID, limit int) ([]entity.File, error)
-	Delete(ctx context.Context, id uuid.UUID) error
-}
-
-// Permissions reads role_permission.
-type Permissions interface {
-	RolePermissions(ctx context.Context) (map[int][]string, error)
-}
 
 // Transactions registers work that must wait for the request transaction to commit.
 type Transactions interface {
@@ -145,12 +22,6 @@ type Cache interface {
 	Delete(ctx context.Context, key string) error
 }
 
-// DatabaseHealth reports PostgreSQL reachability and server connection usage.
-type DatabaseHealth interface {
-	Ping(ctx context.Context) error
-	ConnectionStats(ctx context.Context) (active, maximum int, err error)
-}
-
 // Pinger checks that a dependency answers.
 type Pinger interface {
 	Ping(ctx context.Context) error
@@ -161,44 +32,6 @@ type Locks interface {
 	// TryAcquire claims key for ttl and returns the release token; ok is false when it is taken.
 	TryAcquire(ctx context.Context, key string, ttl time.Duration) (token string, ok bool)
 	Release(ctx context.Context, key, token string)
-}
-
-// Jobs enqueues background jobs, inside the request transaction when there is one.
-type Jobs interface {
-	EnqueueMail(ctx context.Context, job entity.MailJob) error
-	// EnqueueAccountCleanup is a no-op while a cleanup of the same user is pending or running.
-	EnqueueAccountCleanup(ctx context.Context, userID int) error
-	// EnqueueNotification queues a job on the notification queue.
-	EnqueueNotification(ctx context.Context, job entity.NotificationJob) error
-}
-
-// Alerts stores admin alerts outside any request transaction.
-type Alerts interface {
-	// CreateIfNoOpen inserts the alert unless one with the same dedup key is unacknowledged.
-	CreateIfNoOpen(ctx context.Context, a *entity.Alert) (id int, created bool, err error)
-	// AdminIDs lists up to limit admin users.
-	AdminIDs(ctx context.Context, limit int) ([]int, error)
-	// Notify creates an in-app notification unless the user turned in-app off for its category.
-	Notify(ctx context.Context, n *entity.Notification) error
-}
-
-// AccountCleanups tracks the cleanup of removed accounts.
-type AccountCleanups interface {
-	MarkCompleted(ctx context.Context, userID int) error
-	// PendingUserIDs lists users removed before deletedBefore without a completed cleanup, by id.
-	PendingUserIDs(ctx context.Context, deletedBefore time.Time, limit int) ([]int, error)
-	// DetachPhoto clears the avatar reference of a user, removed or not.
-	DetachPhoto(ctx context.Context, userID int) error
-	// UserState reports whether the user exists, removed or not, and whether it is removed.
-	UserState(ctx context.Context, userID int) (exists, removed bool, err error)
-}
-
-// Maintenance runs the periodic cleanup statements.
-type Maintenance interface {
-	// PurgeDeletedSessions hard-deletes sessions soft-deleted more than retention ago.
-	PurgeDeletedSessions(ctx context.Context, retentionDays int) (int64, error)
-	// SoftDeleteReadNotifications soft-deletes notifications read more than retention ago.
-	SoftDeleteReadNotifications(ctx context.Context, retentionDays int) (int64, error)
 }
 
 // Sink receives one uploaded file under a random key.
@@ -221,87 +54,64 @@ type FileStorage interface {
 	PresignPut(ctx context.Context, key string, length int64) (string, error)
 }
 
-// AuditLog is an audit_logs row.
+// AuditLog is an audit_log row.
 type AuditLog struct {
-	UserID     *string
-	Action     string
-	EntityType string
-	EntityID   string
-	OldValue   map[string]any
-	NewValue   map[string]any
-	IPAddress  *string
-	UserAgent  *string
-	RequestID  *string
+	ActorSub     *uuid.UUID
+	Action       string
+	ResourceType string
+	ResourceID   string
+	RequestID    string
+	IP           string
+	Data         map[string]any
 }
 
-// Audits stores audit logs outside any request transaction.
+// Audits stores audit logs, in the request transaction when there is one.
 type Audits interface {
 	Create(ctx context.Context, l *AuditLog) error
 }
 
-// NotificationFilter narrows the notifications of a user; nil fields do not filter.
-type NotificationFilter struct {
-	Category *string
-	IsRead   *bool
+// ErrIdempotencyClaimLost reports a key whose claim expired or passed to another request.
+var ErrIdempotencyClaimLost = errors.New("repo: idempotency claim lost")
+
+// IdempotencyRecord is the stored state of an idempotency key.
+type IdempotencyRecord struct {
+	Hash string `json:"hash"`
+	// Owner identifies the request holding an unfinished claim.
+	Owner       string `json:"owner,omitempty"`
+	Done        bool   `json:"done"`
+	Status      int    `json:"status,omitempty"`
+	ContentType string `json:"contentType,omitempty"`
+	Body        []byte `json:"body,omitempty"`
 }
 
-// NewNotification is the row a notification is created from; Metadata is nil for SQL null.
-type NewNotification struct {
-	UserID   int
-	Type     string
-	Category string
-	Title    string
-	Content  string
-	Metadata []byte
-	Channels []string
+// IdempotencyStore keeps the idempotency keys.
+type IdempotencyStore interface {
+	// Begin claims key for owner, a request with body hash; existing is the record stored
+	// before, nil when the key was free and is now claimed.
+	Begin(ctx context.Context, key, hash, owner string, ttl time.Duration) (existing *IdempotencyRecord, err error)
+	// Complete stores the finished response of the key while owner holds its claim, and returns
+	// ErrIdempotencyClaimLost otherwise.
+	Complete(ctx context.Context, key, owner string, rec *IdempotencyRecord, ttl time.Duration) error
+	// Release frees the key while owner holds its claim.
+	Release(ctx context.Context, key, owner string) error
 }
 
-// InAppBatch is one in-app notification written to several users.
-type InAppBatch struct {
-	UserIDs  []int
-	Type     string
-	Category string
-	Title    string
-	Content  string
-	Metadata []byte
+// NotePage selects the notes of an owner after a position, newest first.
+type NotePage struct {
+	Owner uuid.UUID
+	// AfterCreatedAt and AfterID are the position of the last note of the previous page; nil for
+	// the first page.
+	AfterCreatedAt *time.Time
+	AfterID        *uuid.UUID
+	Limit          int
 }
 
-// NotificationFlags are the channel switches of a notification setting.
-type NotificationFlags struct {
-	InApp bool
-	Email bool
-	SMS   bool
-	Push  bool
-}
-
-// Notifications stores notifications and notification settings. A user sees the notifications
-// that are not deleted and include the IN_APP channel; the lookups return nil when nothing matches.
-type Notifications interface {
-	List(ctx context.Context, userID int, f NotificationFilter, offset, limit int) ([]entity.NotificationRecord, error)
-	Count(ctx context.Context, userID int, f NotificationFilter) (int, error)
-	Get(ctx context.Context, id, userID int) (*entity.NotificationRecord, error)
-	MarkRead(ctx context.Context, id, userID int, at time.Time) (*entity.NotificationRecord, error)
-	MarkAllRead(ctx context.Context, userID int, at time.Time) error
-	// SoftDelete reports whether a visible notification was deleted.
-	SoftDelete(ctx context.Context, id, userID int) (bool, error)
-	Create(ctx context.Context, n *NewNotification) (*entity.NotificationRecord, error)
-	// CreateInApp skips the users who turned in-app off for the category and returns the rows written.
-	CreateInApp(ctx context.Context, b *InAppBatch) (int, error)
-	// RecordChannel merges {channel: result} into sentChannels of a notification that is not deleted.
-	RecordChannel(ctx context.Context, id int, channel string, result map[string]any) error
-	Setting(ctx context.Context, userID int, category string) (*entity.NotificationSetting, error)
-	Settings(ctx context.Context, userID int) ([]entity.NotificationSetting, error)
-	CreateSetting(ctx context.Context, userID int, category string, f NotificationFlags) (*entity.NotificationSetting, error)
-	UpdateSetting(ctx context.Context, id int, f NotificationFlags) (*entity.NotificationSetting, error)
-	// InitSettings creates the missing settings of every category with all channels on.
-	InitSettings(ctx context.Context, userID int, categories []string) error
-	// RemoveUser hard-deletes every notification and setting of a user.
-	RemoveUser(ctx context.Context, userID int) error
-}
-
-// UserBindings attaches a phone number or a WeChat account to an active user that has none.
-type UserBindings interface {
-	BindPhoneIfEmpty(ctx context.Context, id int, phone string) (bool, error)
-	// BindWechatIfEmpty sets the open id, and the union id when unionID is not nil.
-	BindWechatIfEmpty(ctx context.Context, id int, openID string, unionID *string) (bool, error)
+// Notes stores notes; reads skip soft-deleted rows and the notes of other owners.
+type Notes interface {
+	Create(ctx context.Context, n *entity.Note) (*entity.Note, error)
+	// Get, Update and Delete report found=false for a note that does not exist or is not owner's.
+	Get(ctx context.Context, owner, id uuid.UUID) (n *entity.Note, found bool, err error)
+	List(ctx context.Context, p *NotePage) ([]entity.Note, error)
+	Update(ctx context.Context, owner, id uuid.UUID, c *entity.NoteChanges) (n *entity.Note, found bool, err error)
+	Delete(ctx context.Context, owner, id uuid.UUID) (found bool, err error)
 }

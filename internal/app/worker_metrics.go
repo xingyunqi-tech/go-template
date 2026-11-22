@@ -2,64 +2,58 @@ package app
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/xingyunqi-tech/go-template/internal/config"
-	httpapi "github.com/xingyunqi-tech/go-template/internal/controller/http"
-	"github.com/xingyunqi-tech/go-template/internal/metrics"
 )
 
 const _metricsReadHeaderTimeout = 5 * time.Second
 
-// workerMetricsHandler serves GET /<METRICS_PATH> behind the METRICS_TOKEN guard.
-func workerMetricsHandler(cfg *config.Config, m *metrics.Metrics) http.Handler {
-	guard := httpapi.MonitorGuard(cfg.Metrics.Token.Value(), cfg.App.IsProduction())
+// metricsMux serves GET /metrics, behind METRICS_TOKEN when it is set.
+func metricsMux(token string, metrics http.Handler) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /"+cfg.Metrics.Path, func(w http.ResponseWriter, r *http.Request) {
-		if _, err := guard(r); err != nil {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte(`{"code":403,"message":"Forbidden resource","data":null}`))
+	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
+		if token != "" {
+			got, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+				w.Header().Set("WWW-Authenticate", "Bearer")
+				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 
-			return
+				return
+			}
 		}
 
-		if err := m.Write(w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		metrics.ServeHTTP(w, r)
 	})
 
 	return mux
 }
 
-// serveWorkerMetrics listens on WORKER_METRICS_PORT; stop shuts the server down and is a no-op
-// when the port is 0.
-func serveWorkerMetrics(ctx context.Context, cfg *config.Config, m *metrics.Metrics, log *slog.Logger) (stop func(), err error) {
-	if cfg.Metrics.WorkerPort == 0 {
-		return func() {}, nil
-	}
-
-	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", net.JoinHostPort("", strconv.Itoa(cfg.Metrics.WorkerPort)))
+// serveMetrics listens on port; stop shuts the server down.
+func serveMetrics(ctx context.Context, cfg *config.Config, port int, metrics http.Handler, log *slog.Logger) (stop func(), err error) {
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", net.JoinHostPort("", strconv.Itoa(port)))
 	if err != nil {
-		return nil, fmt.Errorf("app: worker metrics: %w", err)
+		return nil, fmt.Errorf("app: metrics listener: %w", err)
 	}
 
-	srv := &http.Server{Handler: workerMetricsHandler(cfg, m), ReadHeaderTimeout: _metricsReadHeaderTimeout}
+	srv := &http.Server{Handler: metricsMux(cfg.Metrics.Token.Value(), metrics), ReadHeaderTimeout: _metricsReadHeaderTimeout} //nolint:exhaustruct // defaults
 
 	go func() {
 		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.ErrorContext(ctx, "worker metrics server failed", "error", err.Error())
+			log.ErrorContext(ctx, "metrics server failed", "error", err.Error())
 		}
 	}()
 
-	log.InfoContext(ctx, "worker metrics listening", "addr", listener.Addr().String(), "path", "/"+cfg.Metrics.Path)
+	log.InfoContext(ctx, "metrics listening", "addr", listener.Addr().String())
 
 	return func() {
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.App.ShutdownTimeout)

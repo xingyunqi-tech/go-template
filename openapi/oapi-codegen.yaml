@@ -5,24 +5,16 @@ generate:
   models: true
   chi-server: true
   strict-server: true
-additional-imports:
-  - package: github.com/xingyunqi-tech/go-template/internal/controller/http/response
 compatibility:
   apply-chi-middleware-first-to-last: true
 output-options:
   skip-prune: true
-  overlay:
-    path: openapi/overlay.yaml
   type-mapping:
-    number:
-      default:
-        type: float64
     string:
       formats:
         date-time:
           type: jsontime.Time
           import: github.com/xingyunqi-tech/go-template/pkg/jsontime
         uuid:
-          type: string
-  user-templates:
-    strict/strict-interface.tmpl: openapi/templates/strict-interface.tmpl
+          type: uuid.UUID
+          import: uuid

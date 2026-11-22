@@ -10,213 +10,24 @@ import (
 	"uuid"
 )
 
-type AccountCleanup struct {
-	UserId      int32
-	CompletedAt time.Time
-}
-
-type Address struct {
-	ID       int32
-	UserId   int32
-	Name     string
-	Phone    string
-	Province string
-	City     string
-	District string
-	// Province region code
-	ProvinceCode *string
-	// City region code
-	CityCode *string
-	// District region code
-	DistrictCode *string
-	Address      string
-	IsDefault    bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	DeletedAt    *time.Time
-}
-
-type AdminAlert struct {
-	ID             int32
-	Type           string
-	Level          string
-	Message        string
-	Payload        []byte
-	DedupKey       string
-	AcknowledgedAt *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-}
-
 type AuditLog struct {
-	ID         int32
-	UserId     *string
-	Action     string
-	EntityType string
-	EntityId   string
-	OldValue   []byte
-	NewValue   []byte
-	IpAddress  *string
-	UserAgent  *string
-	RequestId  *string
-	CreatedAt  time.Time
+	ID           uuid.UUID
+	ActorSub     *uuid.UUID
+	Action       string
+	ResourceType string
+	ResourceID   string
+	RequestID    string
+	Ip           string
+	Data         []byte
+	CreatedAt    time.Time
 }
 
-type Config struct {
-	Key       string
-	Value     []byte
-	IsPublic  bool
+type Note struct {
+	ID        uuid.UUID
+	OwnerSub  uuid.UUID
+	Title     string
+	Content   string
 	CreatedAt time.Time
 	UpdatedAt time.Time
-}
-
-type Favorite struct {
-	ID         int32
-	UserId     int32
-	TargetType string
-	TargetId   string
-	SubjectId  *uuid.UUID
-	Title      *string
-	Image      *string
-	Extra      *string
-	CreatedAt  time.Time
-}
-
-type Feedback struct {
-	ID              int32
-	UserId          *int32
-	Type            string
-	Content         string
-	Images          []byte
-	Contact         *string
-	Status          string
-	Reply           *string
-	QuestionId      *uuid.UUID
-	QuestionVersion *int32
-	Reason          *string
-	ErrataId        *uuid.UUID
-	MessageId       *uuid.UUID
-	MessageSnapshot []byte
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-}
-
-type File struct {
-	ID          uuid.UUID
-	Path        string
-	Visibility  string
-	OwnerUserId *int32
-	MimeType    *string
-	Size        *int32
-	Sha256      *string
-}
-
-type Notification struct {
-	ID           int32
-	UserId       int32
-	Type         string
-	Category     string
-	Title        string
-	Content      string
-	Metadata     []byte
-	Channels     []byte
-	SentChannels []byte
-	IsRead       bool
-	ReadAt       *time.Time
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	DeletedAt    *time.Time
-}
-
-type NotificationSetting struct {
-	ID          int32
-	UserId      int32
-	Category    string
-	EnableInApp bool
-	EnableEmail bool
-	EnableSms   bool
-	EnablePush  bool
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-type Permission struct {
-	ID          string
-	Name        string
-	Description *string
-	Resource    string
-	Action      string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-// Administrative division data (Province/City/District)
-type Region struct {
-	ID         int32
-	Code       string
-	Name       string
-	Level      int32
-	ParentCode *string
-	Sort       int32
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-}
-
-type Role struct {
-	ID   int32
-	Name string
-}
-
-type RolePermission struct {
-	RoleID       int32
-	PermissionID string
-	CreatedAt    time.Time
-}
-
-type Session struct {
-	ID           int32
-	Hash         string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	DeletedAt    *time.Time
-	UserId       *int32
-	UserAgent    *string
-	Ip           *string
-	LastActiveAt *time.Time
-}
-
-type Status struct {
-	ID   int32
-	Name string
-}
-
-type User struct {
-	ID            int32
-	Email         *string
-	Password      *string
-	Provider      string
-	FirstName     *string
-	LastName      *string
-	Phone         *string
-	Nickname      *string
-	Gender        *int32
-	Birthday      *time.Time
-	WechatOpenId  *string
-	WechatUnionId *string
-	AlipayOpenId  *string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	DeletedAt     *time.Time
-	PhotoId       *uuid.UUID
-	RoleId        *int32
-	StatusId      *int32
-}
-
-type UserConsent struct {
-	ID       uuid.UUID
-	UserId   int32
-	Type     string
-	Version  string
-	AgreedAt time.Time
-	Ip       *string
+	DeletedAt *time.Time
 }

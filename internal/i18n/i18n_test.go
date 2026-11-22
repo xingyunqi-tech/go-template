@@ -1,85 +1,77 @@
-package i18n
+package i18n_test
 
 import (
-	"context"
-	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/xingyunqi-tech/go-template/internal/entity"
+	"github.com/xingyunqi-tech/go-template/internal/i18n"
 )
 
-func TestResolveFollowsAcceptLanguageResolver(t *testing.T) {
+func translator(t *testing.T) *i18n.Translator {
+	t.Helper()
+
+	tr, err := i18n.New("zh")
+	require.NoError(t, err)
+
+	return tr
+}
+
+func TestResolveMatchesAcceptLanguage(t *testing.T) {
 	t.Parallel()
 
-	tr, err := New("en")
-	require.NoError(t, err)
-	assert.Equal(t, []string{"en", "zh"}, tr.Languages())
+	tr := translator(t)
 
-	cases := map[string]string{
-		"":                            "en",
-		"zh":                          "zh",
-		"zh-CN,zh;q=0.9,en;q=0.8":     "zh",
-		"ZH-cn":                       "zh",
-		"en;q=0.5, zh;q=0.8":          "zh",
-		"fr, zh-Hant-TW;q=0.4":        "zh",
-		"fr, de":                      "en",
-		"zh;q=abc, en;q=0.1":          "zh",
-		"en-US;q=0, zh;q=0.0001":      "zh",
-		"*":                           "en",
-		" , ,zh":                      "zh",
-		"zh;q":                        "zh",
-		"en;q=Infinity, zh;q=1000000": "en",
-	}
-
-	for header, want := range cases {
+	for header, want := range map[string]string{
+		"":                        "zh",
+		"en":                      "en",
+		"en-US,en;q=0.9":          "en",
+		"zh-CN":                   "zh",
+		"fr-FR, en;q=0.5":         "en",
+		"en;q=0.3, zh-TW;q=0.8":   "zh",
+		"fr":                      "zh",
+		"de;q=0.9, en;q=0.1, *":   "en",
+		"not a language!!":        "zh",
+		"zh-Hans-CN;q=0.2, en-GB": "en",
+	} {
 		assert.Equal(t, want, tr.Resolve(header), header)
 	}
-
-	zh, err := New("zh")
-	require.NoError(t, err)
-	assert.Equal(t, "zh", zh.Resolve("fr"))
-
-	_, err = New("fr")
-	require.ErrorIs(t, err, errUnknownLanguage)
 }
 
-func TestTranslateFallsBackToDefaultLanguage(t *testing.T) {
+func TestMessageFillsTemplateAndFallsBack(t *testing.T) {
 	t.Parallel()
 
-	tr, err := New("en")
-	require.NoError(t, err)
+	tr := translator(t)
 
-	v, ok := tr.Translate("zh", "common.notFound")
+	msg, ok := tr.Message("en", "validation.min", map[string]any{"min": 1})
 	assert.True(t, ok)
-	assert.Equal(t, "资源不存在", v)
+	assert.Equal(t, "must be at least 1", msg)
 
-	v, ok = tr.Translate("fr", "common.notFound")
+	msg, ok = tr.Message("fr", "common.notFound", nil)
 	assert.True(t, ok)
-	assert.Equal(t, "Not found", v)
+	assert.Equal(t, "资源不存在", msg)
 
-	v, ok = tr.Translate("zh", "confirm-email.text1")
-	assert.True(t, ok)
-	assert.NotEmpty(t, v)
+	_, ok = tr.Message("en", "common.nope", nil)
+	assert.False(t, ok)
+}
 
-	for _, key := range []string{"common.missing", "nope.notFound", "common", "common.not.found", "common.Cannot GET /a.b"} {
-		_, ok := tr.Translate("en", key)
-		assert.False(t, ok, key)
+func TestEveryErrorKeyAndRuleIsTranslated(t *testing.T) {
+	t.Parallel()
+
+	tr := translator(t)
+
+	for key := range entity.Codes() {
+		assert.True(t, tr.Has(key), key)
 	}
-}
 
-func TestParseFloatReadsLeadingNumber(t *testing.T) {
-	t.Parallel()
-
-	assert.InDelta(t, 0.8, parseFloat(" 0.8abc"), 1e-9)
-	assert.InDelta(t, 5, parseFloat("5e0"), 1e-9)
-	assert.True(t, math.IsInf(parseFloat("Infinity"), 1))
-	assert.True(t, math.IsNaN(parseFloat("abc")))
-}
-
-func TestLanguageContext(t *testing.T) {
-	t.Parallel()
-
-	assert.Empty(t, Language(context.Background()))
-	assert.Equal(t, "zh", Language(WithLanguage(context.Background(), "zh")))
+	for _, rule := range []string{
+		entity.RuleRequired, entity.RuleType, entity.RuleEmail, entity.RuleURL, entity.RuleUUID, entity.RuleMin,
+		entity.RuleMax, entity.RuleMinLength, entity.RuleMaxLength, entity.RuleMinItems, entity.RuleMaxItems,
+		entity.RulePattern, entity.RuleEnum, entity.RuleFormat, entity.RuleExists, entity.RuleContains,
+		entity.RuleMinProperties,
+	} {
+		assert.True(t, tr.Has("validation."+rule), rule)
+	}
 }

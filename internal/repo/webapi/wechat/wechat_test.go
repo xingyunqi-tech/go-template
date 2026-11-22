@@ -62,7 +62,7 @@ func reply(v any) http.HandlerFunc {
 func fields(t *testing.T, err error) (status int, key string, details []entity.Detail) {
 	t.Helper()
 
-	var e *entity.Error
+	var e *entity.NestError
 	require.ErrorAs(t, err, &e)
 
 	return e.Status, e.ErrorKey, e.Fields

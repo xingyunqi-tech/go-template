@@ -1,20 +1,22 @@
-# CI / e2e：生产镜像以 APP_ENV=production 起完整服务栈，演示账号由 seed 一次性写入
+# CI / e2e：生产镜像以 APP_ENV=production 起完整服务栈；AUTH_SIGNING_KEY 为 e2e 用例共用的固定测试密钥
 #
 # 用法：make test-e2e
 
 x-ci-env: &ci-env
   APP_ENV: production
-  AUTH_JWT_SECRET: ci_jwt_secret_0123456789abcdefghijklmnop
-  AUTH_REFRESH_SECRET: ci_refresh_secret_0123456789abcdefghijklmnop
-  AUTH_FORGOT_SECRET: ci_forgot_secret_0123456789abcdefghijklmnop
-  AUTH_CONFIRM_EMAIL_SECRET: ci_confirm_email_secret_0123456789abcdefghijklmnop
-  SWAGGER_ENABLED: 'true'
-  REDIS_ENABLED: 'true'
-  TRUST_PROXY: '1'
-  MAIL_HOST: localhost
-  MAIL_PORT: '1025'
-  MAIL_DEFAULT_EMAIL: noreply@example.com
-  MAIL_DEFAULT_NAME: API
+  DOCS_ENABLED: 'true'
+  LOG_FORMAT: json
+  LOG_LEVEL: info
+  CORS_ORIGINS: http://localhost:5173
+  TRUSTED_PROXIES: '1'
+  METRICS_TOKEN: ci-metrics-token-0123456789
+  REDIS_URL: redis://redis:6379/0
+  AUTH_ISSUER: go-template-e2e
+  AUTH_AUDIENCE: go-template-e2e
+  AUTH_SIGNING_KEY: |
+    -----BEGIN PRIVATE KEY-----
+    MC4CAQAwBQYDK2VwBCIEIAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g
+    -----END PRIVATE KEY-----
 
 services:
   postgres:
@@ -36,9 +38,7 @@ services:
     environment:
       <<: *ci-env
       APP_ENV: test
-      DATABASE_HOST: postgres
-      REDIS_ENABLED: 'true'
-      REDIS_HOST: redis
+      DATABASE_URL: postgresql://${DATABASE_USERNAME:-root}:${DATABASE_PASSWORD:-secret}@postgres:5432/${DATABASE_NAME:-api}?sslmode=disable
     depends_on:
       migrate:
         condition: service_completed_successfully

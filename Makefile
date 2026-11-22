@@ -35,14 +35,13 @@ OPENAPIGEN := $(BIN)/openapigen
 PKGS := ./...
 IMAGE := go-template:local
 BUILD_PLATFORMS := linux/amd64 linux/arm64
-MOCK_SOURCES := internal/repo/contracts.go internal/usecase/accountcleanup/accountcleanup.go internal/usecase/alert/alert.go \
-	internal/usecase/auth/auth.go internal/usecase/auth/phone.go internal/usecase/auth/social.go \
-	internal/usecase/file/file.go internal/usecase/sms/sender.go internal/usecase/user/user.go
+MOCK_SOURCES := internal/repo/contracts.go
 MOCK_DIRS := $(sort $(foreach src,$(MOCK_SOURCES),$(dir $(src))mocks))
-GENERATED := internal/controller/http/gen internal/repo/postgres/sqlcgen $(MOCK_DIRS)
+GENERATED := openapi/openapi.json internal/controller/http/validation.json internal/controller/http/gen internal/repo/postgres/sqlcgen $(MOCK_DIRS)
 GITLEAKS_LOG_OPTS ?=
-MIGRATIONS_DB := go_template_migrations
-NAMING_SQL := SELECT c.relname || '.' || con.conname FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND con.contype <> 'n' AND c.relname <> 'goose_db_version' UNION ALL SELECT tablename || '.' || indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename <> 'goose_db_version' AND indexname NOT IN (SELECT conname FROM pg_constraint)
+MIGRATIONS_SCHEMA := go_template_migrations
+NAMING_SQL = SELECT con.conname FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '$(1)' AND con.contype <> 'n' AND c.relname NOT LIKE 'river%' AND c.relname NOT LIKE 'goose%' UNION ALL SELECT indexname FROM pg_indexes WHERE schemaname = '$(1)' AND tablename NOT LIKE 'river%' AND tablename NOT LIKE 'goose%'
+CONSTRAINT_NAME := ^[a-z0-9_]+_(pkey|key|fkey|idx|check)$$
 TEST_FLAGS := -race -shuffle=on
 COVERAGE_DIR := $(CURDIR)/coverage
 DEV_COMPOSE := docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.postgres.yaml -f docker/docker-compose.redis.yaml -f docker/docker-compose.dev.yaml
@@ -81,13 +80,13 @@ down: ## 停止开发栈
 	$(DEV_COMPOSE) down
 
 .PHONY: migrate
-migrate: ## 执行数据库迁移（读取 .env；DB_SCHEMA_OWNER=external 时只校验表结构）
+migrate: ## 创建 DATABASE_SCHEMA 并执行迁移（读取 .env）
 	$(ENV_RUN) $(GO) run ./cmd/app migrate
 
 .PHONY: migrate-create
-migrate-create: ## 新建顺序编号的 goose SQL 迁移（NAME=add_orders）
-	@[[ -n "$(NAME)" ]] || { echo "用法：make migrate-create NAME=<name>" >&2; exit 1; }
-	$(GOTOOL) goose -dir migrations -s create $(NAME) sql
+migrate-create: ## 新建顺序编号的 goose SQL 迁移（NAME=add_orders，SET=core 或 identity，默认 core）
+	@[[ -n "$(NAME)" ]] || { echo "用法：make migrate-create NAME=<name> [SET=core|identity]" >&2; exit 1; }
+	$(GOTOOL) goose -dir migrations/$(or $(SET),core) -s create $(NAME) sql
 
 .PHONY: seed
 seed: ## 写入种子数据（读取 .env）
@@ -102,17 +101,16 @@ worker: ## 本地启动队列 worker 与周期任务（读取 .env）
 	$(ENV_RUN) $(GO) run ./cmd/app worker
 
 .PHONY: generate
-generate: $(OPENAPIGEN) $(SQLC) ## 生成代码：oapi-codegen（scope.yaml 范围内）、sqlc、mockgen（MOCK_SOURCES 中的端口）
-	$(OPENAPIGEN)
+generate: openapi $(SQLC) ## 生成代码：OpenAPI bundle 与 oapi-codegen、sqlc、mockgen（MOCK_SOURCES 中的端口）
 	$(SQLC) generate
 	for dir in $(MOCK_DIRS); do rm -f "$$dir"/mock_*.go; done
 	for src in $(MOCK_SOURCES); do \
 		$(GOTOOL) mockgen -typed -source=$$src -package=mocks -destination=$$(dirname $$src)/mocks/mock_$$(basename $$src); \
 	done
 
-.PHONY: module
-module: ## 按 OpenAPI 标签生成模块骨架（NAME=orders TAG=Orders）：写入 scope.yaml、处理器桩、用例、仓储与端口
-	$(GO) run ./cmd/modulegen -name $(NAME) -tag '$(TAG)'
+.PHONY: openapi
+openapi: $(OPENAPIGEN) ## 由 openapi/src 生成 openapi/openapi.json、校验文档与 oapi-codegen 代码
+	$(OPENAPIGEN)
 
 ##@ 检查
 
@@ -186,27 +184,25 @@ test-integration: ## 第 2 层：集成测试（testcontainers，需要 Docker�
 	$(GOTOOL) gotestsum --junitfile $(COVERAGE_DIR)/integration.xml -- $(TEST_FLAGS) -tags integration -coverprofile=$(COVERAGE_DIR)/integration.out -coverpkg=./internal/...,./pkg/... $(PKGS)
 
 .PHONY: test-contract
-test-contract: ## 第 4 层：契约测试（含 validation-cases.json 全部 nestjs oracle 用例）
+test-contract: $(OPENAPIGEN) ## 第 4 层：契约测试（文档与路由、policy 一致，bundle 无漂移）
 	@mkdir -p $(COVERAGE_DIR)
 	$(GOTOOL) gotestsum --junitfile $(COVERAGE_DIR)/contract.xml -- $(TEST_FLAGS) -tags contract -coverprofile=$(COVERAGE_DIR)/contract.out -coverpkg=./internal/...,./pkg/... ./tests/contract/...
 
 .PHONY: test-migrations
-test-migrations: $(SQLC) ## 迁移：空库 up → sqlc vet → down-to 0 → up，检查新增约束与索引命名（需要 make infra，读取 .env）
+test-migrations: $(SQLC) ## 迁移：在独立 schema 中 up → sqlc vet → down → 只剩 goose 版本表 → up，检查约束与索引命名（需要 make infra，读取 .env）
 	$(ENV_RUN) \
-	$(PSQL) -d postgres -c 'DROP DATABASE IF EXISTS $(MIGRATIONS_DB) WITH (FORCE)' -c 'CREATE DATABASE $(MIGRATIONS_DB)'; \
-	export DATABASE_NAME=$(MIGRATIONS_DB); \
+	export DATABASE_SCHEMA=$(MIGRATIONS_SCHEMA) OTEL_SERVICE_NAME=$${OTEL_SERVICE_NAME:-go-template} OTEL_SDK_DISABLED=true; \
+	$(PSQL) -d "$${DATABASE_NAME:-api}" -c 'DROP SCHEMA IF EXISTS $(MIGRATIONS_SCHEMA) CASCADE'; \
 	$(GO) run ./cmd/app migrate; \
 	$(SQLC) vet; \
-	$(GOTOOL) goose -dir migrations postgres \
-		"postgres://$${DATABASE_USERNAME:-root}:$${DATABASE_PASSWORD:-secret}@$${DATABASE_HOST:-localhost}:$${DATABASE_PORT:-5432}/$(MIGRATIONS_DB)?sslmode=disable" down-to 0; \
-	left="$$($(PSQL) -d $(MIGRATIONS_DB) -c "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'goose_db_version'")"; \
-	if [[ -n "$$left" ]]; then echo "down-to 0 后仍有表：$$left" >&2; exit 1; fi; \
+	$(GO) run ./cmd/app migrate down; \
+	left="$$($(PSQL) -d "$${DATABASE_NAME:-api}" -c "SELECT tablename FROM pg_tables WHERE schemaname = '$(MIGRATIONS_SCHEMA)' AND tablename NOT IN ('goose_core_version', 'goose_identity_version')")"; \
+	if [[ -n "$$left" ]]; then echo "migrate down 后仍有表：$$left" >&2; exit 1; fi; \
 	$(GO) run ./cmd/app migrate; \
-	names="$$($(PSQL) -d $(MIGRATIONS_DB) -c "$(NAMING_SQL)")"; \
-	bad="$$(comm -23 <(sort <<<"$$names") <(awk '$$1 == "constraint" || $$1 == "index" {print $$2}' db/nestjs-schema.sql | sort) \
-		| awk -F. '{t = $$1; n = substr($$0, length(t) + 2); if (n != t "_pkey" && n !~ ("^" t "_.+_(key|fkey|check)$$") && n !~ ("^idx_" t "_.+$$")) print}')"; \
-	if [[ -n "$$bad" ]]; then echo "约束 / 索引命名应为 <table>_<column>_key、<table>_<column>_fkey、idx_<table>_<column>：" >&2; echo "$$bad" >&2; exit 1; fi; \
-	$(PSQL) -d postgres -c 'DROP DATABASE $(MIGRATIONS_DB) WITH (FORCE)'
+	names="$$($(PSQL) -d "$${DATABASE_NAME:-api}" -c "$(call NAMING_SQL,$(MIGRATIONS_SCHEMA))")"; \
+	bad="$$(grep -Ev '$(CONSTRAINT_NAME)' <<<"$$names" || true)"; \
+	if [[ -n "$$bad" ]]; then echo "约束 / 索引命名应为 <table>_pkey、<table>_<columns>_key|fkey|idx|check：" >&2; echo "$$bad" >&2; exit 1; fi; \
+	$(PSQL) -d "$${DATABASE_NAME:-api}" -c 'DROP SCHEMA $(MIGRATIONS_SCHEMA) CASCADE'
 
 .PHONY: test-e2e
 test-e2e: ## 第 3 层：构建镜像并以 compose 启动后黑盒测试（APP_URL，默认 http://localhost:3000）

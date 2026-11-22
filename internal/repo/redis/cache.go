@@ -1,5 +1,6 @@
-// Package redis implements the cache port compatible with nestjs cache-manager + Keyv: keys are
-// "cache::<key>" and values {"value": ..., "expires": <ms>}.
+// Package redis implements the Redis-backed ports: the cache, locks, revoked sessions and
+// idempotency keys. Keys carry the {OTEL_SERVICE_NAME}: prefix except the revocation keys shared
+// by every service.
 package redis
 
 import (
@@ -18,36 +19,28 @@ import (
 )
 
 const (
-	_namespace      = "cache"
 	_cacheName      = "default"
 	_memoryMaxItems = 10_000
 	_commandTimeout = 500 * time.Millisecond
 )
 
-type envelope struct {
-	Value   json.RawMessage `json:"value"`
-	Expires int64           `json:"expires"`
-}
-
 // Cache stores values in Redis, falling back to process memory when Redis is disabled or fails.
 type Cache struct {
 	client  *goredis.Client
+	prefix  string
 	memory  *Memory
 	log     *slog.Logger
 	now     func() time.Time
 	counter Counter
 }
 
-// NewCache returns a Cache; client may be nil to use memory only.
-func NewCache(client *goredis.Client, log *slog.Logger) *Cache {
-	return &Cache{client: client, memory: NewMemory(), log: log, now: time.Now, counter: nil}
+// NewCache returns a Cache whose keys are {service}:cache:{key}; client may be nil to use memory
+// only.
+func NewCache(client *goredis.Client, service string, log *slog.Logger) *Cache {
+	return &Cache{client: client, prefix: service + ":cache:", memory: NewMemory(), log: log, now: time.Now, counter: nil}
 }
 
 var _ repo.Cache = (*Cache)(nil)
-
-func key(k string) string {
-	return _namespace + "::" + k
-}
 
 func (c *Cache) fallback(ctx context.Context, op string, err error) {
 	c.log.WarnContext(ctx, "redis cache unavailable, using memory", "op", op, "error", err.Error())
@@ -89,7 +82,7 @@ func (c *Cache) get(ctx context.Context, k string, dst any) (bool, error) {
 	cmdCtx, cancel := context.WithTimeout(ctx, _commandTimeout)
 	defer cancel()
 
-	raw, err := c.client.Get(cmdCtx, key(k)).Bytes()
+	raw, err := c.client.Get(cmdCtx, c.prefix+k).Bytes()
 
 	switch {
 	case errors.Is(err, goredis.Nil):
@@ -100,16 +93,7 @@ func (c *Cache) get(ctx context.Context, k string, dst any) (bool, error) {
 		return c.memory.Get(ctx, k, dst)
 	}
 
-	var e envelope
-	if err := json.Unmarshal(raw, &e); err != nil {
-		return false, nil //nolint:nilerr // unreadable entries count as misses
-	}
-
-	if e.Expires != 0 && e.Expires <= c.now().UnixMilli() {
-		return false, nil
-	}
-
-	if err := json.Unmarshal(e.Value, dst); err != nil {
+	if err := json.Unmarshal(raw, dst); err != nil {
 		return false, nil //nolint:nilerr // unreadable entries count as misses
 	}
 
@@ -127,15 +111,10 @@ func (c *Cache) Set(ctx context.Context, k string, value any, ttl time.Duration)
 		return fmt.Errorf("cache: encode: %w", err)
 	}
 
-	payload, err := encode(envelope{Value: raw, Expires: c.now().Add(ttl).UnixMilli()})
-	if err != nil {
-		return fmt.Errorf("cache: encode: %w", err)
-	}
-
 	cmdCtx, cancel := context.WithTimeout(ctx, _commandTimeout)
 	defer cancel()
 
-	if err := c.client.Set(cmdCtx, key(k), payload, ttl).Err(); err != nil {
+	if err := c.client.Set(cmdCtx, c.prefix+k, raw, ttl).Err(); err != nil {
 		c.fallback(ctx, "set", err)
 
 		return c.memory.Set(ctx, k, value, ttl)
@@ -155,7 +134,7 @@ func (c *Cache) Delete(ctx context.Context, k string) error {
 	cmdCtx, cancel := context.WithTimeout(ctx, _commandTimeout)
 	defer cancel()
 
-	if err := c.client.Del(cmdCtx, key(k)).Err(); err != nil {
+	if err := c.client.Del(cmdCtx, c.prefix+k).Err(); err != nil {
 		c.fallback(ctx, "delete", err)
 	}
 

@@ -4,13 +4,18 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
+	"maps"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/go-playground/validator/v10"
+
+	"github.com/xingyunqi-tech/go-template/pkg/clientip"
 )
 
 // Environments accepted by APP_ENV.
@@ -20,66 +25,65 @@ const (
 	EnvProduction  = "production"
 )
 
-// ErrProduction reports settings that production refuses or that contradict each other.
-var ErrProduction = errors.New("invalid settings")
+// Metrics exporters accepted by OTEL_METRICS_EXPORTER.
+const (
+	MetricsPrometheus = "prometheus"
+	MetricsOTLP       = "otlp"
+	MetricsNone       = "none"
+)
 
-func sortedCopy(s []string) []string {
-	out := slices.Clone(s)
-	slices.Sort(out)
+const (
+	_redacted        = "***"
+	_developmentDSN  = "postgresql://root:secret@localhost:5432/api?sslmode=disable" //nolint:gosec // local development database of make infra
+	_minMetricsToken = 16
+)
 
-	return out
+var (
+	// ErrInvalid reports settings that are malformed, contradict each other or are refused in
+	// production.
+	ErrInvalid = errors.New("invalid settings")
+
+	_schemaName = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
+)
+
+// Secret hides its value from logs and formatting.
+type Secret string
+
+// String implements fmt.Stringer.
+func (s Secret) String() string {
+	return _redacted
+}
+
+// LogValue implements slog.LogValuer.
+func (s Secret) LogValue() slog.Value {
+	return slog.StringValue(_redacted)
+}
+
+// Value returns the secret.
+func (s Secret) Value() string {
+	return string(s)
 }
 
 // Config is the whole application configuration.
 type Config struct {
-	App           App
-	Log           Log
-	Database      Database
-	Redis         Redis
-	Auth          Auth
-	Seed          Seed
-	Throttle      Throttle
-	Metrics       Metrics
-	File          File
-	Mail          Mail
-	Observability Observability
-	SMS           SMS
-	Wechat        Wechat
-	Alipay        Alipay
+	App       App
+	Log       Log
+	Database  Database
+	Redis     Redis
+	Auth      Auth
+	HTTP      HTTP
+	Metrics   Metrics
+	Telemetry Telemetry
 }
 
-// App holds settings shared with nestjs-template under the same variable names.
+// App holds the process settings.
 type App struct {
-	Env              string        `env:"APP_ENV"               envDefault:"development" validate:"oneof=development test production"`
-	Name             string        `env:"APP_NAME"              envDefault:"app"         validate:"required"`
-	Port             int           `env:"APP_PORT"              envDefault:"3000"        validate:"min=1,max=65535"`
-	APIPrefix        string        `env:"API_PREFIX"            envDefault:"api"         validate:"required,excludesall=/"`
-	FallbackLanguage string        `env:"APP_FALLBACK_LANGUAGE" envDefault:"en"          validate:"oneof=en zh"`
-	FrontendDomain   string        `env:"FRONTEND_DOMAIN"`
-	BackendDomain    string        `env:"BACKEND_DOMAIN"        envDefault:"http://localhost"`
-	TrustProxy       int           `env:"TRUST_PROXY"           envDefault:"0"           validate:"min=0"`
-	SwaggerEnabled   OptionalBool  `env:"SWAGGER_ENABLED"`
-	ShutdownTimeout  time.Duration `env:"SHUTDOWN_TIMEOUT"      envDefault:"30s"         validate:"gt=0"`
-	DrainPeriod      time.Duration `env:"SHUTDOWN_DRAIN_PERIOD" envDefault:"0s"          validate:"gte=0"`
-}
-
-// Log configures the slog handler.
-type Log struct {
-	Level       string       `env:"LOG_LEVEL" validate:"omitempty,oneof=fatal error warn info debug trace silent"`
-	PrettyPrint OptionalBool `env:"LOG_PRETTY_PRINT"`
-}
-
-// LevelOr returns LOG_LEVEL, or the default for the environment when unset: info in production,
-// debug elsewhere.
-func (l *Log) LevelOr(production bool) string {
-	switch {
-	case l.Level != "":
-		return l.Level
-	case production:
-		return "info"
-	default:
-		return "debug"
-	}
+	Env             string        `env:"APP_ENV"            envDefault:"development" validate:"oneof=development test production"`
+	Port            int           `env:"APP_PORT"           envDefault:"3000"        validate:"min=1,max=65535"`
+	DefaultLocale   string        `env:"APP_DEFAULT_LOCALE" envDefault:"zh"          validate:"oneof=zh en"`
+	FrontendURL     string        `env:"APP_FRONTEND_URL"                            validate:"omitempty,url"`
+	DocsEnabled     OptionalBool  `env:"DOCS_ENABLED"`
+	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT"   envDefault:"20s"         validate:"gt=0"`
 }
 
 // IsProduction reports whether APP_ENV is production.
@@ -87,22 +91,129 @@ func (a *App) IsProduction() bool {
 	return a.Env == EnvProduction
 }
 
-// Docs reports whether /docs and /docs-json are served; unset means every environment but production.
+// Docs reports whether /openapi.json and /docs are served; unset means every environment but
+// production.
 func (a *App) Docs() bool {
-	return a.SwaggerEnabled.Or(!a.IsProduction())
+	return a.DocsEnabled.Or(!a.IsProduction())
+}
+
+// Log configures the slog handler.
+type Log struct {
+	Level  string `env:"LOG_LEVEL"  envDefault:"info" validate:"oneof=debug info warn error"`
+	Format string `env:"LOG_FORMAT" envDefault:"json" validate:"oneof=json text"`
+}
+
+// Database configures the PostgreSQL connection.
+type Database struct {
+	URL            Secret `env:"DATABASE_URL"`
+	Schema         string `env:"DATABASE_SCHEMA"           envDefault:"public"`
+	MaxConns       int32  `env:"DATABASE_MAX_CONNS"        envDefault:"20" validate:"min=1"`
+	WorkerMaxConns int32  `env:"WORKER_DATABASE_MAX_CONNS" envDefault:"10" validate:"min=1"`
+}
+
+// DSN returns DATABASE_URL, or the local development database when it is unset.
+func (d *Database) DSN() string {
+	if d.URL == "" {
+		return _developmentDSN
+	}
+
+	return d.URL.Value()
+}
+
+// Redis configures the Redis connection; without REDIS_URL every Redis-backed feature runs in
+// process.
+type Redis struct {
+	URL Secret `env:"REDIS_URL"`
+}
+
+// Enabled reports whether REDIS_URL is set.
+func (r *Redis) Enabled() bool {
+	return r.URL != ""
+}
+
+// Auth configures the access tokens; AUTH_SIGNING_KEY makes this service the issuer and
+// AUTH_JWKS_URL a verifier.
+type Auth struct {
+	Issuer     string        `env:"AUTH_ISSUER"      envDefault:"go-template"`
+	Audience   string        `env:"AUTH_AUDIENCE"    envDefault:"api"`
+	SigningKey Secret        `env:"AUTH_SIGNING_KEY"`
+	VerifyKeys string        `env:"AUTH_VERIFY_KEYS"`
+	JWKSURL    string        `env:"AUTH_JWKS_URL"                         validate:"omitempty,url"`
+	AccessTTL  time.Duration `env:"AUTH_ACCESS_TTL"  envDefault:"15m"     validate:"gt=0"`
+	RefreshTTL time.Duration `env:"AUTH_REFRESH_TTL" envDefault:"720h"    validate:"gt=0"`
+}
+
+// Role is how this service takes part in authentication.
+type Role int
+
+// Authentication roles.
+const (
+	// RoleIssuer signs tokens with AUTH_SIGNING_KEY.
+	RoleIssuer Role = iota
+	// RoleVerifier only verifies tokens with the keys at AUTH_JWKS_URL.
+	RoleVerifier
+	// RoleEphemeralIssuer signs tokens with a key generated at startup, outside production.
+	RoleEphemeralIssuer
+)
+
+// Role returns the authentication role selected by the auth variables.
+func (a *Auth) Role() Role {
+	switch {
+	case a.SigningKey != "":
+		return RoleIssuer
+	case a.JWKSURL != "":
+		return RoleVerifier
+	default:
+		return RoleEphemeralIssuer
+	}
+}
+
+// HTTP configures request handling.
+type HTTP struct {
+	BodyLimit        ByteSize         `env:"BODY_LIMIT"         envDefault:"1MiB"`
+	CORSOrigins      []string         `env:"CORS_ORIGINS"       envSeparator:","`
+	TrustedProxies   clientip.Proxies `env:"TRUSTED_PROXIES"    envDefault:"0"`
+	RateLimitEnabled bool             `env:"RATE_LIMIT_ENABLED" envDefault:"true"`
+}
+
+// Metrics configures the Prometheus endpoints.
+type Metrics struct {
+	Token      Secret `env:"METRICS_TOKEN"`
+	Port       int    `env:"METRICS_PORT"                         validate:"min=0,max=65535"`
+	WorkerPort int    `env:"WORKER_METRICS_PORT" envDefault:"9464" validate:"min=0,max=65535"`
+}
+
+// Telemetry holds the OpenTelemetry and Sentry settings this service reads itself; the other
+// OTEL_* variables go straight to the SDK.
+type Telemetry struct {
+	ServiceName     string `env:"OTEL_SERVICE_NAME,required"                  validate:"required"`
+	MetricsExporter string `env:"OTEL_METRICS_EXPORTER"   envDefault:"prometheus" validate:"oneof=prometheus otlp none"`
+	SDKDisabled     bool   `env:"OTEL_SDK_DISABLED"`
+	SentryDSN       Secret `env:"SENTRY_DSN"`
+}
+
+// Prometheus reports whether metrics are pulled from /metrics.
+func (t *Telemetry) Prometheus() bool {
+	return t.MetricsExporter == MetricsPrometheus && !t.SDKDisabled
 }
 
 // Load parses the environment and returns every problem at once.
 func Load() (*Config, error) {
-	var cfg Config
+	var (
+		cfg  Config
+		errs []error
+	)
 
-	if err := env.Parse(&cfg); err != nil {
-		return nil, fmt.Errorf("config: %w", err)
+	failed, err := parseEnv(&cfg)
+	if err != nil {
+		errs = append(errs, err)
 	}
 
 	validate := validator.New(validator.WithRequiredStructEnabled())
 	validate.RegisterTagNameFunc(func(f reflect.StructField) string {
 		if name := f.Tag.Get("env"); name != "" {
+			name, _, _ = strings.Cut(name, ",")
+
 			return name
 		}
 
@@ -110,12 +221,165 @@ func Load() (*Config, error) {
 	})
 
 	if err := validate.Struct(&cfg); err != nil {
+		errs = append(errs, validationErrors(err, failed))
+	}
+
+	if problems := cfg.problems(); len(problems) > 0 {
+		errs = append(errs, fmt.Errorf("%w: %s", ErrInvalid, strings.Join(problems, "; ")))
+	}
+
+	if err := errors.Join(errs...); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 
-	if problems := append(cfg.productionProblems(), cfg.infraProblems()...); len(problems) > 0 {
-		return nil, fmt.Errorf("config: %w: %s", ErrProduction, strings.Join(problems, "; "))
+	return &cfg, nil
+}
+
+func (c *Config) problems() []string {
+	var problems []string
+
+	if !_schemaName.MatchString(c.Database.Schema) {
+		problems = append(problems, "DATABASE_SCHEMA: must match "+_schemaName.String())
 	}
 
-	return &cfg, nil
+	if c.Auth.SigningKey != "" && c.Auth.JWKSURL != "" {
+		problems = append(problems, "AUTH_SIGNING_KEY, AUTH_JWKS_URL: only one of them may be set")
+	}
+
+	if token := c.Metrics.Token.Value(); token != "" && len(token) < _minMetricsToken {
+		problems = append(problems, fmt.Sprintf("METRICS_TOKEN: must be at least %d characters", _minMetricsToken))
+	}
+
+	if c.App.IsProduction() {
+		problems = append(problems, c.productionProblems()...)
+	}
+
+	slices.Sort(problems)
+
+	return problems
+}
+
+func (c *Config) productionProblems() []string {
+	var problems []string
+
+	required := map[string]bool{
+		"DATABASE_URL": c.Database.URL != "",
+		"REDIS_URL":    c.Redis.Enabled(),
+		"CORS_ORIGINS": len(c.CORSOrigins()) > 0,
+	}
+
+	for name, ok := range required {
+		if !ok {
+			problems = append(problems, name+": required in production")
+		}
+	}
+
+	if !c.HTTP.RateLimitEnabled {
+		problems = append(problems, "RATE_LIMIT_ENABLED: must be true in production")
+	}
+
+	if c.Auth.Role() == RoleEphemeralIssuer {
+		problems = append(problems, "AUTH_SIGNING_KEY, AUTH_JWKS_URL: one of them is required in production")
+	}
+
+	if c.Telemetry.Prometheus() && c.Metrics.Token == "" && c.Metrics.Port == 0 {
+		problems = append(problems, "METRICS_TOKEN, METRICS_PORT: one of them is required in production when OTEL_METRICS_EXPORTER=prometheus")
+	}
+
+	return problems
+}
+
+// parseEnv parses every settings group of cfg, names the variable of every field that failed and
+// returns those variables.
+func parseEnv(cfg *Config) (map[string]bool, error) {
+	failed := map[string]bool{}
+
+	var errs []error
+
+	groups := reflect.ValueOf(cfg).Elem()
+
+	for i := range groups.NumField() {
+		group := groups.Field(i)
+
+		if err := env.Parse(group.Addr().Interface()); err != nil {
+			errs = append(errs, groupErrors(err, envNames(group.Type()), failed))
+		}
+	}
+
+	return failed, errors.Join(errs...)
+}
+
+// groupErrors names the variable of every field of one group in err and records it in failed.
+func groupErrors(err error, names map[string]string, failed map[string]bool) error {
+	var agg env.AggregateError
+	if !errors.As(err, &agg) {
+		return err
+	}
+
+	errs := make([]error, 0, len(agg.Errors))
+
+	for _, e := range agg.Errors {
+		var (
+			parse  env.ParseError
+			notSet env.VarIsNotSetError
+		)
+
+		switch {
+		case errors.As(e, &parse) && names[parse.Name] != "":
+			failed[names[parse.Name]] = true
+			e = fmt.Errorf("%s: %w", names[parse.Name], parse.Err)
+		case errors.As(e, &notSet):
+			failed[notSet.Key] = true
+		}
+
+		errs = append(errs, e)
+	}
+
+	return errors.Join(errs...)
+}
+
+// validationErrors drops the validator errors of the variables that failed to parse.
+func validationErrors(err error, failed map[string]bool) error {
+	var verrs validator.ValidationErrors
+	if !errors.As(err, &verrs) {
+		return err
+	}
+
+	errs := make([]error, 0, len(verrs))
+
+	for _, e := range verrs {
+		if !failed[e.Field()] {
+			errs = append(errs, e)
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+// envNames maps the field names of one settings group to their variables.
+func envNames(t reflect.Type) map[string]string {
+	names := map[string]string{}
+
+	for f := range t.Fields() {
+		if name, _, _ := strings.Cut(f.Tag.Get("env"), ","); name != "" {
+			names[f.Name] = name
+		} else if f.Type.Kind() == reflect.Struct {
+			maps.Copy(names, envNames(f.Type))
+		}
+	}
+
+	return names
+}
+
+// CORSOrigins returns CORS_ORIGINS without blank entries.
+func (c *Config) CORSOrigins() []string {
+	var origins []string
+
+	for _, o := range c.HTTP.CORSOrigins {
+		if o = strings.TrimSpace(o); o != "" {
+			origins = append(origins, o)
+		}
+	}
+
+	return origins
 }

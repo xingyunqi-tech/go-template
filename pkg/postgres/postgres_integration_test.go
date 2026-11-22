@@ -42,7 +42,7 @@ func runMain(m *testing.M) int {
 func newPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	pool, err := postgres.New(t.Context(), dsn, postgres.Options{MaxConns: 2, TLS: nil})
+	pool, err := postgres.New(t.Context(), dsn, postgres.Options{MaxConns: 2, Schema: "", Tracer: nil})
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
@@ -101,6 +101,18 @@ func TestNewRejectsUnreachableServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
-	_, err := postgres.New(ctx, "postgres://app:app@127.0.0.1:1/app?sslmode=disable", postgres.Options{MaxConns: 0, TLS: nil})
+	_, err := postgres.New(ctx, "postgres://app:app@127.0.0.1:1/app?sslmode=disable", postgres.Options{MaxConns: 0, Schema: "", Tracer: nil})
 	require.Error(t, err)
+}
+
+func TestSchemaBecomesTheSearchPath(t *testing.T) {
+	t.Parallel()
+
+	pool, err := postgres.New(t.Context(), dsn, postgres.Options{MaxConns: 1, Schema: "svc_path", Tracer: nil})
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	var path string
+	require.NoError(t, pool.QueryRow(t.Context(), "SHOW search_path").Scan(&path))
+	require.Equal(t, `"svc_path"`, path)
 }

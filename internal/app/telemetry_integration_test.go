@@ -19,6 +19,7 @@ import (
 
 	"github.com/xingyunqi-tech/go-template/internal/app"
 	"github.com/xingyunqi-tech/go-template/internal/config"
+	"github.com/xingyunqi-tech/go-template/internal/testutil"
 )
 
 type sink struct {
@@ -60,30 +61,42 @@ func (s *sink) received(path string) []byte {
 }
 
 func TestTracesLogsAndErrorsAreExported(t *testing.T) {
-	t.Parallel()
-
 	otlp, otlpURL := newSink(t)
 	sentrySink, sentryURL := newSink(t)
 
-	a := newAppWith(t, 0, func(c *config.Config) {
-		require.NoError(t, c.Observability.OTelEnabled.UnmarshalText([]byte("true")))
-		c.Observability.OTelEndpoint = otlpURL
-		c.Observability.SentryDSN = config.Secret(strings.Replace(sentryURL, "http://", "http://public@", 1) + "/1")
-		c.App.Name = "traced-app"
-	}, nil)
+	t.Setenv("OTEL_TRACES_EXPORTER", "otlp")
+	t.Setenv("OTEL_LOGS_EXPORTER", "otlp")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", otlpURL)
+	t.Setenv("OTEL_SERVICE_NAME", "traced-app")
 
-	obs, err := app.SetupObservability(t.Context(), a.cfg, "test")
+	cfg := loadConfig(t, _db.Clone(t))
+	cfg.Telemetry.MetricsExporter = config.MetricsNone
+	cfg.Telemetry.SentryDSN = config.Secret(strings.Replace(sentryURL, "http://", "http://public@", 1) + "/1")
+
+	obs, err := app.SetupObservability(t.Context(), cfg, "test")
 	require.NoError(t, err)
 
 	log := obs.Logger(slog.New(slog.DiscardHandler))
 	log.InfoContext(t.Context(), "exported log line")
 
-	token := a.login("john.doe@example.com", _secret00).access
-	a.do(http.MethodGet, "/api/v1/users/12", token, nil)
+	infra, err := app.OpenInfra(t.Context(), cfg, 0)
+	require.NoError(t, err)
+	t.Cleanup(infra.Close)
 
-	a.pool.Close()
-	r := a.do(http.MethodGet, "/api/v1/auth/me", token, nil)
-	require.GreaterOrEqual(t, r.Status, http.StatusInternalServerError, r.Raw)
+	handler, err := app.NewHandler(t.Context(), cfg, log, infra, nil)
+	require.NoError(t, err)
+
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	a := &testApp{t: t, url: srv.URL, cfg: cfg, infra: infra}
+	a.get("/health/live", "")
+
+	infra.Pool.Close()
+
+	failed := a.do(http.MethodPost, "/api/v1/notes", testutil.IssueAccessToken(t, nil), `{"title":"t"}`, "X-Request-Id", "req-sentry")
+	require.GreaterOrEqual(t, failed.Status, http.StatusInternalServerError, failed.Raw)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -92,10 +105,10 @@ func TestTracesLogsAndErrorsAreExported(t *testing.T) {
 
 	traces := otlp.received("/v1/traces")
 	require.NotEmpty(t, traces)
-	assert.True(t, bytes.Contains(traces, []byte("GET /api/v1/users/:id")))
+	assert.True(t, bytes.Contains(traces, []byte("GET /health/live")))
 	assert.True(t, bytes.Contains(traces, []byte("traced-app")))
 	assert.True(t, bytes.Contains(otlp.received("/v1/logs"), []byte("exported log line")))
 
 	require.Eventually(t, func() bool { return len(sentrySink.received("/envelope/")) > 0 }, 5*time.Second, 50*time.Millisecond)
-	assert.True(t, bytes.Contains(sentrySink.received("/envelope/"), []byte(`"exception"`)))
+	assert.True(t, bytes.Contains(sentrySink.received("/envelope/"), []byte("req-sentry")))
 }

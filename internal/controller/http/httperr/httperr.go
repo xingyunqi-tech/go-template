@@ -1,116 +1,120 @@
-// Package httperr models nestjs HttpException and turns any error into the {code, message, data}
-// error body following nestjs AllExceptionsFilter.
+// Package httperr writes errors as the error response of platform conventions §2.2.
 package httperr
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
-	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
+	"github.com/xingyunqi-tech/go-template/internal/controller/http/reqctx"
+	"github.com/xingyunqi-tech/go-template/internal/entity"
 )
 
-// Error is a nestjs HttpException. Message is a custom message (translated as common.<Message>
-// when the key exists); ErrorKey is the response "error" field used when Message is empty;
-// Errors becomes data, with top-level string values translated.
-type Error struct {
-	Status   int
-	Message  string
-	ErrorKey string
-	Errors   *validatorx.Object
-	Headers  http.Header
+const _serviceUnavailableRetry = 5
+
+// ErrInvalidToken is the cause of a 401 for a request that carried an invalid or expired token.
+var ErrInvalidToken = errors.New("invalid token")
+
+// Translate returns the message of id in the request language with data filling it.
+type Translate func(ctx context.Context, id string, data map[string]any) string
+
+// Body is the error response.
+type Body struct {
+	Code      int    `json:"code"`
+	Message   string `json:"message"`
+	ErrorKey  string `json:"errorKey"`
+	Data      any    `json:"data"`
+	RequestID string `json:"requestId"`
 }
 
-func (e *Error) Error() string {
+// ValidationData is the data of common.validationFailed.
+type ValidationData struct {
+	Errors []FieldError `json:"errors"`
+}
+
+// FieldError is one entry of ValidationData.
+type FieldError struct {
+	Field   string         `json:"field"`
+	Rule    string         `json:"rule"`
+	Message string         `json:"message"`
+	Params  map[string]any `json:"params,omitempty"`
+}
+
+// Resolve maps err to its error key and response data: an entity.Error keeps its key, an
+// entity.ValidationError becomes common.validationFailed, anything else common.internalError.
+func Resolve(err error) (key string, data any) {
+	var (
+		domain     *entity.Error
+		validation *entity.ValidationError
+	)
+
 	switch {
-	case e.Message != "":
-		return strconv.Itoa(e.Status) + " " + e.Message
-	case e.ErrorKey != "":
-		return strconv.Itoa(e.Status) + " " + e.ErrorKey
-	default:
-		return strconv.Itoa(e.Status) + " " + http.StatusText(e.Status)
+	case errors.As(err, &validation):
+		return entity.KeyValidationFailed, validation
+	case errors.As(err, &domain):
+		if _, known := entity.Codes()[domain.Key]; known {
+			return domain.Key, domain.Data
+		}
+	}
+
+	return entity.KeyInternalError, nil
+}
+
+// Build returns the HTTP status and body of err.
+func Build(ctx context.Context, err error, translate Translate) (int, *Body) {
+	key, data := Resolve(err)
+	code := entity.Codes()[key]
+
+	if v, ok := data.(*entity.ValidationError); ok {
+		data = validationData(ctx, v, translate)
+	}
+
+	return code.Status, &Body{
+		Code: code.Code, Message: translate(ctx, key, nil), ErrorKey: key, Data: data, RequestID: reqctx.RequestID(ctx),
 	}
 }
 
-// New returns an exception with a custom message, like `new NotFoundException('…')`.
-func New(status int, message string) *Error {
-	return &Error{Status: status, Message: message, ErrorKey: "", Errors: nil, Headers: nil}
+func validationData(ctx context.Context, v *entity.ValidationError, translate Translate) ValidationData {
+	out := ValidationData{Errors: make([]FieldError, 0, len(v.Errors))}
+
+	for _, f := range v.Errors {
+		out.Errors = append(out.Errors, FieldError{
+			Field: f.Field, Rule: f.Rule, Message: translate(ctx, "validation."+f.Rule, f.Params), Params: f.Params,
+		})
+	}
+
+	return out
 }
 
-// WithErrors returns an exception whose data is errors, like `{status, errors}` bodies.
-func WithErrors(status int, errs *validatorx.Object) *Error {
-	return &Error{Status: status, Message: "", ErrorKey: "", Errors: errs, Headers: nil}
-}
+// Write writes err with the headers its status requires: WWW-Authenticate for 401, Retry-After
+// for 503 when the caller did not set one.
+func Write(ctx context.Context, w http.ResponseWriter, err error, translate Translate) (int, error) {
+	status, body := Build(ctx, err, translate)
+	h := w.Header()
 
-// Keyed returns an exception whose message is common.<key>, like nestjs throwNotFoundError(key).
-func Keyed(status int, key string) *Error {
-	return &Error{Status: status, Message: "", ErrorKey: key, Errors: nil, Headers: nil}
-}
+	switch status {
+	case http.StatusUnauthorized:
+		challenge := "Bearer"
+		if errors.Is(err, ErrInvalidToken) {
+			challenge += ` error="invalid_token"`
+		}
 
-// Field returns errors with a single field, like nestjs throwValidationError(field, key).
-func Field(name string, value validatorx.Value) *validatorx.Object {
-	o := validatorx.NewObject()
-	o.Set(name, value)
+		h.Set("WWW-Authenticate", challenge)
+	case http.StatusServiceUnavailable:
+		if h.Get("Retry-After") == "" {
+			h.Set("Retry-After", strconv.Itoa(_serviceUnavailableRetry))
+		}
+	}
 
-	return o
-}
+	h.Set("Content-Type", "application/json; charset=utf-8")
+	h.Del("Content-Length")
+	w.WriteHeader(status)
 
-// InvalidID is the ParseIdPipe failure: 400 {id: invalidId}.
-func InvalidID() *Error {
-	return WithErrors(http.StatusBadRequest, Field("id", "invalidId"))
-}
-
-// TooManyRequests is the throttler rejection; headers carry Retry-After.
-type TooManyRequests struct {
-	Headers http.Header
-}
-
-func (e *TooManyRequests) Error() string {
-	return "ThrottlerException: Too Many Requests"
-}
-
-// ErrUnknownBusinessError reports a BusinessError whose key is not in the key table.
-var ErrUnknownBusinessError = errors.New("httperr: unregistered business error key")
-
-func businessStatus(key string) (int, error) {
-	status, ok := businessErrors()[key]
-	if !ok {
-		return 0, fmt.Errorf("%w: %s", ErrUnknownBusinessError, key)
+	if encodeErr := json.NewEncoder(w).Encode(body); encodeErr != nil {
+		return status, encodeErr //nolint:wrapcheck // the client went away
 	}
 
 	return status, nil
-}
-
-// businessErrors is nestjs src/common/constants/business-error-keys.ts.
-func businessErrors() map[string]int {
-	return map[string]int{
-		"sessionTakenOver":          http.StatusConflict,
-		"sessionClosed":             http.StatusConflict,
-		"questionInMockInProgress":  http.StatusConflict,
-		"answerHidden":              http.StatusForbidden,
-		"selfAssessmentNotAllowed":  http.StatusConflict,
-		"questionNotAccessible":     http.StatusForbidden,
-		"noQuestionsAvailable":      http.StatusUnprocessableEntity,
-		"generateLimitExceeded":     http.StatusTooManyRequests,
-		"mockSessionBusy":           http.StatusConflict,
-		"paperRequired":             http.StatusUnprocessableEntity,
-		"reportNotAvailable":        http.StatusConflict,
-		"dailySessionCannotFinish":  http.StatusConflict,
-		"dailySessionCannotAbandon": http.StatusConflict,
-		"aiUnavailable":             http.StatusServiceUnavailable,
-		"aiQuotaExceeded":           http.StatusTooManyRequests,
-		"aiRateLimited":             http.StatusTooManyRequests,
-		"aiConsentRequired":         http.StatusForbidden,
-		"phoneBindingRequired":      http.StatusForbidden,
-		"contentBlocked":            http.StatusUnprocessableEntity,
-		"aiConversationOutdated":    http.StatusConflict,
-		"errataInProgress":          http.StatusConflict,
-		"answerChangeNotAllowed":    http.StatusUnprocessableEntity,
-	}
-}
-
-// Status returns an exception with the default message of status.
-func Status(status int) *Error {
-	return &Error{Status: status, Message: "", ErrorKey: "", Errors: nil, Headers: nil}
 }

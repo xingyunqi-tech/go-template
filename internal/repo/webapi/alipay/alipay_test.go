@@ -123,20 +123,20 @@ func TestExchangeAuthCodeErrors(t *testing.T) {
 		name   string
 		status int
 		body   any
-		want   *entity.Error
+		want   *entity.NestError
 	}{
 		{
 			"expired code", http.StatusOK,
 			map[string]any{"error_response": map[string]any{"code": "40002", "sub_code": "isv.code-invalid"}},
-			entity.UnprocessableKey("invalidAlipayAuthCode", entity.Detail{Name: "authCode", Value: "invalidCode"}),
+			entity.NestUnprocessable("invalidAlipayAuthCode", entity.Detail{Name: "authCode", Value: "invalidCode"}),
 		},
 		{
 			"other error", http.StatusOK,
 			map[string]any{"error_response": map[string]any{"code": "40004", "sub_code": "isv.app-unbind"}},
-			entity.Invalid("alipay", "requestFailed"),
+			entity.NestInvalid("alipay", "requestFailed"),
 		},
-		{"no open id", http.StatusOK, map[string]any{"alipay_system_oauth_token_response": map[string]any{"user_id": "2088"}}, entity.Invalid("alipay", "requestFailed")},
-		{"http error", http.StatusBadGateway, map[string]any{}, entity.Invalid("alipay", "requestFailed")},
+		{"no open id", http.StatusOK, map[string]any{"alipay_system_oauth_token_response": map[string]any{"user_id": "2088"}}, entity.NestInvalid("alipay", "requestFailed")},
+		{"http error", http.StatusBadGateway, map[string]any{}, entity.NestInvalid("alipay", "requestFailed")},
 	}
 
 	for _, tc := range cases {
@@ -154,9 +154,9 @@ func TestExchangeAuthCodeErrors(t *testing.T) {
 	}
 
 	_, err := alipay.New(config("http://unused", ""), nil, slog.New(slog.DiscardHandler)).ExchangeAuthCode(t.Context(), "x")
-	assert.Equal(t, entity.Invalid("alipay", "notConfigured"), err)
+	assert.Equal(t, entity.NestInvalid("alipay", "notConfigured"), err)
 
 	unreachable := &url.URL{Scheme: "http", Host: "127.0.0.1:1", Path: "/gateway.do"}
 	_, err = alipay.New(config(unreachable.String(), encoded), nil, slog.New(slog.DiscardHandler)).ExchangeAuthCode(t.Context(), "x")
-	assert.Equal(t, entity.Invalid("alipay", "requestFailed"), err)
+	assert.Equal(t, entity.NestInvalid("alipay", "requestFailed"), err)
 }

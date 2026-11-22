@@ -13,7 +13,7 @@ import (
 func TestLocalLockIsExclusiveUntilReleasedOrExpired(t *testing.T) {
 	t.Parallel()
 
-	l := redis.NewLocks(nil, slog.New(slog.DiscardHandler))
+	l := redis.NewLocks(nil, "svc", slog.New(slog.DiscardHandler))
 
 	token, ok := l.TryAcquire(t.Context(), "job", time.Hour)
 	assert.True(t, ok)

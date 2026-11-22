@@ -1,9 +1,8 @@
-// Package audit is nestjs AuditService: audit log rows with sensitive fields redacted.
+// Package audit writes audit log entries with sensitive fields redacted.
 package audit
 
 import (
 	"context"
-	"log/slog"
 	"slices"
 	"strings"
 
@@ -71,24 +70,20 @@ func sanitizeValue(v any, depth int) any {
 	}
 }
 
-// Service writes audit logs; failures are only logged.
+// Service writes audit logs.
 type Service struct {
 	audits repo.Audits
-	log    *slog.Logger
 }
 
 // New returns a Service.
-func New(audits repo.Audits, log *slog.Logger) *Service {
-	return &Service{audits: audits, log: log}
+func New(audits repo.Audits) *Service {
+	return &Service{audits: audits}
 }
 
-// Log records l with its values sanitized.
-func (s *Service) Log(ctx context.Context, l *repo.AuditLog) {
+// Log records l with its data sanitized.
+func (s *Service) Log(ctx context.Context, l *repo.AuditLog) error {
 	entry := *l
-	entry.OldValue = Sanitize(l.OldValue)
-	entry.NewValue = Sanitize(l.NewValue)
+	entry.Data = Sanitize(l.Data)
 
-	if err := s.audits.Create(ctx, &entry); err != nil {
-		s.log.ErrorContext(ctx, "failed to create audit log", "error", err.Error())
-	}
+	return s.audits.Create(ctx, &entry) //nolint:wrapcheck // repo errors are wrapped
 }

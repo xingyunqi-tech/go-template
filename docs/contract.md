@@ -53,12 +53,49 @@ nestjs 文档不含 class-validator 约束。`pkg/validatorx` 读取 `openapi/va
 
 `FILE_DRIVER=s3-presigned` 时，同一路径 `POST /api/v1/files/upload` 接收 `application/json` `FileUploadDto {fileName, fileSize}`、返回 `{file, uploadSignedUrl}`，与基线（local 驱动导出）中的 multipart 定义不同；nestjs 在该驱动下行为相同。
 
-## 基线中未实现的接口（176 个）
+## 基线中未实现的接口（214 个）
 
 请求这些接口返回 404 信封 `Cannot <METHOD> <originalUrl>`。前端仍可从 `/docs-json` 生成全部代码。本节由 `TestUnimplementedOperationsAreListedInContractDoc` 校验，`UPDATE_CONTRACT_DOC=1 make test-contract` 重新生成。
 
 | 方法 | 路径 | operationId | tag |
 |---|---|---|---|
+| POST | `/api/v1/users` | createUser | Users |
+| GET | `/api/v1/users` | getUsers | Users |
+| GET | `/api/v1/users/{id}` | getUser | Users |
+| PUT | `/api/v1/users/{id}` | updateUser | Users |
+| DELETE | `/api/v1/users/{id}` | deleteUser | Users |
+| POST | `/api/v1/files/upload` | uploadFile | Files |
+| POST | `/api/v1/auth/email/login` | loginWithEmail | Auth |
+| POST | `/api/v1/auth/email/register` | registerWithEmail | Auth |
+| POST | `/api/v1/auth/email/confirm` | confirmEmail | Auth |
+| POST | `/api/v1/auth/email/confirm/new` | confirmNewEmail | Auth |
+| POST | `/api/v1/auth/forgot/password` | forgotPassword | Auth |
+| POST | `/api/v1/auth/reset/password` | resetPassword | Auth |
+| GET | `/api/v1/auth/me` | getCurrentUser | Auth |
+| PUT | `/api/v1/auth/me` | updateCurrentUser | Auth |
+| DELETE | `/api/v1/auth/me` | deleteCurrentUser | Auth |
+| POST | `/api/v1/auth/refresh` | refreshToken | Auth |
+| GET | `/api/v1/auth/sessions` | getMySessions | Auth |
+| DELETE | `/api/v1/auth/sessions/{id}` | revokeMySession | Auth |
+| POST | `/api/v1/auth/sessions/revoke-others` | revokeOtherSessions | Auth |
+| POST | `/api/v1/auth/logout` | logout | Auth |
+| POST | `/api/v1/auth/phone/send-code` | sendSmsCode | Auth |
+| POST | `/api/v1/auth/phone/login` | loginWithPhone | Auth |
+| POST | `/api/v1/auth/phone/sms-login` | loginWithSms | Auth |
+| POST | `/api/v1/auth/phone/register` | registerWithPhone | Auth |
+| POST | `/api/v1/auth/phone/reset-password` | resetPasswordByPhone | Auth |
+| PUT | `/api/v1/auth/password` | changePassword | Auth |
+| POST | `/api/v1/auth/wechat/login` | loginWithWechat | Auth |
+| POST | `/api/v1/auth/wechat/phone-login` | loginWithWechatPhone | Auth |
+| POST | `/api/v1/auth/alipay/login` | loginWithAlipay | Auth |
+| GET | `/api/v1/notifications` | getNotifications | Notifications |
+| GET | `/api/v1/notifications/unread-count` | getUnreadCount | Notifications |
+| GET | `/api/v1/notifications/settings` | getNotificationSettings | Notifications |
+| PUT | `/api/v1/notifications/settings` | updateNotificationSettings | Notifications |
+| GET | `/api/v1/notifications/{id}` | getNotification | Notifications |
+| DELETE | `/api/v1/notifications/{id}` | deleteNotification | Notifications |
+| POST | `/api/v1/notifications/read-all` | markAllNotificationsAsRead | Notifications |
+| POST | `/api/v1/notifications/{id}/read` | markNotificationAsRead | Notifications |
 | POST | `/api/v1/addresses` | createAddress | Addresses |
 | GET | `/api/v1/addresses` | getAddresses | Addresses |
 | GET | `/api/v1/addresses/default` | getDefaultAddress | Addresses |
@@ -219,6 +256,7 @@ nestjs 文档不含 class-validator 约束。`pkg/validatorx` 读取 `openapi/va
 | PATCH | `/api/v1/admin/question-reports/{id}` | adminUpdateQuestionReport | Admin Question Reports |
 | GET | `/api/v1/me/consents` | getMyConsents | Consents |
 | POST | `/api/v1/me/consents` | agreeConsent | Consents |
+| POST | `/api/v1/admin/users/{id}/cleanup` | adminRetriggerAccountCleanup | Admin Account Cleanup |
 | POST | `/api/v1/ai/conversations` | createAiConversation | AI |
 | GET | `/api/v1/ai/conversations` | getAiConversations | AI |
 | GET | `/api/v1/ai/conversations/{id}/messages` | getAiMessages | AI |

@@ -5,36 +5,39 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
 	"github.com/xingyunqi-tech/go-template/internal/config"
-	"github.com/xingyunqi-tech/go-template/pkg/tracing"
+	"github.com/xingyunqi-tech/go-template/pkg/telemetry"
 )
 
 const _sentryFlushTimeout = 2 * time.Second
 
-// Observability is the process-wide tracing and Sentry setup.
+// Observability is the process-wide OpenTelemetry and Sentry setup.
 type Observability struct {
-	tracing *tracing.Provider
-	sentry  bool
+	telemetry *telemetry.Provider
+	sentry    bool
 }
 
-// SetupObservability installs OpenTelemetry when OTEL_ENABLED and Sentry when SENTRY_DSN is set.
+// SetupObservability installs OpenTelemetry from the OTEL_* variables and Sentry when SENTRY_DSN
+// is set.
 func SetupObservability(ctx context.Context, cfg *config.Config, release string) (*Observability, error) {
-	provider, err := tracing.Setup(ctx, tracing.Config{
-		Enabled: cfg.Observability.OTelEnabled.Or(false), Endpoint: cfg.Observability.OTelEndpoint, ServiceName: cfg.App.Name,
+	provider, err := telemetry.Setup(ctx, telemetry.Options{
+		Disabled: cfg.Telemetry.SDKDisabled, MetricsExporter: cfg.Telemetry.MetricsExporter,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: %w", err)
 	}
 
-	o := &Observability{tracing: provider, sentry: false}
+	o := &Observability{telemetry: provider, sentry: false}
 
-	if dsn := cfg.Observability.SentryDSN.Value(); dsn != "" {
+	if dsn := cfg.Telemetry.SentryDSN.Value(); dsn != "" {
 		err := sentry.Init(sentry.ClientOptions{ //nolint:exhaustruct // SDK defaults
 			Dsn: dsn, Environment: cfg.App.Env, Release: release,
 		})
@@ -48,13 +51,22 @@ func SetupObservability(ctx context.Context, cfg *config.Config, release string)
 	return o, nil
 }
 
-// Logger also exports the records of base through OpenTelemetry when it is enabled.
+// Logger also exports the records of base through OpenTelemetry when a log exporter is set.
 func (o *Observability) Logger(base *slog.Logger) *slog.Logger {
-	if o.tracing.LogHandler == nil {
+	if o.telemetry.LogHandler == nil {
 		return base
 	}
 
-	return slog.New(slog.NewMultiHandler(base.Handler(), o.tracing.LogHandler))
+	return slog.New(slog.NewMultiHandler(base.Handler(), o.telemetry.LogHandler))
+}
+
+// MetricsHandler serves the Prometheus registry; nil outside the prometheus exporter.
+func (o *Observability) MetricsHandler() http.Handler {
+	if o == nil || o.telemetry.Registry == nil {
+		return nil
+	}
+
+	return promhttp.HandlerFor(o.telemetry.Registry, promhttp.HandlerOpts{}) //nolint:exhaustruct // defaults
 }
 
 // Shutdown flushes Sentry and the OpenTelemetry exporters.
@@ -63,22 +75,30 @@ func (o *Observability) Shutdown(ctx context.Context) error {
 		sentry.Flush(_sentryFlushTimeout)
 	}
 
-	return o.tracing.Shutdown(ctx) //nolint:wrapcheck // wrapped by tracing
+	return o.telemetry.Shutdown(ctx) //nolint:wrapcheck // wrapped by telemetry
 }
 
-// reportError sends err to Sentry when SENTRY_DSN is set.
+// reportError sends err to Sentry with the request id when SENTRY_DSN is set.
 func reportError(cfg *config.Config) func(ctx context.Context, err error) {
-	if cfg.Observability.SentryDSN.Value() == "" {
+	if cfg.Telemetry.SentryDSN.Value() == "" {
 		return nil
 	}
 
 	return func(ctx context.Context, err error) {
 		hub := sentry.GetHubFromContext(ctx)
 		if hub == nil {
-			hub = sentry.CurrentHub()
+			hub = sentry.CurrentHub().Clone()
 		}
 
-		hub.CaptureException(err)
+		hub.WithScope(func(scope *sentry.Scope) {
+			for _, a := range LogAttrs(ctx) {
+				if a.Key == "request_id" {
+					scope.SetTag("request_id", a.Value.String())
+				}
+			}
+
+			hub.CaptureException(err)
+		})
 	}
 }
 

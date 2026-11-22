@@ -5,14 +5,14 @@ repos:
   - repo: builtin
     hooks:
       - id: check-added-large-files
-        exclude: ^(openapi/|tests/contract/fixtures/|internal/controller/http/gen/)
+        exclude: ^(openapi/|internal/controller/http/validation\.json$|internal/controller/http/gen/)
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: check-toml
       - id: end-of-file-fixer
-        exclude: ^(openapi/.*\.json|tests/contract/fixtures/|tests/fixtures/nestjs_mail/|templates/mail/|LICENSE$)
+        exclude: ^(openapi/.*\.json|internal/controller/http/validation\.json$|LICENSE$)
       - id: trailing-whitespace
-        exclude: ^(openapi/.*\.json|tests/contract/fixtures/|tests/fixtures/nestjs_mail/|templates/mail/|LICENSE$)
+        exclude: ^(openapi/.*\.json|internal/controller/http/validation\.json$|LICENSE$)
 
   - repo: local
     hooks:
@@ -54,7 +54,7 @@ repos:
         name: 生成代码新鲜度
         entry: scripts/check-generated.sh
         language: system
-        files: ^(openapi/|tools/openapigen/|migrations/|internal/repo/postgres/queries/|sqlc\.yaml$|Makefile$|internal/repo/contracts\.go$|internal/usecase/[^/]+/[^/]+\.go$)
+        files: ^(openapi/src/|openapi/oapi-codegen\.yaml$|tools/openapigen/|migrations/|internal/repo/postgres/queries/|sqlc\.yaml$|Makefile$|internal/repo/contracts\.go$|internal/usecase/[^/]+/[^/]+\.go$)
         pass_filenames: false
 
       - id: comment-history

@@ -67,7 +67,7 @@ func TestMemoryEvictsOldestWhenFull(t *testing.T) {
 func TestCacheWithoutRedisUsesMemory(t *testing.T) {
 	t.Parallel()
 
-	c := redis.NewCache(nil, slog.New(slog.DiscardHandler))
+	c := redis.NewCache(nil, "svc", slog.New(slog.DiscardHandler))
 	require.NoError(t, c.Set(t.Context(), "k", "v", time.Hour))
 
 	var got string

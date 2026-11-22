@@ -1,0 +1,12 @@
+openapi: 3.1.0
+info:
+  title: go-template
+  version: 1.0.0
+  description: Go backend template; envelopes, errors, pagination and authentication follow docs/platform-conventions.md.
+paths: {}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

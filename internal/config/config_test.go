@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -11,182 +12,158 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/config"
 )
 
-func setSecrets(t *testing.T) {
-	t.Helper()
-
-	t.Setenv("AUTH_JWT_SECRET", "secret")
-	t.Setenv("AUTH_REFRESH_SECRET", "secret_for_refresh")
-	t.Setenv("AUTH_FORGOT_SECRET", "secret_for_forgot")
-	t.Setenv("AUTH_CONFIRM_EMAIL_SECRET", "secret_for_confirm_email")
-}
-
-func TestLoadDefaults(t *testing.T) { //nolint:paralleltest // setSecrets uses t.Setenv
-	setSecrets(t)
+func TestLoadDefaults(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "svc")
 
 	cfg, err := config.Load()
 	require.NoError(t, err)
 
 	assert.Equal(t, config.EnvDevelopment, cfg.App.Env)
-	assert.Equal(t, "app", cfg.App.Name)
 	assert.Equal(t, 3000, cfg.App.Port)
-	assert.Equal(t, "api", cfg.App.APIPrefix)
-	assert.Equal(t, "en", cfg.App.FallbackLanguage)
-	assert.Equal(t, 30*time.Second, cfg.App.ShutdownTimeout)
+	assert.Equal(t, "zh", cfg.App.DefaultLocale)
+	assert.Equal(t, 20*time.Second, cfg.App.ShutdownTimeout)
 	assert.True(t, cfg.App.Docs())
-	assert.Equal(t, "postgres://root:secret@localhost:5432/api", cfg.Database.DSN())
-	assert.Equal(t, int32(80), cfg.Database.MaxConnections)
-	assert.Equal(t, int32(10), cfg.Database.WorkerMaxConnections)
-	assert.Equal(t, "localhost:6379", cfg.Redis.Addr())
-	assert.False(t, cfg.Redis.Enabled.Or(false))
-	assert.InDelta(t, 900_000, cfg.Auth.Expires.Millis, 0)
-	assert.Equal(t, "3650d", cfg.Auth.RefreshExpires.Text)
-	assert.Equal(t, config.HasherArgon2id, cfg.Auth.PasswordHasher)
-	assert.Equal(t, "***", cfg.Auth.Secret.String())
+	assert.Equal(t, "public", cfg.Database.Schema)
+	assert.Equal(t, int32(20), cfg.Database.MaxConns)
+	assert.Equal(t, int32(10), cfg.Database.WorkerMaxConns)
+	assert.NotEmpty(t, cfg.Database.DSN())
+	assert.False(t, cfg.Redis.Enabled())
+	assert.Equal(t, config.ByteSize(1<<20), cfg.HTTP.BodyLimit)
+	assert.True(t, cfg.HTTP.RateLimitEnabled)
+	assert.Equal(t, 15*time.Minute, cfg.Auth.AccessTTL)
+	assert.Equal(t, 720*time.Hour, cfg.Auth.RefreshTTL)
+	assert.Equal(t, config.RoleEphemeralIssuer, cfg.Auth.Role())
+	assert.Equal(t, "json", cfg.Log.Format)
+	assert.Equal(t, "info", cfg.Log.Level)
+	assert.True(t, cfg.Telemetry.Prometheus())
+	assert.Equal(t, 9464, cfg.Metrics.WorkerPort)
 }
 
-func TestDatabaseURLTakesPrecedence(t *testing.T) {
-	setSecrets(t)
-	t.Setenv("DATABASE_URL", "postgres://u:p@db:6543/x")
+func TestServiceNameIsRequired(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "")
+
+	_, err := config.Load()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "OTEL_SERVICE_NAME")
+}
+
+func TestProductionRequirements(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "svc")
+	t.Setenv("APP_ENV", "production")
+
+	_, err := config.Load()
+	require.ErrorIs(t, err, config.ErrInvalid)
+
+	t.Setenv("RATE_LIMIT_ENABLED", "false")
+
+	_, err = config.Load()
+	require.ErrorIs(t, err, config.ErrInvalid)
+
+	for _, name := range []string{"DATABASE_URL", "REDIS_URL", "CORS_ORIGINS", "AUTH_SIGNING_KEY, AUTH_JWKS_URL", "METRICS_TOKEN, METRICS_PORT", "RATE_LIMIT_ENABLED"} {
+		assert.Contains(t, err.Error(), name)
+	}
+
+	t.Setenv("DATABASE_URL", "postgresql://u:p@db:5432/app")
+	t.Setenv("REDIS_URL", "redis://redis:6379/0")
+	t.Setenv("CORS_ORIGINS", "https://a.example.com, https://b.example.com")
+	t.Setenv("AUTH_JWKS_URL", "https://auth.example.com/.well-known/jwks.json")
+	t.Setenv("METRICS_PORT", "9100")
+	t.Setenv("RATE_LIMIT_ENABLED", "true")
 
 	cfg, err := config.Load()
 	require.NoError(t, err)
-	assert.Equal(t, "postgres://u:p@db:6543/x", cfg.Database.DSN())
+	assert.Equal(t, config.RoleVerifier, cfg.Auth.Role())
+	assert.Equal(t, []string{"https://a.example.com", "https://b.example.com"}, cfg.CORSOrigins())
+	assert.False(t, cfg.App.Docs())
 }
 
-func TestLoadRequiresAuthSecrets(t *testing.T) { //nolint:paralleltest // depends on the secrets being unset
-	_, err := config.Load()
-	require.Error(t, err)
+func TestSigningKeyAndJWKSURLAreExclusive(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "svc")
+	t.Setenv("AUTH_SIGNING_KEY", "pem")
+	t.Setenv("AUTH_JWKS_URL", "https://auth.example.com/.well-known/jwks.json")
 
-	for _, name := range []string{"AUTH_JWT_SECRET", "AUTH_REFRESH_SECRET", "AUTH_FORGOT_SECRET", "AUTH_CONFIRM_EMAIL_SECRET"} {
+	_, err := config.Load()
+	require.ErrorIs(t, err, config.ErrInvalid)
+	assert.Contains(t, err.Error(), "only one of them")
+}
+
+func TestInvalidValuesAreReported(t *testing.T) {
+	for name, value := range map[string]string{
+		"DATABASE_SCHEMA":       "Bad-Schema",
+		"BODY_LIMIT":            "1TB",
+		"TRUSTED_PROXIES":       "nope",
+		"LOG_FORMAT":            "xml",
+		"OTEL_METRICS_EXPORTER": "statsd",
+		"METRICS_TOKEN":         "short",
+		"AUTH_ACCESS_TTL":       "15",
+		"APP_DEFAULT_LOCALE":    "fr",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("OTEL_SERVICE_NAME", "svc")
+			t.Setenv(name, value)
+
+			_, err := config.Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), name)
+		})
+	}
+}
+
+func TestLoadReportsEveryProblemAtOnce(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "svc")
+	t.Setenv("BODY_LIMIT", "1TB")
+	t.Setenv("LOG_FORMAT", "xml")
+	t.Setenv("DATABASE_SCHEMA", "Bad-Schema")
+
+	_, err := config.Load()
+	require.ErrorIs(t, err, config.ErrInvalid)
+
+	for _, name := range []string{"BODY_LIMIT", "LOG_FORMAT", "DATABASE_SCHEMA"} {
 		assert.Contains(t, err.Error(), name)
 	}
 }
 
-func TestProductionRejectsWeakSettings(t *testing.T) {
-	setSecrets(t)
-	t.Setenv("APP_ENV", "production")
-	t.Setenv("AUTH_REFRESH_SECRET", "secret")
-
-	_, err := config.Load()
-	require.ErrorIs(t, err, config.ErrProduction)
-	assert.Contains(t, err.Error(), "AUTH_JWT_SECRET: must be at least 32 characters")
-	assert.Contains(t, err.Error(), "must be different from each other")
-	assert.Contains(t, err.Error(), "REDIS_ENABLED")
-
-	for i, name := range []string{"AUTH_JWT_SECRET", "AUTH_REFRESH_SECRET", "AUTH_FORGOT_SECRET", "AUTH_CONFIRM_EMAIL_SECRET"} {
-		t.Setenv(name, strings.Repeat(string(rune('a'+i)), 32))
-	}
-
-	t.Setenv("REDIS_ENABLED", "true")
-
-	_, err = config.Load()
-	require.ErrorIs(t, err, config.ErrProduction)
-	assert.Contains(t, err.Error(), "MAIL_HOST: required in production")
-
-	t.Setenv("MAIL_HOST", "smtp.example.com")
-	t.Setenv("MAIL_DEFAULT_EMAIL", "noreply@example.com")
-	t.Setenv("MAIL_DEFAULT_NAME", "App")
-
-	_, err = config.Load()
-	require.NoError(t, err)
-}
-
-func TestInfrastructureSettings(t *testing.T) {
-	setSecrets(t)
-
-	cfg, err := config.Load()
-	require.NoError(t, err)
-	assert.True(t, cfg.Throttle.Disabled.On())
-	assert.True(t, cfg.Metrics.Disabled.On())
-	assert.Equal(t, "metrics", cfg.Metrics.Path)
-	assert.Equal(t, config.FileDriverLocal, cfg.File.Driver)
-	assert.True(t, cfg.File.PathStyleDisabled.On())
-	assert.Equal(t, 587, cfg.Mail.Port)
-
-	t.Setenv("THROTTLE_ENABLED", "0")
-	t.Setenv("METRICS_ENABLED", "false")
-
-	cfg, err = config.Load()
-	require.NoError(t, err)
-	assert.True(t, cfg.Throttle.Disabled.On())
-	assert.False(t, cfg.Metrics.Disabled.On())
-
-	t.Setenv("METRICS_TOKEN", "short")
-	t.Setenv("FILE_DRIVER", "s3")
-
-	_, err = config.Load()
-	require.ErrorIs(t, err, config.ErrProduction)
-	assert.Contains(t, err.Error(), "METRICS_TOKEN: must be at least 16 characters")
-	assert.Contains(t, err.Error(), "ACCESS_KEY_ID, AWS_DEFAULT_S3_BUCKET, AWS_S3_REGION, SECRET_ACCESS_KEY: required when FILE_DRIVER=s3")
-}
-
-func TestInvalidDurationIsRejected(t *testing.T) {
-	setSecrets(t)
-	t.Setenv("AUTH_JWT_TOKEN_EXPIRES_IN", "15 fortnights")
+func TestFieldsSharingANameReportTheirOwnVariable(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "svc")
+	t.Setenv("APP_PORT", "abc")
 
 	_, err := config.Load()
 	require.Error(t, err)
+	assert.Equal(t, 1, strings.Count(err.Error(), "APP_PORT"), err.Error())
+	assert.NotContains(t, err.Error(), "METRICS_PORT")
 }
 
-func TestDocsDefaultsOffInProduction(t *testing.T) {
-	setSecrets(t)
-	t.Setenv("APP_ENV", "development")
+func TestMissingRequiredVariableIsReportedOnce(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "")
+	os.Unsetenv("OTEL_SERVICE_NAME") //nolint:usetesting // t.Setenv restores it after the test
 
-	cfg, err := config.Load()
-	require.NoError(t, err)
-
-	cfg.App.Env = config.EnvProduction
-	assert.False(t, cfg.App.Docs())
-
-	t.Setenv("SWAGGER_ENABLED", "true")
-
-	cfg, err = config.Load()
-	require.NoError(t, err)
-
-	cfg.App.Env = config.EnvProduction
-	assert.True(t, cfg.App.Docs())
+	_, err := config.Load()
+	require.Error(t, err)
+	assert.Equal(t, 1, strings.Count(err.Error(), "OTEL_SERVICE_NAME"), err.Error())
 }
 
-func TestSwaggerEnabledOnlyTrueString(t *testing.T) {
-	setSecrets(t)
-	t.Setenv("SWAGGER_ENABLED", "1")
-
-	cfg, err := config.Load()
-	require.NoError(t, err)
-	assert.False(t, cfg.App.Docs())
-}
-
-func TestLogLevelDefaultsByEnvironment(t *testing.T) {
+func TestByteSizeSuffixes(t *testing.T) {
 	t.Parallel()
 
-	var unset config.Log
+	for text, want := range map[string]config.ByteSize{
+		"512": 512, "64B": 64, "256KiB": 256 << 10, "1MiB": 1 << 20, "2 GiB": 2 << 30,
+	} {
+		var b config.ByteSize
+		require.NoError(t, b.UnmarshalText([]byte(text)), text)
+		assert.Equal(t, want, b, text)
+	}
 
-	assert.Equal(t, "info", unset.LevelOr(true))
-	assert.Equal(t, "debug", unset.LevelOr(false))
-
-	set := config.Log{Level: "warn"}
-	assert.Equal(t, "warn", set.LevelOr(true))
+	for _, text := range []string{"", "0", "-1", "1MB", "x"} {
+		var b config.ByteSize
+		assert.Error(t, b.UnmarshalText([]byte(text)), text)
+	}
 }
 
-func TestLoadReportsEveryInvalidValue(t *testing.T) {
-	setSecrets(t)
-	t.Setenv("APP_ENV", "staging")
-	t.Setenv("APP_PORT", "70000")
+func TestSecretIsRedacted(t *testing.T) {
+	t.Parallel()
 
-	_, err := config.Load()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "APP_ENV")
-	assert.Contains(t, err.Error(), "APP_PORT")
-}
-
-func TestLoadReportsEveryParseError(t *testing.T) {
-	setSecrets(t)
-	t.Setenv("APP_PORT", "abc")
-	t.Setenv("SHUTDOWN_TIMEOUT", "soon")
-
-	_, err := config.Load()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `"Port"`)
-	assert.Contains(t, err.Error(), `"ShutdownTimeout"`)
-	assert.NotContains(t, err.Error(), "'min' tag")
+	s := config.Secret("hunter2")
+	assert.Equal(t, "***", s.String())
+	assert.Equal(t, "***", s.LogValue().String())
+	assert.Equal(t, "hunter2", s.Value())
 }

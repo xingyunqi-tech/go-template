@@ -1,102 +1,188 @@
 // Package entity holds domain objects and domain errors.
 package entity
 
-// Detail is one extra field of a BusinessError, written into the error response data.
-type Detail struct {
-	Name  string
-	Value any
+import (
+	"errors"
+	"strings"
+)
+
+// Error keys of the error code table (platform conventions §2.4).
+const (
+	KeyBadRequest               = "common.badRequest"
+	KeyMalformedJSON            = "common.malformedJson"
+	KeyUnauthorized             = "common.unauthorized"
+	KeyTokenExpired             = "auth.tokenExpired"
+	KeyInvalidCredentials       = "auth.invalidCredentials"
+	KeyRefreshTokenReused       = "auth.refreshTokenReused"
+	KeyRefreshTokenInvalid      = "auth.refreshTokenInvalid"
+	KeyForbidden                = "common.forbidden"
+	KeyAccountDisabled          = "auth.accountDisabled"
+	KeyEmailNotVerified         = "auth.emailNotVerified"
+	KeyReauthRequired           = "auth.reauthRequired"
+	KeyNotFound                 = "common.notFound"
+	KeyProviderDisabled         = "auth.providerDisabled"
+	KeySessionNotFound          = "auth.sessionNotFound"
+	KeyUserNotFound             = "user.notFound"
+	KeyMethodNotAllowed         = "common.methodNotAllowed"
+	KeyConflict                 = "common.conflict"
+	KeyEmailTaken               = "user.emailTaken"
+	KeyPhoneTaken               = "user.phoneTaken"
+	KeyIdempotencyInProgress    = "common.idempotencyInProgress"
+	KeyLastAdmin                = "role.lastAdmin"
+	KeyPayloadTooLarge          = "common.payloadTooLarge"
+	KeyFileTooLarge             = "file.tooLarge"
+	KeyUnsupportedMediaType     = "common.unsupportedMediaType"
+	KeyValidationFailed         = "common.validationFailed"
+	KeyVerificationCodeInvalid  = "auth.verificationCodeInvalid"
+	KeyVerificationTokenInvalid = "auth.verificationTokenInvalid"
+	KeyPasswordIncorrect        = "auth.passwordIncorrect"
+	KeyFileTypeNotAllowed       = "file.typeNotAllowed"
+	KeyIdempotencyKeyMismatch   = "common.idempotencyKeyMismatch"
+	KeyProviderCodeInvalid      = "auth.providerCodeInvalid"
+	KeyTooManyRequests          = "common.tooManyRequests"
+	KeySendTooFrequent          = "auth.sendTooFrequent"
+	KeyVerificationLocked       = "auth.verificationLocked"
+	KeyInternalError            = "common.internalError"
+	KeyBadGateway               = "common.badGateway"
+	KeyServiceUnavailable       = "common.serviceUnavailable"
+)
+
+// Code is the HTTP status and business code of an error key.
+type Code struct {
+	Status int
+	Code   int
 }
 
-// BusinessError is nestjs BusinessException: Key selects the status code and the common.<Key>
-// message; Details are returned untranslated in data next to errorKey.
-type BusinessError struct {
-	Key     string
-	Details []Detail
+// Codes returns the error code table keyed by error key.
+func Codes() map[string]Code {
+	return map[string]Code{
+		KeyBadRequest:               {400, 40000},
+		KeyMalformedJSON:            {400, 40001},
+		KeyUnauthorized:             {401, 40100},
+		KeyTokenExpired:             {401, 40101},
+		KeyInvalidCredentials:       {401, 40102},
+		KeyRefreshTokenReused:       {401, 40103},
+		KeyRefreshTokenInvalid:      {401, 40104},
+		KeyForbidden:                {403, 40300},
+		KeyAccountDisabled:          {403, 40301},
+		KeyEmailNotVerified:         {403, 40302},
+		KeyReauthRequired:           {403, 40303},
+		KeyNotFound:                 {404, 40400},
+		KeyProviderDisabled:         {404, 40401},
+		KeySessionNotFound:          {404, 40402},
+		KeyUserNotFound:             {404, 40403},
+		KeyMethodNotAllowed:         {405, 40500},
+		KeyConflict:                 {409, 40900},
+		KeyEmailTaken:               {409, 40901},
+		KeyPhoneTaken:               {409, 40902},
+		KeyIdempotencyInProgress:    {409, 40903},
+		KeyLastAdmin:                {409, 40904},
+		KeyPayloadTooLarge:          {413, 41300},
+		KeyFileTooLarge:             {413, 41301},
+		KeyUnsupportedMediaType:     {415, 41500},
+		KeyValidationFailed:         {422, 42200},
+		KeyVerificationCodeInvalid:  {422, 42201},
+		KeyVerificationTokenInvalid: {422, 42202},
+		KeyPasswordIncorrect:        {422, 42203},
+		KeyFileTypeNotAllowed:       {422, 42204},
+		KeyIdempotencyKeyMismatch:   {422, 42205},
+		KeyProviderCodeInvalid:      {422, 42206},
+		KeyTooManyRequests:          {429, 42900},
+		KeySendTooFrequent:          {429, 42901},
+		KeyVerificationLocked:       {429, 42902},
+		KeyInternalError:            {500, 50000},
+		KeyBadGateway:               {502, 50200},
+		KeyServiceUnavailable:       {503, 50300},
+	}
 }
 
-// NewBusinessError returns a BusinessError.
-func NewBusinessError(key string, details ...Detail) *BusinessError {
-	return &BusinessError{Key: key, Details: details}
-}
-
-func (e *BusinessError) Error() string {
-	return "business error: " + e.Key
-}
-
-// Error is a nestjs HttpException raised by business code: Message is a custom message, ErrorKey
-// the "error" field and Fields the "errors" object.
+// Error is a failure identified by an error key; Data is returned as the response data and
+// Cause is kept for logs only.
 type Error struct {
-	Status   int
-	Message  string
-	ErrorKey string
-	Fields   []Detail
+	Key   string
+	Data  any
+	Cause error
+}
+
+// New returns an Error for key.
+func New(key string) *Error {
+	return &Error{Key: key, Data: nil, Cause: nil}
+}
+
+// Wrap returns an Error for key caused by err.
+func Wrap(key string, err error) *Error {
+	return &Error{Key: key, Data: nil, Cause: err}
+}
+
+// WithData returns a copy of e carrying data.
+func (e *Error) WithData(data any) *Error {
+	return &Error{Key: e.Key, Data: data, Cause: e.Cause}
 }
 
 func (e *Error) Error() string {
-	switch {
-	case e.Message != "":
-		return e.Message
-	case e.ErrorKey != "":
-		return e.ErrorKey
-	case len(e.Fields) > 0:
-		return e.Fields[0].Name + ": " + toString(e.Fields[0].Value)
-	default:
-		return "http error"
-	}
-}
-
-func toString(v any) string {
-	if s, ok := v.(string); ok {
-		return s
+	if e.Cause != nil {
+		return e.Key + ": " + e.Cause.Error()
 	}
 
-	return "value"
+	return e.Key
 }
 
-// HTTP statuses used by business errors.
+func (e *Error) Unwrap() error {
+	return e.Cause
+}
+
+// Is matches another *Error with the same key.
+func (e *Error) Is(target error) bool {
+	var t *Error
+
+	return errors.As(target, &t) && t.Key == e.Key
+}
+
+// Validation rules (platform conventions §2.3).
 const (
-	StatusBadRequest    = 400
-	StatusUnauthorized  = 401
-	StatusForbidden     = 403
-	StatusNotFound      = 404
-	StatusConflict      = 409
-	StatusUnprocessable = 422
+	RuleRequired  = "required"
+	RuleType      = "type"
+	RuleEmail     = "email"
+	RuleURL       = "url"
+	RuleUUID      = "uuid"
+	RuleMin       = "min"
+	RuleMax       = "max"
+	RuleMinLength = "minLength"
+	RuleMaxLength = "maxLength"
+	RuleMinItems  = "minItems"
+	RuleMaxItems  = "maxItems"
+	RulePattern   = "pattern"
+	RuleEnum      = "enum"
+	RuleFormat    = "format"
+	RuleExists    = "exists"
+	RuleContains  = "contains"
 )
 
-// Invalid is nestjs throwValidationError(field, key): 422 {field: key}.
-func Invalid(field, key string) *Error {
-	return &Error{Status: StatusUnprocessable, Message: "", ErrorKey: "", Fields: []Detail{{Name: field, Value: key}}}
+// RuleMinProperties is the service rule of an object with fewer properties than allowed.
+const RuleMinProperties = "minProperties"
+
+// FieldError is one failed constraint: Field is a JSON path, query.<name> or path.<name>.
+type FieldError struct {
+	Field  string
+	Rule   string
+	Params map[string]any
 }
 
-// InvalidFields is a 422 with several fields.
-func InvalidFields(fields ...Detail) *Error {
-	return &Error{Status: StatusUnprocessable, Message: "", ErrorKey: "", Fields: fields}
+// ValidationError is a 422 common.validationFailed with one entry per failed field.
+type ValidationError struct {
+	Errors []FieldError
 }
 
-// Unauthorized is a 401 with an optional untranslated message.
-func Unauthorized(message string) *Error {
-	return &Error{Status: StatusUnauthorized, Message: message, ErrorKey: "", Fields: nil}
+// Invalid returns a ValidationError for one field.
+func Invalid(field, rule string, params map[string]any) *ValidationError {
+	return &ValidationError{Errors: []FieldError{{Field: field, Rule: rule, Params: params}}}
 }
 
-// Forbidden is a 403 with a custom message.
-func Forbidden(message string) *Error {
-	return &Error{Status: StatusForbidden, Message: message, ErrorKey: "", Fields: nil}
-}
+func (e *ValidationError) Error() string {
+	parts := make([]string, 0, len(e.Errors))
+	for _, f := range e.Errors {
+		parts = append(parts, f.Field+": "+f.Rule)
+	}
 
-// NotFoundKey is nestjs throwNotFoundError(key).
-func NotFoundKey(key string) *Error {
-	return &Error{Status: StatusNotFound, Message: "", ErrorKey: key, Fields: nil}
-}
-
-// NotFound is a 404 with a custom message.
-func NotFound(message string) *Error {
-	return &Error{Status: StatusNotFound, Message: message, ErrorKey: "", Fields: nil}
-}
-
-// StatusPayloadTooLarge is the status of fileTooLarge.
-const StatusPayloadTooLarge = 413
-
-// FileTooLarge is nestjs fileTooLargeError: 413 {file: fileTooLarge}.
-func FileTooLarge() *Error {
-	return &Error{Status: StatusPayloadTooLarge, Message: "", ErrorKey: "", Fields: []Detail{{Name: "file", Value: "fileTooLarge"}}}
+	return KeyValidationFailed + ": " + strings.Join(parts, ", ")
 }

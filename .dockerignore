@@ -2,12 +2,10 @@
 !go.mod
 !go.sum
 !cmd/
-!db/
 !migrations/
 !seeds/
 !internal/
 !openapi/
 !pkg/
-!templates/
 **/*_test.go
 **/testdata/

@@ -73,20 +73,20 @@ func New(cfg *Config, cache repo.Cache, transport http.RoundTripper, log *slog.L
 	}
 }
 
-func failure(field, key string, wechatError any) *entity.Error {
+func failure(field, key string, wechatError any) *entity.NestError {
 	fields := []entity.Detail{{Name: field, Value: key}}
 	if wechatError != nil {
 		fields = append(fields, entity.Detail{Name: "wechatError", Value: wechatError})
 	}
 
-	return entity.InvalidFields(fields...)
+	return entity.NestInvalidFields(fields...)
 }
 
-func notConfigured() *entity.Error {
+func notConfigured() *entity.NestError {
 	return failure("wechat", "notConfigured", nil)
 }
 
-func requestFailed() *entity.Error {
+func requestFailed() *entity.NestError {
 	return failure("wechat", "requestFailed", nil)
 }
 
@@ -209,7 +209,7 @@ func (c *Client) fetch(ctx context.Context, path string, query url.Values, body 
 
 // passThrough keeps 422 responses and turns any other failure into wechat requestFailed.
 func passThrough(err error) error {
-	var known *entity.Error
+	var known *entity.NestError
 	if errors.As(err, &known) {
 		return known
 	}
@@ -333,7 +333,7 @@ func (c *Client) PhoneNumber(ctx context.Context, code string) (*entity.WechatPh
 }
 
 func (c *Client) phoneError(ctx context.Context, err error) error {
-	var known *entity.Error
+	var known *entity.NestError
 	if errors.As(err, &known) {
 		return known
 	}
@@ -342,7 +342,7 @@ func (c *Client) phoneError(ctx context.Context, err error) error {
 
 	var api *apiError
 	if errors.As(err, &api) && (api.code == _errInvalidCode || api.code == _errCodeUsed) {
-		return entity.UnprocessableKey("invalidPhoneCode", entity.Detail{Name: "phoneCode", Value: "invalidCode"})
+		return entity.NestUnprocessable("invalidPhoneCode", entity.Detail{Name: "phoneCode", Value: "invalidCode"})
 	}
 
 	return requestFailed()
@@ -398,7 +398,7 @@ func SubscribeUnrecoverable(err error) bool {
 		}
 	}
 
-	var known *entity.Error
+	var known *entity.NestError
 	if errors.As(err, &known) {
 		for _, f := range known.Fields {
 			if f.Name == "wechat" {

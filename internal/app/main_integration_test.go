@@ -11,32 +11,44 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/testutil"
 )
 
-var _db *testutil.Database //nolint:gochecknoglobals // one container per package
+var (
+	_db    *testutil.Database  //nolint:gochecknoglobals // one container per package
+	_redis *testutil.RedisPool //nolint:gochecknoglobals // one container per package
+)
 
 func TestMain(m *testing.M) {
 	for k, v := range map[string]string{
-		"AUTH_JWT_SECRET":           "secret",
-		"AUTH_REFRESH_SECRET":       "secret_for_refresh",
-		"AUTH_FORGOT_SECRET":        "secret_for_forgot",
-		"AUTH_CONFIRM_EMAIL_SECRET": "secret_for_confirm_email",
+		"OTEL_SERVICE_NAME":    "app-test",
+		"OTEL_TRACES_EXPORTER": "none",
+		"OTEL_LOGS_EXPORTER":   "none",
+		"AUTH_SIGNING_KEY":     testutil.SigningKeyPEM(),
+		"AUTH_ISSUER":          testutil.Issuer,
+		"AUTH_AUDIENCE":        testutil.Audience,
 	} {
 		_ = os.Setenv(k, v)
 	}
 
+	os.Exit(run(m))
+}
+
+func run(m *testing.M) int {
 	db, err := testutil.StartDatabase(context.Background())
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 
-		os.Exit(1)
+		return 1
 	}
+	defer db.Close()
 
-	_db = db
-	code := m.Run()
+	redis, err := testutil.StartRedisPool(context.Background())
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
 
-	if _minio != nil {
-		_ = _minio.Terminate()
+		return 1
 	}
+	defer redis.Close()
 
-	db.Close()
-	os.Exit(code)
+	_db, _redis = db, redis
+
+	return m.Run()
 }

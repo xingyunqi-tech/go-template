@@ -1,149 +1,91 @@
 package http
 
-import (
-	"maps"
-
-	"github.com/xingyunqi-tech/go-template/internal/entity"
-)
+import "slices"
 
 // Auth is how an operation authenticates.
 type Auth int
 
 // Auth kinds.
 const (
-	AuthNone Auth = iota
+	// AuthPublic never reads Authorization.
+	AuthPublic Auth = iota
+	// AuthJWT requires a valid access token.
 	AuthJWT
-	AuthOptionalJWT
-	AuthRefresh
-	AuthMonitor
+	// AuthOptional reads a valid access token and treats any other request as anonymous.
+	AuthOptional
 )
 
-func (a Auth) String() string {
-	switch a {
-	case AuthNone:
-		return "none"
-	case AuthJWT:
-		return "jwt"
-	case AuthOptionalJWT:
-		return "optional-jwt"
-	case AuthRefresh:
-		return "refresh"
-	case AuthMonitor:
-		return "monitor-token"
-	default:
-		return "unknown"
+// Perms are the permission codes an operation requires.
+type Perms struct {
+	codes []string
+	any   bool
+}
+
+// All requires every code.
+func All(codes ...string) Perms {
+	return Perms{codes: codes, any: false}
+}
+
+// Any requires one of the codes.
+func Any(codes ...string) Perms {
+	return Perms{codes: codes, any: true}
+}
+
+func (p Perms) empty() bool {
+	return len(p.codes) == 0
+}
+
+func (p Perms) granted(a Authorizer, roles []string) bool {
+	if a == nil {
+		return false
 	}
+
+	has := func(code string) bool { return a.Granted(roles, code) }
+
+	if p.any {
+		return slices.ContainsFunc(p.codes, has)
+	}
+
+	for _, code := range p.codes {
+		if !has(code) {
+			return false
+		}
+	}
+
+	return true
 }
 
-// Throttle overrides the default rate limit (nestjs @Throttle({default: {limit, ttl}}), ttl in ms).
-type Throttle struct {
-	Limit int
-	TTL   int
-}
-
-// Audit is nestjs @Auditable: the entity id comes from the IDParams path parameters (joined with
-// ":", default "id") or, with FromResponse first, from the response id; the recorded value is the
-// validated body unless OmitBody, or the response with IncludeResponse.
+// Audit names the audit log entry written after a successful call: the resource id is the id
+// path parameter, else the id of the response data.
 type Audit struct {
-	Action          string
-	EntityType      string
-	IDParams        []string
-	FromResponse    bool
-	OmitBody        bool
-	IncludeResponse bool
+	Action   string
+	Resource string
 }
 
-// Policy is the per-operation behavior that nestjs declares with decorators.
+// Policy is what the router does around one operation.
 type Policy struct {
-	Auth Auth
-	// RBAC routes go through the permission guard; Permissions are all required, or any one of
-	// them when AnyPermission is set.
-	RBAC          bool
-	Permissions   []string
-	AnyPermission bool
-	// Query is the nestjs DTO validating the query string.
-	Query string
-	// Params is the nestjs DTO validating the path parameters (@Param() of a DTO class).
-	Params   string
-	Throttle *Throttle
-	Audit    *Audit
-	Tx       bool
-	// Raw responses skip the envelope.
-	Raw bool
-	// Upload runs the upload purpose guard and receives the file before the query DTO.
-	Upload bool
-	// NoCache adds Cache-Control: no-cache, no-store, must-revalidate to 2xx responses.
-	NoCache bool
+	Auth  Auth
+	Perms Perms
+	// Reauth requires auth_time within the last 10 minutes.
+	Reauth bool
+	// VerifiedEmail requires the email_verified claim.
+	VerifiedEmail bool
+	// RateLimits are shared rules counted per request before the handler.
+	RateLimits []string
+	// Tx runs the handler in a request transaction.
+	Tx    bool
+	Audit *Audit
+	// BodyLimit overrides BODY_LIMIT; 0 keeps it.
+	BodyLimit int64
 }
 
-// rbac is a JWT policy that requires permission.
-func rbac(permission string, tx bool) Policy {
-	return Policy{Auth: AuthJWT, RBAC: true, Permissions: []string{permission}, Tx: tx}
-}
-
-// Policies returns the policy of every implemented operation, keyed by operationId.
+// Policies returns the policy of every documented operation, keyed by operationId.
 func Policies() map[string]Policy {
-	policies := map[string]Policy{
-		"getAppInfo":           {Auth: AuthNone},
-		"simpleHealthCheck":    {Auth: AuthNone},
-		"healthCheck":          {Auth: AuthMonitor, NoCache: true},
-		"livenessProbe":        {Auth: AuthNone, NoCache: true},
-		"readinessProbe":       {Auth: AuthNone, NoCache: true},
-		"getMetrics":           {Auth: AuthMonitor, Raw: true},
-		"uploadFile":           {Auth: AuthJWT, Query: "UploadFileQueryDto", Upload: true},
-		"readPrivateFile":      {Auth: AuthJWT, Raw: true},
-		"downloadFile":         {Auth: AuthNone, Raw: true},
-		"loginWithEmail":       {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 60_000}, Tx: true},
-		"registerWithEmail":    {Auth: AuthNone, Tx: true},
-		"confirmEmail":         {Auth: AuthNone, Tx: true},
-		"confirmNewEmail":      {Auth: AuthNone, Tx: true},
-		"forgotPassword":       {Auth: AuthNone, Throttle: &Throttle{Limit: 3, TTL: 300_000}, Tx: true},
-		"resetPassword":        {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 300_000}, Tx: true},
-		"getCurrentUser":       {Auth: AuthJWT},
-		"updateCurrentUser":    {Auth: AuthJWT, Throttle: &Throttle{Limit: 10, TTL: 60_000}, Tx: true},
-		"deleteCurrentUser":    {Auth: AuthJWT, Tx: true},
-		"refreshToken":         {Auth: AuthRefresh, Tx: true},
-		"logout":               {Auth: AuthJWT, Tx: true},
-		"changePassword":       {Auth: AuthJWT, Throttle: &Throttle{Limit: 3, TTL: 60_000}, Tx: true},
-		"getMySessions":        {Auth: AuthJWT},
-		"revokeMySession":      {Auth: AuthJWT, Tx: true},
-		"revokeOtherSessions":  {Auth: AuthJWT, Tx: true},
-		"sendSmsCode":          {Auth: AuthNone, Throttle: &Throttle{Limit: 3, TTL: 60_000}},
-		"loginWithPhone":       {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 60_000}, Tx: true},
-		"loginWithSms":         {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 60_000}, Tx: true},
-		"registerWithPhone":    {Auth: AuthNone, Throttle: &Throttle{Limit: 3, TTL: 60_000}, Tx: true},
-		"resetPasswordByPhone": {Auth: AuthNone, Throttle: &Throttle{Limit: 5, TTL: 300_000}, Tx: true},
-		"loginWithWechat":      {Auth: AuthNone, Throttle: &Throttle{Limit: 10, TTL: 60_000}},
-		"loginWithWechatPhone": {Auth: AuthNone, Throttle: &Throttle{Limit: 10, TTL: 60_000}},
-		"loginWithAlipay":      {Auth: AuthNone, Throttle: &Throttle{Limit: 10, TTL: 60_000}},
-		"createUser":           rbac(entity.PermUserCreate, true),
-		"getUsers":             {Auth: AuthJWT, RBAC: true, Permissions: []string{entity.PermUserList}, Query: "QueryUserDto"},
-		"getUser":              rbac(entity.PermUserRead, false),
-		"updateUser":           rbac(entity.PermUserUpdate, true),
-		"deleteUser":           rbac(entity.PermUserDelete, true),
-	}
-
-	maps.Copy(policies, modulePolicies())
-
-	return policies
-}
-
-// modulePolicies returns the policies of the general-purpose modules.
-func modulePolicies() map[string]Policy {
 	return map[string]Policy{
-		"getNotifications":             {Auth: AuthJWT, Query: "QueryNotificationDto"},
-		"getUnreadCount":               {Auth: AuthJWT},
-		"getNotification":              {Auth: AuthJWT},
-		"markNotificationAsRead":       {Auth: AuthJWT, Tx: true},
-		"markAllNotificationsAsRead":   {Auth: AuthJWT, Tx: true},
-		"deleteNotification":           {Auth: AuthJWT, Tx: true},
-		"getNotificationSettings":      {Auth: AuthJWT},
-		"updateNotificationSettings":   {Auth: AuthJWT, Tx: true},
-		"adminRetriggerAccountCleanup": rbac(entity.PermUserDelete, true),
+		"listNotes":  {Auth: AuthJWT},
+		"createNote": {Auth: AuthJWT, Tx: true, Audit: &Audit{Action: "note.create", Resource: "note"}},
+		"getNote":    {Auth: AuthJWT},
+		"updateNote": {Auth: AuthJWT, Tx: true, Audit: &Audit{Action: "note.update", Resource: "note"}},
+		"deleteNote": {Auth: AuthJWT, Tx: true, Audit: &Audit{Action: "note.delete", Resource: "note"}},
 	}
-}
-
-// Undocumented lists the operations nestjs excludes from the OpenAPI document.
-func Undocumented() []string {
-	return []string{"getMetrics", "readPrivateFile", "downloadFile"}
 }

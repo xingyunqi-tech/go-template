@@ -13,7 +13,7 @@ import (
 )
 
 // PostgresImage is the server image used by integration tests.
-const PostgresImage = "postgres:18.6-alpine"
+const PostgresImage = "postgres:18.7-alpine"
 
 const (
 	_startupTimeout = 2 * time.Minute

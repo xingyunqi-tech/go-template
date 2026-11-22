@@ -79,6 +79,14 @@ linters:
           deny:
             - pkg: github.com/xingyunqi-tech/go-template/internal/controller
               desc: usecase 不依赖 controller
+        repo:
+          files:
+            - "**/internal/repo/**"
+          deny:
+            - pkg: github.com/xingyunqi-tech/go-template/internal/controller
+              desc: repo 不依赖 controller
+            - pkg: github.com/xingyunqi-tech/go-template/internal/usecase
+              desc: repo 不依赖 usecase
         pkg:
           files:
             - "**/pkg/**"
@@ -170,14 +178,13 @@ linters:
       - path: internal/controller/http/policy\.go
         linters:
           - mnd
-      - path: pkg/validatorx/
+      - path: pkg/ratelimit/rules\.go
         linters:
-          - cyclop
-          - funlen
-          - gochecknoglobals
-          - gocognit
-          - gocyclo
           - mnd
+      - path: internal/entity/errors\.go
+        text: G101
+        linters:
+          - gosec
       - path: tests/
         text: G70[23]
         linters:

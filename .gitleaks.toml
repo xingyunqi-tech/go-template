@@ -2,7 +2,7 @@
 useDefault = true
 
 [allowlist]
-description = "测试固定值：123456 的 MD5、校验用例中的固定 UUID、测试与 CI 用密钥；上游 go-clean-template 2021 年提交中的 .env 示例值"
+description = "测试固定值：123456 的 MD5、校验用例中的固定 UUID、测试与 CI 用密钥（含种子为字节 1..32 的 Ed25519 测试签名密钥）；上游 go-clean-template 2021 年提交中的 .env 示例值"
 commits = [
   "70ff8a3f0d1868315fb43ea9ea1b945bf0a56e17",
   "e8a71be56cd3293a2795fd39864740b14924732a",
@@ -12,4 +12,5 @@ regexes = [
   '''(?i)3f0c8a52-7d0e-4b59-9f8e-2a1d6c4b7e10''',
   '''test-[a-z]+-secret-0123456789abcdef''',
   '''ci_[a-z_]+_0123456789abcdef''',
+  '''MC4CAQAwBQYDK2VwBCIEIAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g''',
 ]

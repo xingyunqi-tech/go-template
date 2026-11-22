@@ -2,121 +2,110 @@ package app
 
 import (
 	"context"
-	"errors"
+	"database/sql"
 	"fmt"
 	"log/slog"
-	"slices"
-	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/database"
 
-	"github.com/xingyunqi-tech/go-template/db"
 	"github.com/xingyunqi-tech/go-template/internal/config"
 	"github.com/xingyunqi-tech/go-template/internal/repo/postgres"
 	"github.com/xingyunqi-tech/go-template/migrations"
 )
 
-// ErrSchemaMismatch reports a database missing columns this service uses.
-var ErrSchemaMismatch = errors.New("database schema is missing")
-
 const _migrateConnections = 2
 
-// Migrate applies the goose and River migrations; with DB_SCHEMA_OWNER=external it only checks
-// that the shared database has every column of the nestjs schema and migrates the river schema.
-func Migrate(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
-	infra, err := OpenInfra(ctx, cfg, _migrateConnections)
-	if err != nil {
-		return err
-	}
-	defer infra.Close()
-
-	if cfg.Database.SchemaOwner == config.SchemaOwnerExternal {
-		if err := CheckSchema(ctx, infra.Pool); err != nil {
-			return err
-		}
-
-		return postgres.MigrateRiver(ctx, infra.Pool, log) //nolint:wrapcheck // wrapped by postgres
-	}
-
-	return MigrateUp(ctx, infra.Pool, log)
+// migrationSets lists the goose directories of the authentication role, in apply order.
+func migrationSets(_ config.Role) []migrations.Set {
+	return []migrations.Set{migrations.Core()}
 }
 
-// MigrateUp applies all pending goose migrations and then the River migrations.
-func MigrateUp(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) error {
+// Migrate creates DATABASE_SCHEMA and applies the goose and River migrations; down rolls them
+// all back instead.
+func Migrate(down bool) func(ctx context.Context, cfg *config.Config, log *slog.Logger, obs *Observability) error {
+	return func(ctx context.Context, cfg *config.Config, log *slog.Logger, _ *Observability) error {
+		infra, err := OpenInfra(ctx, cfg, _migrateConnections)
+		if err != nil {
+			return err
+		}
+		defer infra.Close()
+
+		sets := migrationSets(cfg.Auth.Role())
+
+		if down {
+			return MigrateDown(ctx, infra.Pool, cfg.Database.Schema, sets, log)
+		}
+
+		return MigrateUp(ctx, infra.Pool, cfg.Database.Schema, sets, log)
+	}
+}
+
+func provider(sqlDB *sql.DB, set migrations.Set) (*goose.Provider, error) {
+	store, err := database.NewStore(database.DialectPostgres, set.Table)
+	if err != nil {
+		return nil, fmt.Errorf("app: migrate %s: %w", set.Name, err)
+	}
+
+	p, err := goose.NewProvider("", sqlDB, set.FS, goose.WithStore(store))
+	if err != nil {
+		return nil, fmt.Errorf("app: migrate %s: %w", set.Name, err)
+	}
+
+	return p, nil
+}
+
+// MigrateUp creates schema and applies the pending migrations of every set, then River's.
+func MigrateUp(ctx context.Context, pool *pgxpool.Pool, schema string, sets []migrations.Set, log *slog.Logger) error {
+	if _, err := pool.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS "+pgx.Identifier{schema}.Sanitize()); err != nil {
+		return fmt.Errorf("app: create schema: %w", err)
+	}
+
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	defer sqlDB.Close()
 
-	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrations.FS)
-	if err != nil {
-		return fmt.Errorf("app: migrate: %w", err)
+	for _, set := range sets {
+		p, err := provider(sqlDB, set)
+		if err != nil {
+			return err
+		}
+
+		results, err := p.Up(ctx)
+		if err != nil {
+			return fmt.Errorf("app: migrate %s: %w", set.Name, err)
+		}
+
+		for _, r := range results {
+			log.InfoContext(ctx, "migration applied", "set", set.Name, "version", r.Source.Version, "duration_ms", r.Duration.Milliseconds())
+		}
 	}
 
-	results, err := provider.Up(ctx)
-	if err != nil {
-		return fmt.Errorf("app: migrate: %w", err)
-	}
-
-	for _, r := range results {
-		log.InfoContext(ctx, "migration applied", "version", r.Source.Version, "path", r.Source.Path, "duration_ms", r.Duration.Milliseconds())
-	}
-
-	return postgres.MigrateRiver(ctx, pool, log) //nolint:wrapcheck // wrapped by postgres
+	return postgres.MigrateRiver(ctx, pool, schema, log) //nolint:wrapcheck // wrapped by postgres
 }
 
-// requiredColumns lists "table.column" from the nestjs schema snapshot.
-func requiredColumns() []string {
-	var out []string
+// MigrateDown rolls River back and then every set, last set first.
+func MigrateDown(ctx context.Context, pool *pgxpool.Pool, schema string, sets []migrations.Set, log *slog.Logger) error {
+	if err := postgres.RollbackRiver(ctx, pool, schema, log); err != nil {
+		return err //nolint:wrapcheck // wrapped by postgres
+	}
 
-	for line := range strings.SplitSeq(db.NestjsSchema, "\n") {
-		rest, ok := strings.CutPrefix(line, "column ")
-		if !ok {
-			continue
+	sqlDB := stdlib.OpenDBFromPool(pool)
+	defer sqlDB.Close()
+
+	for i := len(sets) - 1; i >= 0; i-- {
+		p, err := provider(sqlDB, sets[i])
+		if err != nil {
+			return err
 		}
 
-		name, _, _ := strings.Cut(rest, " ")
-		out = append(out, name)
-	}
-
-	return out
-}
-
-// CheckSchema fails when a column of the nestjs schema is missing from the current schema.
-func CheckSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	rows, err := pool.Query(ctx, `SELECT table_name || '.' || column_name FROM information_schema.columns WHERE table_schema = current_schema()`)
-	if err != nil {
-		return fmt.Errorf("app: check schema: %w", err)
-	}
-	defer rows.Close()
-
-	existing := map[string]bool{}
-
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return fmt.Errorf("app: check schema: %w", err)
+		if _, err := p.DownTo(ctx, 0); err != nil {
+			return fmt.Errorf("app: rollback %s: %w", sets[i].Name, err)
 		}
 
-		existing[name] = true
-	}
-
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("app: check schema: %w", err)
-	}
-
-	var missing []string
-
-	for _, c := range requiredColumns() {
-		if !existing[c] {
-			missing = append(missing, c)
-		}
-	}
-
-	if len(missing) > 0 {
-		slices.Sort(missing)
-
-		return fmt.Errorf("%w: %s", ErrSchemaMismatch, strings.Join(missing, ", "))
+		log.InfoContext(ctx, "migrations rolled back", "set", sets[i].Name)
 	}
 
 	return nil

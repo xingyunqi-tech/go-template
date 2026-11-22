@@ -12,61 +12,17 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/xingyunqi-tech/go-template/internal/config"
-	"github.com/xingyunqi-tech/go-template/internal/i18n"
-	"github.com/xingyunqi-tech/go-template/internal/repo/postgres"
-	"github.com/xingyunqi-tech/go-template/internal/repo/redis"
-	"github.com/xingyunqi-tech/go-template/internal/repo/webapi/mail"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/alert"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/notification"
 	"github.com/xingyunqi-tech/go-template/internal/worker"
 )
 
 const _stopAndCancelGrace = 5 * time.Second
 
-// NewWorkerClient builds the River client that works the queues and schedules the periodic jobs.
-func NewWorkerClient(cfg *config.Config, log *slog.Logger, infra *Infra, sender mail.Sender) (*river.Client[pgx.Tx], error) {
-	translator, err := i18n.New(cfg.App.FallbackLanguage)
-	if err != nil {
-		return nil, fmt.Errorf("app: %w", err)
-	}
-
-	composer, err := mail.NewComposer(translator, cfg.App.Name, cfg.App.FrontendDomain)
-	if err != nil {
-		return nil, fmt.Errorf("app: %w", err)
-	}
-
-	if sender == nil {
-		sender = newSender(&cfg.Mail, log)
-	}
-
-	appMetrics := infra.Metrics
-	cache := redis.NewCache(infra.Redis, log).WithCounter(appMetrics)
-	db := postgres.NewDB(infra.Pool, acquireTimeout(cfg), log)
-
-	inserter, err := newInserter(infra.Pool, log)
-	if err != nil {
-		return nil, err
-	}
-
-	riverCfg, err := worker.Config(&worker.Deps{
-		Composer: composer,
-		Sender:   sender,
-		Cleanup: newAccountCleanup(db, postgres.NewJobs(inserter), alert.New(postgres.NewAlerts(db), appMetrics, log),
-			newFiles(cfg, db, log), log),
-		Locks:       redis.NewLocks(infra.Redis, log),
-		Maintenance: postgres.NewMaintenance(db),
-		Counter:     appMetrics,
-		Log:         log,
-		Notify: worker.NotificationDeps{
-			Notifications: notification.New(postgres.NewNotifications(db), postgres.NewJobs(inserter), log),
-			Users:         postgres.NewUsers(db),
-			SMS:           newSMSProvider(cfg, log, infra),
-			Subscribe:     subscribeSender{client: newWechat(cfg, log, infra, cache)},
-			Templates:     subscribeTemplates(&cfg.Wechat),
-		},
-	})
-	if err != nil {
-		return nil, err //nolint:wrapcheck // worker errors are wrapped
+// NewWorkerClient builds the River client that works the queues and schedules the periodic
+// jobs; it is nil while no job is registered.
+func NewWorkerClient(cfg *config.Config, log *slog.Logger, infra *Infra) (*river.Client[pgx.Tx], error) {
+	riverCfg, workers := worker.Config(&worker.Deps{Schema: cfg.Database.Schema, Log: log})
+	if workers == 0 {
+		return nil, nil //nolint:nilnil // nothing to work
 	}
 
 	riverCfg.ErrorHandler = jobErrors{log: log, report: reportError(cfg)}
@@ -81,23 +37,32 @@ func NewWorkerClient(cfg *config.Config, log *slog.Logger, infra *Infra, sender 
 
 // Work runs the queue workers and periodic jobs until ctx is canceled, then lets running jobs
 // finish within SHUTDOWN_TIMEOUT.
-func Work(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
-	infra, err := OpenInfra(ctx, cfg, cfg.Database.WorkerMaxConnections)
+func Work(ctx context.Context, cfg *config.Config, log *slog.Logger, obs *Observability) error {
+	infra, err := OpenInfra(ctx, cfg, cfg.Database.WorkerMaxConns)
 	if err != nil {
 		return err
 	}
 	defer infra.Close()
 
-	client, err := NewWorkerClient(cfg, log, infra, nil)
+	client, err := NewWorkerClient(cfg, log, infra)
 	if err != nil {
 		return err
 	}
 
-	stopMetrics, err := serveWorkerMetrics(ctx, cfg, infra.Metrics, log)
-	if err != nil {
-		return err
+	if metrics := obs.MetricsHandler(); metrics != nil && cfg.Metrics.WorkerPort != 0 {
+		stop, err := serveMetrics(ctx, cfg, cfg.Metrics.WorkerPort, metrics, log)
+		if err != nil {
+			return err
+		}
+		defer stop()
 	}
-	defer stopMetrics()
+
+	if client == nil {
+		log.InfoContext(ctx, "worker idle: no jobs registered")
+		<-ctx.Done()
+
+		return nil
+	}
 
 	if err := client.Start(context.WithoutCancel(ctx)); err != nil {
 		return fmt.Errorf("app: start worker: %w", err)
@@ -107,7 +72,12 @@ func Work(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 	<-ctx.Done()
 	log.InfoContext(ctx, "worker stopping", "timeout", cfg.App.ShutdownTimeout)
 
-	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.App.ShutdownTimeout)
+	return stopWorker(ctx, client, cfg.App.ShutdownTimeout, log)
+}
+
+// stopWorker lets running jobs finish within timeout, then cancels them.
+func stopWorker(ctx context.Context, client *river.Client[pgx.Tx], timeout time.Duration, log *slog.Logger) error {
+	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	defer cancel()
 
 	if err := client.Stop(stopCtx); err == nil || errors.Is(err, context.Canceled) {

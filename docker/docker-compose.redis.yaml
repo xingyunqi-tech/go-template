@@ -1,11 +1,9 @@
-# Redis（缓存、会话鉴权缓存）
+# Redis（缓存、限流、吊销键、幂等键）
 #
 # 用法：叠加在 docker-compose.base.yaml 之上
 
 x-redis-env: &redis-env
-  REDIS_ENABLED: 'true'
-  REDIS_HOST: redis
-  REDIS_PORT: '6379'
+  REDIS_URL: redis://redis:6379/0
 
 services:
   redis:

@@ -2,9 +2,7 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,14 +10,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/xingyunqi-tech/go-template/internal/app"
 	"github.com/xingyunqi-tech/go-template/internal/config"
 	"github.com/xingyunqi-tech/go-template/pkg/logger"
-	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
 )
 
 var version = "dev"
@@ -30,7 +26,6 @@ const (
 	exitUsage = 2
 
 	_healthcheckTimeout = 5 * time.Second
-	_minPasswordLength  = 6
 )
 
 const usage = `Usage: app <command>
@@ -38,22 +33,19 @@ const usage = `Usage: app <command>
 Commands:
   serve     run the HTTP API server
   worker    run the queue workers and periodic jobs
-  migrate   apply the database migrations
-  seed      insert reference data and seed accounts, then clear the permission cache
-  permissions clear-cache
-            delete the cached role permission map
-  createsuperuser -email <email>
-            create an active administrator; the password is read from the first line of stdin
+  migrate [up|down]
+            create DATABASE_SCHEMA and apply the migrations, or roll them all back
+  seed      insert the seed accounts
   healthcheck [--ready]
             probe the local API liveness (or readiness) endpoint; exit 0 when it answers 200
   version   print the build version
 `
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
-func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("app", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { _, _ = fmt.Fprint(stderr, usage) }
@@ -67,16 +59,17 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	switch fs.Arg(0) {
-	case "permissions":
-		if fs.Arg(1) != "clear-cache" {
+	case "migrate":
+		switch fs.Arg(1) {
+		case "", "up":
+			return command(stderr, "migrate", app.Migrate(false))
+		case "down":
+			return command(stderr, "migrate down", app.Migrate(true))
+		default:
 			fs.Usage()
 
 			return exitUsage
 		}
-
-		return command(stderr, "permissions clear-cache", app.ClearPermissionCache)
-	case "createsuperuser":
-		return createSuperuser(fs.Args()[1:], stdin, stderr)
 	case "healthcheck":
 		return healthcheck(fs.Args()[1:], stderr)
 	case "version":
@@ -90,47 +83,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 }
 
-func commands() map[string]func(context.Context, *config.Config, *slog.Logger) error {
-	return map[string]func(context.Context, *config.Config, *slog.Logger) error{
-		"serve": app.Serve, "worker": app.Work, "migrate": app.Migrate, "seed": app.Seed,
-	}
+type runFunc = func(context.Context, *config.Config, *slog.Logger, *app.Observability) error
+
+func commands() map[string]runFunc {
+	return map[string]runFunc{"serve": app.Serve, "worker": app.Work, "seed": app.Seed}
 }
 
-// createSuperuser reads -email and the password from the first line of stdin.
-func createSuperuser(args []string, stdin io.Reader, stderr io.Writer) int {
-	fs := flag.NewFlagSet("createsuperuser", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	email := fs.String("email", "", "administrator email")
-
-	if err := fs.Parse(args); err != nil {
-		return exitUsage
-	}
-
-	address := strings.ToLower(strings.TrimSpace(*email))
-	if !validatorx.IsEmail(address) {
-		_, _ = fmt.Fprintln(stderr, "createsuperuser: -email must be an email address")
-
-		return exitUsage
-	}
-
-	line, err := bufio.NewReader(stdin).ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		_, _ = fmt.Fprintln(stderr, err)
-
-		return exitError
-	}
-
-	pass := strings.TrimRight(line, "\r\n")
-	if len(pass) < _minPasswordLength {
-		_, _ = fmt.Fprintf(stderr, "createsuperuser: the password on stdin must have at least %d characters\n", _minPasswordLength)
-
-		return exitUsage
-	}
-
-	return command(stderr, "createsuperuser", app.CreateSuperuser(address, pass))
-}
-
-// healthcheck GETs /<API_PREFIX>/v1/health/live (ready with --ready) on 127.0.0.1:<APP_PORT>.
+// healthcheck GETs /health/live (/health/ready with --ready) on 127.0.0.1:<APP_PORT>.
 func healthcheck(args []string, stderr io.Writer) int {
 	fs := flag.NewFlagSet("healthcheck", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -152,7 +111,7 @@ func healthcheck(args []string, stderr io.Writer) int {
 		probe = "ready"
 	}
 
-	url := fmt.Sprintf("http://127.0.0.1:%d/%s/v1/health/%s", cfg.App.Port, cfg.App.APIPrefix, probe)
+	url := fmt.Sprintf("http://127.0.0.1:%d/health/%s", cfg.App.Port, probe)
 
 	ctx, cancel := context.WithTimeout(context.Background(), _healthcheckTimeout)
 	defer cancel()
@@ -181,7 +140,7 @@ func healthcheck(args []string, stderr io.Writer) int {
 	return exitOK
 }
 
-func command(stderr io.Writer, name string, run func(context.Context, *config.Config, *slog.Logger) error) int {
+func command(stderr io.Writer, name string, run runFunc) int {
 	cfg, err := config.Load()
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
@@ -208,10 +167,12 @@ func command(stderr io.Writer, name string, run func(context.Context, *config.Co
 		}
 	}()
 
-	log := obs.Logger(logger.New(stderr, cfg.Log.LevelOr(cfg.App.IsProduction()), cfg.Log.PrettyPrint.Or(!cfg.App.IsProduction()), app.LogAttrs))
+	log := obs.Logger(logger.New(stderr, logger.Options{
+		Level: cfg.Log.Level, Text: cfg.Log.Format == "text", Service: cfg.Telemetry.ServiceName, Env: cfg.App.Env,
+	}, app.LogAttrs))
 	app.RouteLibraryLogs(log)
 
-	if err := run(ctx, cfg, log); err != nil {
+	if err := run(ctx, cfg, log, obs); err != nil {
 		log.ErrorContext(ctx, "command failed", "command", name, "error", err)
 
 		return exitError

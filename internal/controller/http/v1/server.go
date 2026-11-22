@@ -3,57 +3,48 @@ package v1
 
 import (
 	"log/slog"
-	"time"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/gen"
-	"github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/accountcleanup"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/file"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/health"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/notification"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/user"
+	"github.com/xingyunqi-tech/go-template/internal/entity"
+	"github.com/xingyunqi-tech/go-template/internal/usecase"
 )
 
 var _ gen.StrictServerInterface = (*Server)(nil)
 
 // Server implements the generated strict server interface.
 type Server struct {
-	appName string
-	started time.Time
-	now     func() time.Time
-	auth    *auth.Service
-	users   *user.Service
-	urls    view.FileURLs
-	health  *health.Service
-	log     *slog.Logger
-	files   *file.Service
-	// presigned is the s3-presigned upload driver.
-	presigned     bool
-	notifications *notification.Service
-	cleanup       *accountcleanup.Service
+	notes usecase.Notes
+	log   *slog.Logger
 }
 
 // Deps are the Server dependencies.
 type Deps struct {
-	AppName string
-	Auth    *auth.Service
-	Users   *user.Service
-	URLs    view.FileURLs
-	Health  *health.Service
-	Log     *slog.Logger
-	Files   *file.Service
-	// PresignedUploads selects the s3-presigned upload endpoint.
-	PresignedUploads bool
-	Notifications    *notification.Service
-	Cleanup          *accountcleanup.Service
+	Notes usecase.Notes
+	Log   *slog.Logger
 }
 
-// New returns a Server; uptime counts from this call.
+// New returns a Server.
 func New(d *Deps) *Server {
-	return &Server{
-		appName: d.AppName, started: time.Now(), now: time.Now, auth: d.Auth, users: d.Users, urls: d.URLs,
-		health: d.Health, log: d.Log, files: d.Files, presigned: d.PresignedUploads,
-		notifications: d.Notifications, cleanup: d.Cleanup,
+	return &Server{notes: d.Notes, log: d.Log}
+}
+
+// Register mounts the generated strict handlers of s; parameter binding errors are 400s.
+func Register(s gen.StrictServerInterface) func(chi.Router, func(http.ResponseWriter, *http.Request, error)) {
+	return func(r chi.Router, writeError func(http.ResponseWriter, *http.Request, error)) {
+		badRequest := func(w http.ResponseWriter, r *http.Request, err error) {
+			writeError(w, r, entity.Wrap(entity.KeyBadRequest, err))
+		}
+
+		strict := gen.NewStrictHandlerWithOptions(s, nil, gen.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc:  badRequest,
+			ResponseErrorHandlerFunc: writeError,
+		})
+		gen.HandlerWithOptions(strict, gen.ChiServerOptions{ //nolint:exhaustruct // defaults
+			BaseRouter:       r,
+			ErrorHandlerFunc: badRequest,
+		})
 	}
 }

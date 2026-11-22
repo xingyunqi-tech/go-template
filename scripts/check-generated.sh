@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# pre-commit 钩子：生成输入（openapi/、tools/openapigen/、migrations/、sqlc 查询、mock 端口源文件）有暂存改动时重新生成并检查生成代码无 diff。
+# pre-commit 钩子：生成输入（openapi/src/、tools/openapigen/、migrations/、sqlc 查询、mock 端口源文件）有暂存改动时重新生成并检查生成代码无 diff。
 set -euo pipefail
 
-generated=(internal/controller/http/gen internal/repo/postgres/sqlcgen internal/repo/mocks 'internal/usecase/*/mocks')
+generated=(openapi/openapi.json internal/controller/http/validation.json internal/controller/http/gen internal/repo/postgres/sqlcgen internal/repo/mocks 'internal/usecase/*/mocks')
 
 make --no-print-directory generate >/dev/null
 untracked="$(git ls-files --others --exclude-standard -- "${generated[@]}")"

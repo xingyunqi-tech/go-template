@@ -3,13 +3,14 @@
 package contract_test
 
 import (
-	"bufio"
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -20,253 +21,219 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.yaml.in/yaml/v3"
 
 	httpapi "github.com/xingyunqi-tech/go-template/internal/controller/http"
 	v1 "github.com/xingyunqi-tech/go-template/internal/controller/http/v1"
-	"github.com/xingyunqi-tech/go-template/internal/controller/http/v1/view"
-	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/i18n"
-	"github.com/xingyunqi-tech/go-template/internal/repo/webapi/storage"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
-	"github.com/xingyunqi-tech/go-template/internal/usecase/file"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/health"
 	"github.com/xingyunqi-tech/go-template/openapi"
-	"github.com/xingyunqi-tech/go-template/pkg/validatorx"
+	"github.com/xingyunqi-tech/go-template/pkg/jwtx"
+	"github.com/xingyunqi-tech/go-template/pkg/ratelimit"
 )
 
 const root = "../.."
 
-// undocumentedRoutes may be registered without appearing in the baseline document.
-var undocumentedRoutes = []string{"GET /docs", "GET /docs-json", "GET /metrics"} //nolint:gochecknoglobals // whitelist
-
-type operation struct {
-	method, path string
-	bearer       bool
+// operationsRoutes are registered outside the document (platform conventions §1).
+var operationsRoutes = []string{ //nolint:gochecknoglobals // whitelist
+	"GET /health/live", "GET /health/ready", "GET /metrics", "GET /openapi.json", "GET /docs", "GET /.well-known/jwks.json",
 }
 
-func readFile(t *testing.T, rel string) []byte {
+var _operationID = regexp.MustCompile(`^[a-z][a-zA-Z0-9]*$`)
+
+type ready struct{}
+
+func (ready) Ready(context.Context) health.Report {
+	return health.Report{Ready: true, Checks: map[string]string{}}
+}
+
+func loadDocument(t *testing.T) *openapi3.T {
 	t.Helper()
 
-	data, err := os.ReadFile(filepath.Join(root, rel))
+	doc, err := openapi3.NewLoader().LoadFromData(openapi.Document)
 	require.NoError(t, err)
+	require.NoError(t, doc.Validate(t.Context()))
 
-	return data
+	return doc
 }
 
 func newRouter(t *testing.T) *httpapi.Router {
 	t.Helper()
 
-	translator, err := i18n.New("en")
+	translator, err := i18n.New("zh")
 	require.NoError(t, err)
 
-	validator, err := validatorx.New(openapi.Validation)
+	keys, err := jwtx.NewStaticKeys()
 	require.NoError(t, err)
 
-	r, err := httpapi.NewRouter(v1.New(&v1.Deps{AppName: "app", Auth: nil, Users: nil, URLs: view.FileURLs{BackendDomain: "", APIPrefix: "api"}}), &httpapi.Options{
-		APIPrefix:      "api",
-		SwaggerEnabled: true,
-		Docs:           openapi.Baseline,
-		Validator:      validator,
-		Translator:     translator,
-		Log:            slog.New(slog.DiscardHandler),
-		Production:     false,
-		FrontendDomain: "",
-		Guards:         httpapi.AuthGuards(rejectAll{}),
-		Permission:     httpapi.RequirePermissions(noPermissions{}),
-		Transactor:     nil,
-		Uploads: httpapi.UploadOptions{
-			Files: file.New(file.Config{APIPrefix: "api", BackendDomain: "", MaxSizes: nil}, nil,
-				storage.NewLocal(t.TempDir()), nil, slog.New(slog.DiscardHandler)),
-			Permissions: noPermissions{}, Presigned: false,
-		},
-		TrustProxy: 0,
+	r, err := httpapi.NewRouter(t.Context(), &httpapi.Options{
+		Log: slog.New(slog.DiscardHandler), Translator: translator, ServiceName: "contract",
+		ValidationDocument: httpapi.ValidationDocument, Document: openapi.Document, DocsEnabled: true,
+		Policies: httpapi.Policies(), Register: v1.Register(v1.New(&v1.Deps{Notes: nil, Log: slog.New(slog.DiscardHandler)})),
+		Verifier: jwtx.NewVerifier(keys, "iss", "aud"), Limiter: ratelimit.New(nil), Readiness: ready{},
+		Metrics: http.NotFoundHandler(),
 	})
 	require.NoError(t, err)
 
 	return r
 }
 
-func loadBaseline(t *testing.T) map[string]operation {
-	t.Helper()
+func TestBundleIsUpToDate(t *testing.T) {
+	t.Parallel()
 
-	doc, err := openapi3.NewLoader().LoadFromData(readFile(t, "openapi/nestjs-baseline.json"))
+	dir := t.TempDir()
+	tool := filepath.Join(root, "bin", "openapigen")
+
+	if _, err := os.Stat(tool); err != nil {
+		t.Fatalf("%s is missing; run make generate", tool)
+	}
+
+	config := filepath.Join(dir, "oapi-codegen.yaml")
+	raw, err := os.ReadFile(filepath.Join(root, "openapi", "oapi-codegen.yaml"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(config, bytes.ReplaceAll(raw, []byte("output: internal/controller/http/gen/gen.go"),
+		[]byte("output: "+filepath.Join(dir, "gen.go"))), 0o600))
+
+	cmd := exec.CommandContext(t.Context(), tool, "-src", filepath.Join(root, "openapi", "src"),
+		"-out", filepath.Join(dir, "openapi.json"), "-validation", filepath.Join(dir, "validation.json"), "-config", config)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	for generated, committed := range map[string]string{
+		"openapi.json":    "openapi/openapi.json",
+		"validation.json": "internal/controller/http/validation.json",
+	} {
+		want, err := os.ReadFile(filepath.Join(root, committed))
+		require.NoError(t, err)
+
+		got, err := os.ReadFile(filepath.Join(dir, generated))
+		require.NoError(t, err)
+		assert.True(t, bytes.Equal(want, got), "%s differs from a fresh bundle; run make openapi", committed)
+	}
+}
+
+func TestOpenAPIJSONServesTheCommittedBytes(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+	newRouter(t).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/openapi.json", http.NoBody))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	committed, err := os.ReadFile(filepath.Join(root, "openapi", "openapi.json"))
 	require.NoError(t, err)
 
-	ops := map[string]operation{}
+	body, err := io.ReadAll(rec.Body)
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(committed, body))
+}
+
+func TestRoutesAndDocumentMatch(t *testing.T) {
+	t.Parallel()
+
+	doc := loadDocument(t)
+
+	documented := map[string]bool{}
 
 	for path, item := range doc.Paths.Map() {
-		for method, op := range item.Operations() {
-			if op.OperationID == "" {
-				continue
-			}
-
-			ops[op.OperationID] = operation{method: method, path: path, bearer: hasBearer(op)}
+		for method := range item.Operations() {
+			documented[method+" "+path] = true
 		}
 	}
 
-	return ops
-}
+	registered := map[string]bool{}
 
-func hasBearer(op *openapi3.Operation) bool {
-	if op.Security == nil {
-		return false
-	}
-
-	for _, req := range *op.Security {
-		if _, ok := req["bearer"]; ok {
-			return true
-		}
-	}
-
-	return false
-}
-
-func loadScope(t *testing.T) []string {
-	t.Helper()
-
-	var scope struct {
-		Operations []string `yaml:"operations"`
-	}
-	require.NoError(t, yaml.Unmarshal(readFile(t, "openapi/scope.yaml"), &scope))
-	require.NotEmpty(t, scope.Operations)
-
-	return scope.Operations
-}
-
-func registeredRoutes(t *testing.T, routes chi.Routes) []string {
-	t.Helper()
-
-	var out []string
-
-	err := chi.Walk(routes, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
-		out = append(out, method+" "+route)
+	err := chi.Walk(newRouter(t).Routes(), func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		registered[method+" "+route] = true
 
 		return nil
 	})
 	require.NoError(t, err)
 
-	return out
-}
-
-func TestDocsJSONServesBaselineBytes(t *testing.T) {
-	t.Parallel()
-
-	rec := httptest.NewRecorder()
-	newRouter(t).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/docs-json", http.NoBody))
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	assert.True(t, bytes.Equal(readFile(t, "openapi/nestjs-baseline.json"), rec.Body.Bytes()),
-		"/docs-json differs from openapi/nestjs-baseline.json")
-}
-
-func TestSourceDeclaresContractOrigin(t *testing.T) {
-	t.Parallel()
-
-	keys := map[string]string{}
-	scanner := bufio.NewScanner(bytes.NewReader(readFile(t, "openapi/SOURCE")))
-
-	for scanner.Scan() {
-		key, value, ok := strings.Cut(scanner.Text(), "=")
-		require.True(t, ok, scanner.Text())
-
-		keys[key] = value
-	}
-
-	hex := regexp.MustCompile(`^[0-9a-f]{40}$`)
-
-	assert.Equal(t, "xingyunqi-tech/nestjs-template", keys["repository"])
-	assert.NotEmpty(t, keys["branch"])
-	assert.Regexp(t, hex, keys["commit"])
-	assert.Regexp(t, hex, keys["validation_script"])
-	assert.Equal(t, "NODE_ENV=development FILE_DRIVER=local", keys["environment"])
-	assert.Len(t, keys, 5)
-}
-
-func TestEveryScopedOperationIsRegistered(t *testing.T) {
-	t.Parallel()
-
-	ops := loadBaseline(t)
-	registered := registeredRoutes(t, newRouter(t).Routes())
-
-	for _, id := range loadScope(t) {
-		op, ok := ops[id]
-		if !assert.True(t, ok, "%s is not in the baseline", id) {
-			continue
+	for route := range registered {
+		if !slices.Contains(operationsRoutes, route) {
+			assert.True(t, documented[route], "%s is registered but not documented", route)
 		}
+	}
 
-		assert.Contains(t, registered, op.method+" "+op.path, "%s has no registered handler", id)
+	for route := range documented {
+		assert.True(t, registered[route], "%s is documented but not registered", route)
+		assert.True(t, strings.HasPrefix(strings.SplitN(route, " ", 2)[1], httpapi.APIPrefix+"/"), "%s is outside %s", route, httpapi.APIPrefix)
 	}
 }
 
-func TestEveryRegisteredRouteIsDocumented(t *testing.T) {
+func TestOperationsFollowTheConventions(t *testing.T) {
 	t.Parallel()
 
-	documented := map[string]bool{}
-	for _, op := range loadBaseline(t) {
-		documented[op.method+" "+op.path] = true
-	}
-
-	for _, route := range registeredRoutes(t, newRouter(t).Routes()) {
-		if strings.HasPrefix(route, http.MethodHead+" ") {
-			continue
-		}
-
-		assert.True(t, documented[route] || slices.Contains(undocumentedRoutes, route),
-			"%s is neither documented nor whitelisted", route)
-	}
-}
-
-func TestPoliciesMatchScopeAndDocumentedSecurity(t *testing.T) {
-	t.Parallel()
-
-	ops := loadBaseline(t)
+	doc := loadDocument(t)
 	policies := httpapi.Policies()
-	scope := loadScope(t)
+	seen := map[string]bool{}
 
-	for _, id := range scope {
-		policy, ok := policies[id]
-		if !assert.True(t, ok, "%s has no policy", id) {
-			continue
-		}
+	for path, item := range doc.Paths.Map() {
+		for method, op := range item.Operations() {
+			id := op.OperationID
+			where := method + " " + path
 
-		switch policy.Auth {
-		case httpapi.AuthJWT, httpapi.AuthOptionalJWT, httpapi.AuthRefresh, httpapi.AuthMonitor:
-			assert.True(t, ops[id].bearer, "%s uses %s but the document has no bearer security", id, policy.Auth)
-		case httpapi.AuthNone:
-			assert.False(t, ops[id].bearer, "%s is documented with bearer but has no auth", id)
+			assert.Regexp(t, _operationID, id, where)
+			assert.False(t, seen[id], "%s: operationId %s is not unique", where, id)
+			seen[id] = true
+
+			if policy, ok := policies[id]; assert.True(t, ok, "%s has no policy", id) {
+				assert.Equal(t, policy.Auth != httpapi.AuthPublic, declaresBearer(op), "%s: bearerAuth must match the policy", id)
+			}
+
+			checkErrorResponses(t, id, op)
+
+			if strings.HasPrefix(path, "/api/") {
+				for _, code := range []string{"429", "503"} {
+					assert.NotNil(t, op.Responses.Value(code), "%s does not declare %s", id, code)
+				}
+			}
 		}
 	}
 
 	for id := range policies {
-		if slices.Contains(httpapi.Undocumented(), id) {
-			assert.NotContains(t, ops, id, "%s is documented", id)
-
-			continue
-		}
-
-		assert.Contains(t, scope, id, "policy %s is not in scope.yaml", id)
+		assert.True(t, seen[id], "policy %s has no operation", id)
 	}
 }
 
-func TestValidationMetadataIsFullyImplemented(t *testing.T) {
+func declaresBearer(op *openapi3.Operation) bool {
+	return op.Security != nil && slices.ContainsFunc(*op.Security, func(r openapi3.SecurityRequirement) bool {
+		_, ok := r["bearerAuth"]
+
+		return ok
+	})
+}
+
+// checkErrorResponses requires 422 to use ValidationErrorResponse and other errors ErrorResponse.
+func checkErrorResponses(t *testing.T, id string, op *openapi3.Operation) {
+	t.Helper()
+
+	for code, resp := range op.Responses.Map() {
+		if strings.HasPrefix(code, "2") || resp.Value == nil {
+			continue
+		}
+
+		media := resp.Value.Content.Get("application/json")
+		require.NotNil(t, media, "%s %s has no JSON schema", id, code)
+
+		want := "#/components/schemas/ErrorResponse"
+		if code == "422" {
+			want = "#/components/schemas/ValidationErrorResponse"
+		}
+
+		assert.Equal(t, want, media.Schema.Ref, "%s %s", id, code)
+	}
+}
+
+func TestErrorSchemasArePublished(t *testing.T) {
 	t.Parallel()
 
-	_, err := validatorx.New(openapi.Validation)
-	require.NoError(t, err)
-}
+	doc := loadDocument(t)
 
-type rejectAll struct{}
+	for _, name := range []string{"ErrorResponse", "ValidationErrorResponse"} {
+		assert.NotNil(t, doc.Components.Schemas[name], name)
+	}
 
-func (rejectAll) Authenticate(context.Context, string) (*auth.Principal, error) {
-	return nil, entity.Unauthorized("")
-}
-
-func (rejectAll) AuthenticateRefresh(string) (*auth.RefreshPrincipal, error) {
-	return nil, entity.Unauthorized("")
-}
-
-type noPermissions struct{}
-
-func (noPermissions) ForRole(context.Context, int) ([]string, error) {
-	return nil, nil
+	assert.NotNil(t, doc.Components.SecuritySchemes["bearerAuth"])
+	assert.Equal(t, "3.1.0", doc.OpenAPI)
 }

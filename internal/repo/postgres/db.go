@@ -35,6 +35,11 @@ type txState struct {
 	afterCommit []func(context.Context)
 }
 
+// WithoutTx returns ctx detached from the request transaction.
+func WithoutTx(ctx context.Context) context.Context {
+	return context.WithValue(ctx, txKey{}, (*txState)(nil))
+}
+
 func stateOf(ctx context.Context) *txState {
 	s, _ := ctx.Value(txKey{}).(*txState)
 
@@ -150,10 +155,6 @@ func IsDatabaseError(err error) bool {
 	var pgErr *pgconn.PgError
 
 	return errors.As(err, &pgErr)
-}
-
-func notFound(err error) bool {
-	return errors.Is(err, pgx.ErrNoRows)
 }
 
 // InTx runs fn in a transaction of its own, committed when fn succeeds.

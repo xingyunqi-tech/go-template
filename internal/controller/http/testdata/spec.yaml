@@ -1,0 +1,174 @@
+openapi: 3.1.0
+info:
+  title: router test
+  version: 1.0.0
+paths:
+  /api/v1/items:
+    post:
+      operationId: createItem
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemInput'
+      responses:
+        '201':
+          description: created
+  /api/v1/items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: ok
+    delete:
+      operationId: deleteItem
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ok
+  /api/v1/private:
+    get:
+      operationId: getPrivate
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: ok
+  /api/v1/optional:
+    get:
+      operationId: getOptional
+      responses:
+        '200':
+          description: ok
+  /api/v1/public:
+    get:
+      operationId: getPublic
+      responses:
+        '200':
+          description: ok
+  /api/v1/admin:
+    get:
+      operationId: getAdmin
+      responses:
+        '200':
+          description: ok
+  /api/v1/reauth:
+    post:
+      operationId: postReauth
+      responses:
+        '200':
+          description: ok
+  /api/v1/verified:
+    get:
+      operationId: getVerified
+      responses:
+        '200':
+          description: ok
+  /api/v1/events:
+    post:
+      operationId: postEvent
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: integer
+      responses:
+        '201':
+          description: created
+  /api/v1/boom:
+    get:
+      operationId: getBoom
+      responses:
+        '200':
+          description: ok
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema:
+        type: string
+  schemas:
+    Tag:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 2
+    ItemInput:
+      type: object
+      required: [title, email]
+      properties:
+        title:
+          type: string
+          minLength: 2
+          maxLength: 5
+        email:
+          type: string
+          format: email
+        site:
+          type: string
+          format: uri
+        ref:
+          type: string
+          format: uuid
+        day:
+          type: string
+          format: date
+        count:
+          type: integer
+          minimum: 1
+          maximum: 10
+        ratio:
+          type: number
+          exclusiveMinimum: 0
+          exclusiveMaximum: 1
+        code:
+          type: string
+          pattern: '^[A-Z]+$'
+        color:
+          type: string
+          enum: [red, green]
+        kind:
+          const: item
+        note:
+          type: [string, 'null']
+        tags:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/Tag'

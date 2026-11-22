@@ -1,7 +1,7 @@
 version: "2"
 sql:
   - engine: postgresql
-    schema: migrations
+    schema: migrations/core
     queries: internal/repo/postgres/queries
     gen:
       go:
@@ -18,16 +18,9 @@ sql:
             go_type:
               type: uuid.UUID
               pointer: true
-          - db_type: pg_catalog.timestamp
+          - db_type: timestamptz
             go_type: time.Time
-          - db_type: pg_catalog.timestamp
-            nullable: true
-            go_type:
-              type: time.Time
-              pointer: true
-          - db_type: pg_catalog.timestamptz
-            go_type: time.Time
-          - db_type: date
+          - db_type: timestamptz
             nullable: true
             go_type:
               type: time.Time

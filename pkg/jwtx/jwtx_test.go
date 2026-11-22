@@ -1,113 +1,241 @@
 package jwtx_test
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/xingyunqi-tech/go-template/pkg/jwtx"
 )
 
-type role struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	Entity string `json:"__entity"`
-}
-
-type access struct {
-	ID        int  `json:"id"`
-	Role      role `json:"role"`
-	SessionID int  `json:"sessionId"`
-}
-
-func payload(t *testing.T, token string) string {
+func newKey(t *testing.T) ed25519.PrivateKey {
 	t.Helper()
 
-	parts := strings.Split(token, ".")
-	require.Len(t, parts, 3)
-
-	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
-	return string(raw)
+	return priv
 }
 
-func TestSignOrdersClaimsLikeJsonwebtoken(t *testing.T) {
-	t.Parallel()
+func publicKey(t *testing.T, priv ed25519.PrivateKey) ed25519.PublicKey {
+	t.Helper()
 
-	now := time.Unix(1_700_000_000, 999_000_000)
-	token, err := jwtx.Sign(access{ID: 1, Role: role{ID: 2, Name: "User", Entity: "RoleEntity"}, SessionID: 7}, "secret", 900_500, now)
-	require.NoError(t, err)
+	pub, ok := priv.Public().(ed25519.PublicKey)
+	require.True(t, ok)
 
-	assert.Equal(t,
-		`{"id":1,"role":{"id":2,"name":"User","__entity":"RoleEntity"},"sessionId":7,"iat":1700000000,"exp":1700000900}`,
-		payload(t, token))
-	header, err := base64.RawURLEncoding.DecodeString(strings.Split(token, ".")[0])
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"alg":"HS256","typ":"JWT"}`, string(header))
-
-	empty, err := jwtx.Sign(map[string]any{}, "secret", 1000, now)
-	require.NoError(t, err)
-	assert.Equal(t, `{"iat":1700000000,"exp":1700000001}`, payload(t, empty))
-
-	_, err = jwtx.Sign([]int{1}, "secret", 1000, now)
-	require.Error(t, err)
+	return pub
 }
 
-func TestVerify(t *testing.T) {
+func claims(now time.Time, ttl time.Duration) *jwtx.Claims {
+	iat, exp := jwtx.Lifetime(now, ttl)
+
+	return &jwtx.Claims{
+		Subject: uuid.NewV7(), SessionID: uuid.NewV7(), Roles: []string{"user"},
+		EmailVerified: true, AuthTime: iat, IssuedAt: iat, Expires: exp, ID: "jti-1",
+	}
+}
+
+func sign(t *testing.T, priv ed25519.PrivateKey, c *jwtx.Claims, issuer, audience string) string {
+	t.Helper()
+
+	s, err := jwtx.NewSigner(priv, issuer, audience)
+	require.NoError(t, err)
+
+	token, err := s.Sign(c)
+	require.NoError(t, err)
+
+	return token
+}
+
+func decodeSegment(t *testing.T, token string, i int) map[string]any {
+	t.Helper()
+
+	raw, err := base64.RawURLEncoding.DecodeString(strings.Split(token, ".")[i])
+	require.NoError(t, err)
+
+	out := map[string]any{}
+	require.NoError(t, json.Unmarshal(raw, &out))
+
+	return out
+}
+
+func TestTokensCarryTheConventionClaims(t *testing.T) {
 	t.Parallel()
 
-	token, err := jwtx.Sign(map[string]any{"sessionId": 3, "hash": "h"}, "secret", 60_000, time.Now())
+	priv := newKey(t)
+	c := claims(time.Now(), 15*time.Minute)
+	token := sign(t, priv, c, "iss", "aud")
+
+	pub := publicKey(t, priv)
+
+	kid, err := jwtx.KeyID(pub)
 	require.NoError(t, err)
 
-	claims, err := jwtx.Verify(token, "secret")
+	h := decodeSegment(t, token, 0)
+	assert.Equal(t, "EdDSA", h["alg"])
+	assert.Equal(t, kid, h["kid"])
+
+	p := decodeSegment(t, token, 1)
+	assert.Equal(t, "iss", p["iss"])
+	assert.Equal(t, "aud", p["aud"])
+	assert.Equal(t, c.Subject.String(), p["sub"])
+	assert.Equal(t, c.SessionID.String(), p["sid"])
+	assert.Equal(t, []any{"user"}, p["roles"])
+	assert.Equal(t, true, p["email_verified"])
+	assert.InDelta(t, float64(c.AuthTime.Unix()), p["auth_time"], 0)
+	assert.Equal(t, "jti-1", p["jti"])
+
+	keys, err := jwtx.NewStaticKeys(pub)
 	require.NoError(t, err)
 
-	id, ok := jwtx.Int(claims, "sessionId")
-	assert.True(t, ok)
-	assert.Equal(t, 3, id)
+	got, err := jwtx.NewVerifier(keys, "iss", "aud").Verify(t.Context(), token)
+	require.NoError(t, err)
+	assert.Equal(t, c.Subject, got.Subject)
+	assert.Equal(t, c.SessionID, got.SessionID)
+	assert.Equal(t, c.Roles, got.Roles)
+	assert.True(t, got.EmailVerified)
+	assert.Equal(t, c.AuthTime.Unix(), got.AuthTime.Unix())
+}
 
-	hash, ok := jwtx.String(claims, "hash")
-	assert.True(t, ok)
-	assert.Equal(t, "h", hash)
+func TestKeyIDIsTheRFC7638Thumbprint(t *testing.T) {
+	t.Parallel()
 
-	_, err = jwtx.Verify(token, "other")
-	require.ErrorIs(t, err, jwtx.ErrInvalid)
+	pub := ed25519.PublicKey(make([]byte, ed25519.PublicKeySize))
+	x := base64.RawURLEncoding.EncodeToString(pub)
 
-	expired, err := jwtx.Sign(map[string]any{"id": 1}, "secret", 1000, time.Now().Add(-time.Hour))
+	kid, err := jwtx.KeyID(pub)
 	require.NoError(t, err)
 
-	_, err = jwtx.Verify(expired, "secret")
+	key, err := jwk.ParseKey([]byte(`{"crv":"Ed25519","kty":"OKP","x":"` + x + `"}`))
+	require.NoError(t, err)
+
+	want, err := jwtx.PublicJWK(pub)
+	require.NoError(t, err)
+
+	gotKid, _ := want.KeyID()
+	assert.Equal(t, kid, gotKid)
+
+	alg, _ := want.Algorithm()
+	assert.Equal(t, jwa.EdDSA().String(), alg.String())
+	assert.Equal(t, jwa.OKP(), key.KeyType())
+}
+
+func TestVerifyRejects(t *testing.T) {
+	t.Parallel()
+
+	priv, other := newKey(t), newKey(t)
+	keys, err := jwtx.NewStaticKeys(publicKey(t, priv))
+	require.NoError(t, err)
+
+	v := jwtx.NewVerifier(keys, "iss", "aud")
+	now := time.Now()
+
+	expired := claims(now.Add(-time.Hour), 15*time.Minute)
+	_, err = v.Verify(t.Context(), sign(t, priv, expired, "iss", "aud"))
 	require.ErrorIs(t, err, jwtx.ErrExpired)
 
-	hs512, err := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{"id": 1}).SignedString([]byte("secret"))
+	withinSkew := claims(now.Add(-15*time.Minute-10*time.Second), 15*time.Minute)
+	_, err = v.Verify(t.Context(), sign(t, priv, withinSkew, "iss", "aud"))
 	require.NoError(t, err)
 
-	_, err = jwtx.Verify(hs512, "secret")
-	require.ErrorIs(t, err, jwtx.ErrInvalid)
+	for name, token := range map[string]string{
+		"wrong issuer":   sign(t, priv, claims(now, time.Minute), "other", "aud"),
+		"wrong audience": sign(t, priv, claims(now, time.Minute), "iss", "other"),
+		"unknown key":    sign(t, other, claims(now, time.Minute), "iss", "aud"),
+		"garbage":        "a.b.c",
+		"hs256": base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","kid":"x"}`)) + "." +
+			base64.RawURLEncoding.EncodeToString([]byte(`{}`)) + ".sig",
+	} {
+		_, err := v.Verify(t.Context(), token)
+		require.ErrorIs(t, err, jwtx.ErrInvalid, name)
+	}
+}
 
-	_, err = jwtx.Verify("garbage", "secret")
+func signRaw(t *testing.T, priv ed25519.PrivateKey, payload map[string]any) string {
+	t.Helper()
+
+	kid, err := jwtx.KeyID(publicKey(t, priv))
+	require.NoError(t, err)
+
+	h, err := json.Marshal(map[string]any{"alg": "EdDSA", "kid": kid, "typ": "JWT"})
+	require.NoError(t, err)
+
+	p, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	input := base64.RawURLEncoding.EncodeToString(h) + "." + base64.RawURLEncoding.EncodeToString(p)
+
+	return input + "." + base64.RawURLEncoding.EncodeToString(ed25519.Sign(priv, []byte(input)))
+}
+
+func TestVerifyRejectsMissingClaimsAndAudienceArrays(t *testing.T) {
+	t.Parallel()
+
+	priv := newKey(t)
+	keys, err := jwtx.NewStaticKeys(publicKey(t, priv))
+	require.NoError(t, err)
+
+	v := jwtx.NewVerifier(keys, "iss", "aud")
+	now := time.Now().Unix()
+
+	full := func() map[string]any {
+		return map[string]any{
+			"iss": "iss", "aud": "aud", "sub": uuid.NewV7().String(), "sid": uuid.NewV7().String(),
+			"roles": []string{"user"}, "email_verified": true, "auth_time": now,
+			"iat": now, "exp": now + 60, "jti": "jti-1",
+		}
+	}
+
+	_, err = v.Verify(t.Context(), signRaw(t, priv, full()))
+	require.NoError(t, err)
+
+	for _, claim := range []string{"sub", "iat", "exp", "jti"} {
+		payload := full()
+		delete(payload, claim)
+
+		_, err := v.Verify(t.Context(), signRaw(t, priv, payload))
+		require.ErrorIs(t, err, jwtx.ErrInvalid, claim)
+	}
+
+	payload := full()
+	payload["aud"] = []string{"aud"}
+
+	_, err = v.Verify(t.Context(), signRaw(t, priv, payload))
 	require.ErrorIs(t, err, jwtx.ErrInvalid)
 }
 
-func TestIntClaim(t *testing.T) {
+func TestPEMRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	claims := jwt.MapClaims{"a": 1.0, "b": "2", "c": 1.5, "d": "x", "e": true}
+	priv := newKey(t)
 
-	for key, want := range map[string]int{"a": 1, "b": 2} {
-		got, ok := jwtx.Int(claims, key)
-		assert.True(t, ok, key)
-		assert.Equal(t, want, got)
-	}
+	privPEM, err := jwtx.EncodePrivateKey(priv)
+	require.NoError(t, err)
 
-	for _, key := range []string{"c", "d", "e", "missing"} {
-		_, ok := jwtx.Int(claims, key)
-		assert.False(t, ok, key)
-	}
+	parsed, err := jwtx.ParsePrivateKey(privPEM)
+	require.NoError(t, err)
+	assert.Equal(t, priv, parsed)
+
+	a, err := jwtx.EncodePublicKey(publicKey(t, priv))
+	require.NoError(t, err)
+
+	b, err := jwtx.EncodePublicKey(publicKey(t, newKey(t)))
+	require.NoError(t, err)
+
+	pubs, err := jwtx.ParsePublicKeys(a + b)
+	require.NoError(t, err)
+	assert.Len(t, pubs, 2)
+
+	_, err = jwtx.ParsePrivateKey("not pem")
+	require.Error(t, err)
 }

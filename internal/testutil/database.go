@@ -17,18 +17,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/xingyunqi-tech/go-template/internal/app"
-	"github.com/xingyunqi-tech/go-template/internal/repo/postgres"
-	"github.com/xingyunqi-tech/go-template/pkg/password"
-	"github.com/xingyunqi-tech/go-template/seeds"
+	"github.com/xingyunqi-tech/go-template/migrations"
 )
 
 const (
 	_templateDB   = "app_template"
-	_seedHashers  = 2
 	_setupTimeout = 2 * time.Minute
 )
 
-// Database is a PostgreSQL container with a migrated and seeded template database that tests
+// Database is a PostgreSQL container with a migrated template database that tests
 // clone into private databases.
 type Database struct {
 	pg    *Postgres
@@ -94,23 +91,7 @@ func (d *Database) prepareTemplate(ctx context.Context) error {
 
 	log := slog.New(slog.DiscardHandler)
 
-	if err := app.MigrateUp(ctx, pool, log); err != nil {
-		return err
-	}
-
-	hasher, err := password.New(password.Argon2id, _seedHashers)
-	if err != nil {
-		return err
-	}
-
-	err = postgres.NewDB(pool, time.Second, log).Seed(ctx, seeds.Data, postgres.SeedOptions{
-		Production: false, AdminEmail: "", AdminPassword: "", Hash: hasher.Hash,
-	})
-	if err != nil {
-		return fmt.Errorf("testutil: seed: %w", err)
-	}
-
-	return nil
+	return app.MigrateUp(ctx, pool, "public", []migrations.Set{migrations.Core()}, log) //nolint:wrapcheck // migration errors are wrapped
 }
 
 // Clone creates a private copy of the template database and returns its DSN; it is dropped

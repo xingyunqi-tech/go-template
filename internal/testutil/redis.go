@@ -5,6 +5,7 @@ package testutil
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -70,6 +71,9 @@ type RedisDB struct {
 
 // StartRedisPool starts the package's Redis container.
 func StartRedisPool(ctx context.Context) (*RedisPool, error) {
+	ctx, cancel := context.WithTimeout(ctx, _setupTimeout)
+	defer cancel()
+
 	r, err := StartRedis(ctx)
 	if err != nil {
 		return nil, err
@@ -116,6 +120,11 @@ func (p *RedisPool) Borrow(t *testing.T) RedisDB {
 	})
 
 	return d
+}
+
+// URL is the REDIS_URL of the database.
+func (d RedisDB) URL() string {
+	return "redis://" + d.Addr + "/" + strconv.Itoa(d.DB)
 }
 
 func (d RedisDB) flush(ctx context.Context) error {

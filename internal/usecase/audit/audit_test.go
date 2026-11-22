@@ -3,10 +3,10 @@ package audit_test
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/xingyunqi-tech/go-template/internal/repo"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/audit"
@@ -54,11 +54,12 @@ func (s *store) Create(_ context.Context, l *repo.AuditLog) error {
 	return s.err
 }
 
-func TestLogSanitizesAndSwallowsErrors(t *testing.T) {
+func TestLogSanitizesAndReturnsErrors(t *testing.T) {
 	t.Parallel()
 
 	s := &store{err: errors.New("db down")}
-	audit.New(s, slog.New(slog.DiscardHandler)).Log(t.Context(), &repo.AuditLog{Action: "UPDATE", NewValue: map[string]any{"token": "t"}})
+	err := audit.New(s).Log(t.Context(), &repo.AuditLog{Action: "note.update", Data: map[string]any{"token": "t"}})
 
-	assert.Equal(t, map[string]any{"token": "[REDACTED]"}, s.logs[0].NewValue)
+	require.Error(t, err)
+	assert.Equal(t, map[string]any{"token": "[REDACTED]"}, s.logs[0].Data)
 }

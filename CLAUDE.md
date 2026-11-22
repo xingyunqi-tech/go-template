@@ -1,7 +1,7 @@
 # go-template
 
-Go 后端模板，对外行为遵守 `docs/platform-conventions.md`（跨语言平台约定），导出自身的 OpenAPI 文档供前端生成客户端。
-**v2 迁移进行中**：本文件中与 nestjs 契约相关的内容按批次更新，与约定或 `TEMPLATE_PLAN.md` 冲突时以二者为准。
+Go 后端模板，对外行为遵守 `docs/platform-conventions.md`（跨语言平台约定），导出自身的 OpenAPI 3.1 文档供前端生成客户端。
+**v2 迁移进行中**：本文件按 `TEMPLATE_PLAN.md` 的批次更新，与约定或方案冲突时以二者为准。
 模块路径 `github.com/xingyunqi-tech/go-template`，Go 版本见 `go.mod`。完整方案与阶段划分见 `TEMPLATE_PLAN.md`。
 
 ## 命令：一律通过 Makefile
@@ -10,17 +10,18 @@ Go 后端模板，对外行为遵守 `docs/platform-conventions.md`（跨语言�
 |---|---|
 | 下载 golangci-lint / prek / typos 二进制，安装 Git 钩子 | `make install` |
 | 启动本地 Postgres、Redis | `make infra` |
-| 迁移 / 种子数据 | `make migrate` / `make seed` |
+| 迁移（创建 `DATABASE_SCHEMA`）/ 种子数据 | `make migrate` / `make seed` |
 | 本地启动 API / 队列 worker | `make dev` / `make worker` |
-| 生成代码（oapi-codegen、sqlc、mockgen） | `make generate` |
-| 新建迁移（goose 顺序编号） | `make migrate-create NAME=<name>` |
-| 按 nestjs tag 生成模块骨架（处理器、usecase、repo、端口，并加入 `scope.yaml`） | `make module NAME=<包名> TAG=<tag>` |
+| 由 `openapi/src` 生成 `openapi/openapi.json`、校验文档与 oapi-codegen 代码 | `make openapi` |
+| 生成代码（openapi、sqlc、mockgen） | `make generate` |
+| 新建迁移（goose 顺序编号） | `make migrate-create NAME=<name> [SET=core\|identity]` |
 | 格式化 | `make fmt` |
 | lint（golangci-lint、typos、`go mod tidy -diff`） | `make lint` |
 | vet + build | `make vet` |
 | 单元测试 | `make test` |
 | 集成测试（testcontainers，需要 Docker） | `make test-integration` |
 | 契约测试 | `make test-contract` |
+| 迁移 up / down / 命名检查（需要 `make infra`） | `make test-migrations` |
 | e2e（构建镜像，compose 启动后黑盒测试） | `make test-e2e` |
 | 覆盖率门槛（单元 + 集成 + 契约，≥80%） | `make coverage` |
 | 本地 CI | `make ci` |
@@ -31,11 +32,11 @@ Go 后端模板，对外行为遵守 `docs/platform-conventions.md`（跨语言�
 
 ## 契约：spec-first
 
-- `openapi/nestjs-baseline.json` 是 nestjs `/docs-json` 的原始字节，`GET /docs-json` 原样返回。
-- `openapi/{nestjs-baseline.json,validation.json,SOURCE,nest_handlers.json}`、`db/nestjs-schema.sql`、`tests/contract/fixtures/validation-cases.json` 是 nestjs 导出的原始产物，不得手改。
-- `openapi/scope.yaml` 列出本期已实现的 operationId；`make generate` 只为它们生成处理器接口与路由注册。新增实现时先把 operationId 加进去，再生成、实现。
-- `openapi/overlay.yaml` 只作用于代码生成输入，不改变对外文档。
-- `openapi/templates/strict-interface.tmpl` 覆盖 oapi-codegen 的 strict 响应写出：成功一律 HTTP 200（仅 `uploadFile` 为 201），body 为 `{code: 200, message: "success", data}`，无内容时不输出 `data`。
+- 接口在 `openapi/src/` 编写：`openapi.yaml`（根文档）、`common.yaml`（错误 schema、分页参数、公共响应）、`paths/<module>.yaml`、`schemas/<module>.yaml`。各文件只含 `paths` 与 `components`，由 bundler 合并，`$ref` 一律写文档内引用 `#/components/...`。
+- 成功响应写 `x-envelope: true` 与数据 schema，bundler 展开为 `{code: 0, message: "ok", data}` 的 `<Name>Envelope`（数组为 `<Name>ListEnvelope`，`type: 'null'` 为 `NullEnvelope`）。错误响应引用 `common.yaml` 的 `components/responses`：422 用 `ValidationErrorResponse`，其余用 `ErrorResponse`；429、503 由 bundler 为每个 `/api` 操作补上，不必手写。
+- `make openapi`（`tools/openapigen`）输出入库的 `openapi/openapi.json`（`GET /openapi.json` 原样返回）、全内联的 `internal/controller/http/validation.json`（请求校验用），并只为 2xx 响应生成 `internal/controller/http/gen/gen.go`。
+- 新增接口：写 spec → `make generate` → 在 `internal/controller/http/policy.go` 声明 policy → 在 `v1/` 实现生成的方法。文档中的 operation 缺 policy、policy 缺 operation、operation 缺处理器，启动都会失败。
+- HTTP 状态码按 spec 声明，处理器返回生成的 `<Op><Status>JSONResponse`，信封常量在 `controller/http/response`。
 
 ## 分层
 
@@ -47,33 +48,28 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 
 | 目录 | 内容 |
 |---|---|
-| `internal/entity` | 领域对象与领域错误；不引用 pgx、生成代码、net/http（depguard 检查） |
-| `internal/usecase` | 业务规则；不引用 controller |
-| `internal/controller/http` | 全局中间件、Express 路由语义、请求管线、`policy.go`（按 operationId 声明鉴权 / RBAC / 查询 DTO 等）、`/docs-json`；`gen/` 为生成代码，`v1/` 实现 `gen.StrictServerInterface`，`v1/view/` 是手写响应视图 |
-| `internal/controller/http/httperr` | nestjs HttpException 与 AllExceptionsFilter 翻译规则、业务错误键表、唯一约束表 |
-| `internal/i18n` | nestjs `src/i18n` 翻译文件与 `Accept-Language` 解析 |
-| `internal/config` | caarlos0/env 解析，变量名与 nestjs 一致，启动时一次性校验并列出全部问题 |
-| `internal/repo` | 端口在 `contracts.go`；`postgres/` 为 sqlc 查询与端口实现（请求事务经 context 传递，`AfterCommit` 登记提交后副作用；`jobs.go` 用 River `InsertTx` 在请求事务内入队，River 表在 `river` schema，由 `rivermigrate` 迁移），`redis/` 为与 nestjs Keyv 兼容的缓存与 `lock:<key>` 分布式锁（Redis 不可用时回落进程内），`webapi/mail` 为 nestjs 邮件模板渲染与 SMTP，`webapi/storage` 为 local / S3 文件存储，`webapi/{sms,wechat,alipay}` 为阿里云短信、微信、支付宝开放平台客户端 |
-| `internal/usecase` | `auth`（邮箱、手机号、短信、微信、支付宝登录）、`user`、`session`、`permission`、`sms`、`file`、`health`、`alert`、`audit`、`accountcleanup`、`notification` 等业务流程，返回 `entity.Error` / `entity.BusinessError` |
-| `internal/worker` | River workers（`mail`、`notification`、`account-cleanup`）与周期任务（会话清理、已读通知清理、账号清理补偿），由 `worker` 子命令运行 |
-| `internal/metrics` | Prometheus 指标（名称、标签、桶与 nestjs 一致，样本带 `app`），pgx 查询耗时 tracer |
-| `templates/mail` | 从 nestjs 逐字节复制的邮件模板，golden 用例为 `tests/fixtures/nestjs_mail` |
-| `migrations/`、`seeds/` | goose 迁移（表结构与 `db/nestjs-schema.sql` 一致）、种子数据（与 nestjs seed 账号一致） |
-| `pkg/` | 与业务无关的封装，不引用 `internal/`；`pkg/validatorx` 按 `openapi/validation.json` 复刻 nestjs ValidationPipe（含 validator.js 移植） |
+| `internal/entity` | 领域对象、错误码表（`errors.go`，与约定 §2.4 逐条一致）、`ValidationError`；不引用 pgx、生成代码、net/http（depguard 检查）。`nest_error.go`、`social.go` 只供 `repo/webapi/{sms,wechat,alipay}` 使用，B4 删除 |
+| `internal/usecase` | 业务规则：`note`（CRUD 示例）、`health`、`audit`；返回 `entity.Error` / `entity.ValidationError`；不引用 controller |
+| `internal/controller/http` | 中间件链、操作表、校验适配器、鉴权与限流、幂等键、事务、审计、`policy.go`、ops 路由（health、metrics、`/openapi.json`、`/docs`）；`gen/` 为生成代码，`v1/` 实现 `gen.StrictServerInterface`，`httperr/` 写错误信封，`reqctx/` 为请求 ID、主体、操作 |
+| `internal/i18n` | go-i18n 消息文件 `locales/{zh,en}.json`（按 errorKey 与 `validation.<rule>` 组织）与 `Accept-Language` 解析 |
+| `internal/config` | caarlos0/env 解析约定 §9 与本服务变量，启动时一次性校验并列出全部问题 |
+| `internal/repo` | 端口在 `contracts.go`；`postgres/` 为 sqlc 查询与端口实现（请求事务经 context 传递，`AfterCommit` 登记提交后副作用，River 表在 `DATABASE_SCHEMA`），`redis/` 为缓存、锁、吊销键、幂等键（键带 `{OTEL_SERVICE_NAME}:` 前缀，吊销键 `auth:revoked:sid:` 除外；未配置 `REDIS_URL` 时进程内实现），`webapi/storage` 为 local / S3 文件存储，`webapi/{sms,wechat,alipay}` 为第三方客户端（B4 改写） |
+| `internal/worker` | River 客户端配置（otelriver）；尚无任务时 worker 进程空转 |
+| `migrations/`、`seeds/` | goose 迁移：`core/` 每个服务都执行，`identity/` 只在签发服务执行，版本表 `goose_<set>_version`；`seeds/seed.json` 为演示账号定义 |
+| `pkg/` | 与业务无关的封装，不引用 `internal/`：`clientip`（`TRUSTED_PROXIES`）、`jwtx`（EdDSA 签名、JWKS、验签）、`ratelimit`（GCRA 与共享规则表）、`telemetry`、`logger`、`pagination`、`phone`、`jsontime`、`postgres` 等 |
 
 - 配置只从 `config.Config` 读取，业务代码禁止 `os.Getenv`（forbidigo）。
 - 日志用 `log/slog`，禁止 `fmt.Print*` 与标准库 `log`。
 - 构造函数手写，在 `internal/app` 组装，不引入 wire / fx。
 - 未导出的包级常量以下划线开头（`_scalarVersion`）；`mnd` 拒绝裸数字，先定义常量。
-- 新约束命名：`<table>_<column>_key`、`<table>_<column>_fkey`、`idx_<table>_<column>`。
+- 表名单数 snake_case，主键 `uuid DEFAULT uuidv7()`（应用侧 `uuid.NewV7()` 生成），时间 `timestamptz`；约束与索引命名 `<table>_pkey`、`<table>_<columns>_key|fkey|idx|check`。core 表引用用户只存 `sub`，不建跨 schema 外键。
 
-## 路由语义（与 Express 一致）
+## 请求处理顺序
 
-- 路由匹配基于百分号编码的原始路径：`/api/%68ealth` 不命中 `/api/health`。
-- 静态段不区分大小写，允许一个末尾斜杠，路径参数保留原始大小写与编码。
-- 未匹配路由与方法不符都返回 404 `{code: 404, message: "Cannot <METHOD> <originalUrl>", data: null}`，不带 `Allow`。
-- `HEAD` 命中同路径的 `GET` 处理器。
-- 处理顺序：（`OTEL_ENABLED` 时 otelhttp）→ Request ID 与语言 → CORS（`OPTIONS` 一律 204）→ 指标 → pino-http 请求日志与 panic 兜底 → 安全头 → JSON 请求体（256kb，413 / 400）→ 路由匹配 → 路径参数解码 → 限流（GCRA）→ 鉴权 → RBAC → `ParseIdPipe`（数字 `:id`）→ 请求体 / 查询 DTO 校验（`uploadFile` 为用途守卫 → multipart 接收 → 查询 DTO）→ 生成的处理器（`Tx` 事务、`Audit` 审计）。新增接口必须在 `policy.go` 声明，缺失时启动失败（`Params` 声明校验路径参数的 DTO）；nestjs 不进文档的接口（`/metrics`、私有文件读取、local 下载）以 `RawRoute` 注册，列在 `Undocumented()`。
+- 全局：otelhttp（`http.route` 取自操作查找设置的 `r.Pattern`）→ Request ID → 访问日志与 panic 兜底 → 安全头 → CORS（预检 204）→ 语言。
+- 根路径：`/health/live`、`/health/ready`、`/metrics`（`METRICS_TOKEN` 或 `METRICS_PORT`）、`/openapi.json`、`/docs`（`DOCS_ENABLED`）直接处理。
+- `/api/v1`：操作查找（未命中：路径存在 405 + `Allow`，否则 404）→ `{service}-ip` 限流 → 令牌验证（public 不读 `Authorization`；optional 无效按匿名）与吊销键检查 → `{service}-user` 与 policy 声明的共享限流 → 权限 → 近期登录 → 已验证邮箱 → 请求体上限（413）、`Content-Type`（415）、JSON 语法（400）→ `openapi3filter` 校验（422）→ 幂等键 → 事务 → 生成的处理器 → 审计。
+- 路由区分大小写，末尾斜杠不归一。校验错误的 `field` 为 JSON 路径，查询与路径参数为 `query.<name>` / `path.<name>`。
 
 ## 测试
 
@@ -81,22 +77,23 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 |---|---|---|
 | 单元 | 与源码同目录 `*_test.go` | 无 |
 | 集成 | 与源码同目录 `*_integration_test.go`，夹具在 `internal/testutil` | `integration` |
-| e2e | `tests/e2e` | `e2e` |
-| 契约 | `tests/contract` | `contract` |
+| e2e | `tests/e2e`（compose ci：生产镜像，固定测试签名密钥） | `e2e` |
+| 契约 | `tests/contract`：bundle 无漂移、`/openapi.json` 与文件一致、路由与文档双向一致、operationId 规则、policy 与 `bearerAuth` 一致、错误响应引用 | `contract` |
 
 - 用例调用 `t.Parallel()`（paralleltest）；使用 `t.Setenv` 的用例除外。
-- 集成测试每个包一个 Postgres 容器：`testutil.StartDatabase` 先迁移并写入种子到模板库，用例用 `Clone(t)` 得到独立库，可并行。
-- policy 中 `Tx: true` 的接口在事务内执行：成功或 4xx 业务错误提交，5xx 与 SQL 语句本身的错误回滚；鉴权守卫在事务开始前完成，同一请求不会同时持有两条连接。
-- MinIO（`chainguard/minio`，按 digest 固定）同样由 testcontainers 启动；local 文件驱动的用例用 `FILE_LOCAL_ROOT` 指向临时目录。
-- Redis 每个测试包一个容器：`TestMain` 调 `testutil.StartRedisPool`，用例 `pool.Borrow(t)` 独占借一个逻辑库（DB 0–15，全部借出时阻塞），借出前、归还前各 `FLUSHDB`；用例里只用 `FLUSHDB`，不用 `FLUSHALL` 或跨库的全局命令。
-- 端口 mock 由 mockgen 生成（`internal/repo/mocks`、`internal/usecase/<pkg>/mocks`），新增端口时把源文件加入 Makefile `MOCK_SOURCES`；简单端口用手写 fake。
+- 集成测试每个包一个 Postgres 容器：`testutil.StartDatabase` 先迁移模板库，用例用 `Clone(t)` 得到独立库，可并行。需要登录的用例用 `testutil.IssueAccessToken`（固定 Ed25519 测试密钥，`testutil.SigningKeyPEM()` 为对应的 `AUTH_SIGNING_KEY`）。
+- `internal/app` 的 HTTP 用例经 `testApp.do` 发请求，`/api/v1` 的每个响应都用 `openapi3filter.ValidateResponse` 对照 `openapi/openapi.json` 校验。
+- policy 中 `Tx: true` 的接口在事务内执行：2xx 与 4xx 提交，5xx 回滚，响应在提交后发出；鉴权在事务开始前完成，同一请求不会同时持有两条连接。
+- MinIO（`chainguard/minio`，按 digest 固定）同样由 testcontainers 启动。
+- Redis 每个测试包一个容器：`TestMain` 调 `testutil.StartRedisPool`，用例 `pool.Borrow(t)` 独占借一个逻辑库（DB 0–15，全部借出时阻塞），借出前、归还前各 `FLUSHDB`，`RedisDB.URL()` 给出 `REDIS_URL`；用例里只用 `FLUSHDB`，不用 `FLUSHALL` 或跨库的全局命令。
+- 端口 mock 由 mockgen 生成（`internal/repo/mocks`），新增端口时把源文件加入 Makefile `MOCK_SOURCES`；简单端口用手写 fake。
 - testcontainers 起不来时测试失败，不跳过。Docker Desktop 的 socket 不在 `/var/run/docker.sock` 时，夹具自动使用 `~/.docker/run/docker.sock`。
 
 ## 生成文件（不手改）
 
-- `internal/controller/http/gen/gen.go` ← `make generate`（oapi-codegen）
-- `internal/repo/postgres/sqlcgen/` ← `make generate`（sqlc，输入为 `migrations/` 与 `internal/repo/postgres/queries/`）
-- `internal/repo/mocks/`、`internal/usecase/*/mocks/` ← `make generate`（mockgen，源文件见 Makefile `MOCK_SOURCES`）
+- `openapi/openapi.json`、`internal/controller/http/validation.json`、`internal/controller/http/gen/gen.go` ← `make openapi`（`tools/openapigen`，输入为 `openapi/src/` 与 `openapi/oapi-codegen.yaml`）
+- `internal/repo/postgres/sqlcgen/` ← `make generate`（sqlc，输入为 `migrations/core/` 与 `internal/repo/postgres/queries/`）
+- `internal/repo/mocks/` ← `make generate`（mockgen，源文件见 Makefile `MOCK_SOURCES`）
 
 ## 注释规范
 

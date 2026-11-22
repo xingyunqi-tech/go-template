@@ -3,7 +3,6 @@
 package redis_test
 
 import (
-	"encoding/json"
 	"log/slog"
 	"testing"
 	"time"
@@ -15,57 +14,48 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/repo/redis"
 )
 
-func TestCacheUsesKeyvFormatInRedis(t *testing.T) {
-	t.Parallel()
+func newClient(t *testing.T) *goredis.Client {
+	t.Helper()
 
 	db := _redis.Borrow(t)
 	client := goredis.NewClient(&goredis.Options{Addr: db.Addr, DB: db.DB}) //nolint:exhaustruct // defaults
 
 	t.Cleanup(func() { _ = client.Close() })
 
-	c := redis.NewCache(client, slog.New(slog.DiscardHandler))
-	require.NoError(t, c.Set(t.Context(), "jwt:session:1", map[string]any{"statusId": 1, "roleId": nil}, time.Minute))
+	return client
+}
 
-	raw, err := client.Get(t.Context(), "cache::jwt:session:1").Bytes()
+func TestCacheStoresJSONUnderTheServicePrefix(t *testing.T) {
+	t.Parallel()
+
+	client := newClient(t)
+	c := redis.NewCache(client, "svc", slog.New(slog.DiscardHandler))
+	require.NoError(t, c.Set(t.Context(), "profile:1", map[string]any{"name": "<a>", "n": 1}, time.Minute))
+
+	raw, err := client.Get(t.Context(), "svc:cache:profile:1").Result()
 	require.NoError(t, err)
+	assert.JSONEq(t, `{"name":"<a>","n":1}`, raw)
+	assert.Contains(t, raw, "<a>")
 
-	var stored struct {
-		Value   map[string]any `json:"value"`
-		Expires int64          `json:"expires"`
-	}
-	require.NoError(t, json.Unmarshal(raw, &stored))
-	assert.Equal(t, map[string]any{"statusId": 1.0, "roleId": nil}, stored.Value)
-	assert.InDelta(t, time.Now().Add(time.Minute).UnixMilli(), stored.Expires, 5000)
-
-	ttl, err := client.PTTL(t.Context(), "cache::jwt:session:1").Result()
+	ttl, err := client.PTTL(t.Context(), "svc:cache:profile:1").Result()
 	require.NoError(t, err)
 	assert.Greater(t, ttl, 50*time.Second)
 
 	var got map[string]any
 
-	found, err := c.Get(t.Context(), "jwt:session:1", &got)
+	found, err := c.Get(t.Context(), "profile:1", &got)
 	require.NoError(t, err)
 	assert.True(t, found)
+	assert.Equal(t, map[string]any{"name": "<a>", "n": 1.0}, got)
 
-	require.NoError(t, client.Set(t.Context(), "cache::nestjs", `{"value":"from nestjs","expires":4102444800000}`, time.Minute).Err())
+	require.NoError(t, client.Set(t.Context(), "svc:cache:broken", "{", time.Minute).Err())
 
-	var s string
-
-	found, err = c.Get(t.Context(), "nestjs", &s)
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, "from nestjs", s)
-
-	require.NoError(t, client.Set(t.Context(), "cache::old", `{"value":1,"expires":1}`, time.Minute).Err())
-
-	var n int
-
-	found, err = c.Get(t.Context(), "old", &n)
+	found, err = c.Get(t.Context(), "broken", &got)
 	require.NoError(t, err)
 	assert.False(t, found)
 
-	require.NoError(t, c.Delete(t.Context(), "jwt:session:1"))
-	assert.Zero(t, client.Exists(t.Context(), "cache::jwt:session:1").Val())
+	require.NoError(t, c.Delete(t.Context(), "profile:1"))
+	assert.Zero(t, client.Exists(t.Context(), "svc:cache:profile:1").Val())
 }
 
 func TestCacheFallsBackToMemoryWhenRedisIsDown(t *testing.T) {
@@ -75,7 +65,7 @@ func TestCacheFallsBackToMemoryWhenRedisIsDown(t *testing.T) {
 
 	t.Cleanup(func() { _ = client.Close() })
 
-	c := redis.NewCache(client, slog.New(slog.DiscardHandler))
+	c := redis.NewCache(client, "svc", slog.New(slog.DiscardHandler))
 	require.NoError(t, c.Set(t.Context(), "k", "v", time.Minute))
 
 	var got string

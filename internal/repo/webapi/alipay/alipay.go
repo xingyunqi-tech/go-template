@@ -63,8 +63,8 @@ func New(cfg *Config, transport http.RoundTripper, log *slog.Logger) *Client {
 	return &Client{cfg: *cfg, http: &http.Client{Transport: transport, Timeout: _timeout}, log: log, now: time.Now} //nolint:exhaustruct // defaults
 }
 
-func failure(key string) *entity.Error {
-	return entity.Invalid("alipay", key)
+func failure(key string) *entity.NestError {
+	return entity.NestInvalid("alipay", key)
 }
 
 // BeijingTime formats t in UTC+8 like the gateway expects.
@@ -252,7 +252,7 @@ func (c *Client) ExchangeAuthCode(ctx context.Context, authCode string) (string,
 		c.log.ErrorContext(ctx, "Alipay oauth token failed", "code", reply.Error.Code, "sub_code", reply.Error.SubCode)
 
 		if strings.HasPrefix(reply.Error.SubCode, _invalidCode) {
-			return "", entity.UnprocessableKey("invalidAlipayAuthCode", entity.Detail{Name: "authCode", Value: "invalidCode"})
+			return "", entity.NestUnprocessable("invalidAlipayAuthCode", entity.Detail{Name: "authCode", Value: "invalidCode"})
 		}
 
 		return "", failure("requestFailed")
