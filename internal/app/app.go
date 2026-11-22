@@ -14,6 +14,7 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/config"
 	httpapi "github.com/xingyunqi-tech/go-template/internal/controller/http"
 	v1 "github.com/xingyunqi-tech/go-template/internal/controller/http/v1"
+	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/i18n"
 	"github.com/xingyunqi-tech/go-template/internal/repo"
 	"github.com/xingyunqi-tech/go-template/internal/repo/postgres"
@@ -61,7 +62,15 @@ func NewHandler(ctx context.Context, cfg *config.Config, log *slog.Logger, infra
 	}
 
 	healthService := health.New(postgres.NewHealth(db), redisPinger)
-	server := v1.New(&v1.Deps{Notes: note.New(postgres.NewNotes(db)), Log: log})
+	limiter := ratelimit.New(infra.Redis)
+	revocations := redis.NewRevocations(infra.Redis)
+
+	server, jwks, err := newServer(&identityDeps{
+		cfg: cfg, log: log, db: db, infra: infra, keys: keys, translator: translator, limiter: limiter, revoker: revocations,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	router, err := httpapi.NewRouter(ctx, &httpapi.Options{
 		Log:                 log,
@@ -77,15 +86,16 @@ func NewHandler(ctx context.Context, cfg *config.Config, log *slog.Logger, infra
 		Policies:            httpapi.Policies(),
 		Register:            v1.Register(server),
 		Verifier:            keys.Verifier,
-		Revocations:         redis.NewRevocations(infra.Redis),
-		Authorizer:          nil,
-		Limiter:             ratelimit.New(infra.Redis),
+		Revocations:         revocations,
+		Authorizer:          entity.RBAC{},
+		Limiter:             limiter,
 		RateLimits:          cfg.HTTP.RateLimitEnabled,
 		Idempotency:         redis.NewIdempotency(infra.Redis),
 		IdempotencyClaimTTL: max(cfg.App.ShutdownTimeout, httpserver.WriteTimeout) + _claimMargin,
 		Transactor:          transactor{db: db},
 		Auditor:             audit.New(postgres.NewAudits(db)),
 		Readiness:           healthService,
+		JWKS:                jwks,
 		Metrics:             metrics,
 		MetricsToken:        cfg.Metrics.Token.Value(),
 		ReportError:         reportError(cfg),
@@ -96,6 +106,23 @@ func NewHandler(ctx context.Context, cfg *config.Config, log *slog.Logger, infra
 	}
 
 	return &Handler{Handler: router, health: healthService}, nil
+}
+
+// newServer builds the handlers of the documented operations and the JWKS document.
+func newServer(d *identityDeps) (*v1.Server, []byte, error) {
+	identity, err := newIdentity(d)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	jwks, err := jwksDocument(d.keys)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return v1.New(&v1.Deps{
+		Notes: note.New(postgres.NewNotes(d.db)), Auth: identity.Auth, Sessions: identity.Sessions, Users: identity.Users, Log: d.log,
+	}), jwks, nil
 }
 
 // Serve runs the API server until ctx is canceled, then fails readiness and shuts down within

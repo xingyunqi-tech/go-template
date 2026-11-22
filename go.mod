@@ -9,6 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.21.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.10
 	github.com/caarlos0/env/v11 v11.4.2
+	github.com/emersion/go-smtp v0.26.0
 	github.com/exaring/otelpgx v0.13.0
 	github.com/getkin/kin-openapi v0.153.0
 	github.com/getsentry/sentry-go v0.50.0
@@ -33,6 +34,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/minio v0.45.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.45.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.45.0
+	github.com/wneessen/go-mail v0.8.2
 	go.opentelemetry.io/contrib/bridges/otelslog v0.21.0
 	go.opentelemetry.io/contrib/exporters/autoexport v0.72.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
@@ -78,6 +80,7 @@ require (
 	github.com/docker/go-connections v0.8.2 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.10.1 // indirect
+	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.16 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect

@@ -97,26 +97,32 @@ func Codes() map[string]Code {
 }
 
 // Error is a failure identified by an error key; Data is returned as the response data and
-// Cause is kept for logs only.
+// Cause is kept for logs only. RetryAfter, in seconds, is sent as Retry-After when positive.
 type Error struct {
-	Key   string
-	Data  any
-	Cause error
+	Key        string
+	Data       any
+	Cause      error
+	RetryAfter int64
 }
 
 // New returns an Error for key.
 func New(key string) *Error {
-	return &Error{Key: key, Data: nil, Cause: nil}
+	return &Error{Key: key, Data: nil, Cause: nil, RetryAfter: 0}
 }
 
 // Wrap returns an Error for key caused by err.
 func Wrap(key string, err error) *Error {
-	return &Error{Key: key, Data: nil, Cause: err}
+	return &Error{Key: key, Data: nil, Cause: err, RetryAfter: 0}
 }
 
 // WithData returns a copy of e carrying data.
 func (e *Error) WithData(data any) *Error {
-	return &Error{Key: e.Key, Data: data, Cause: e.Cause}
+	return &Error{Key: e.Key, Data: data, Cause: e.Cause, RetryAfter: e.RetryAfter}
+}
+
+// WithRetryAfter returns a copy of e asking the client to wait seconds.
+func (e *Error) WithRetryAfter(seconds int64) *Error {
+	return &Error{Key: e.Key, Data: e.Data, Cause: e.Cause, RetryAfter: seconds}
 }
 
 func (e *Error) Error() string {

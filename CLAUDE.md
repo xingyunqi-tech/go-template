@@ -11,6 +11,8 @@ Go 后端模板，对外行为遵守 `docs/platform-conventions.md`（跨语言�
 | 下载 golangci-lint / prek / typos 二进制，安装 Git 钩子 | `make install` |
 | 启动本地 Postgres、Redis | `make infra` |
 | 迁移（创建 `DATABASE_SCHEMA`）/ 种子数据 | `make migrate` / `make seed` |
+| 生成签名密钥（`AUTH_SIGNING_KEY` 与公钥） | `make keys` |
+| 创建管理员（密码从标准输入读取） | `go run ./cmd/app createsuperuser --email <email>` |
 | 本地启动 API / 队列 worker | `make dev` / `make worker` |
 | 由 `openapi/src` 生成 `openapi/openapi.json`、校验文档与 oapi-codegen 代码 | `make openapi` |
 | 生成代码（openapi、sqlc、mockgen） | `make generate` |
@@ -48,13 +50,14 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 
 | 目录 | 内容 |
 |---|---|
-| `internal/entity` | 领域对象、错误码表（`errors.go`，与约定 §2.4 逐条一致）、`ValidationError`；不引用 pgx、生成代码、net/http（depguard 检查）。`nest_error.go`、`social.go` 只供 `repo/webapi/{sms,wechat,alipay}` 使用，B4 删除 |
-| `internal/usecase` | 业务规则：`note`（CRUD 示例）、`health`、`audit`；返回 `entity.Error` / `entity.ValidationError`；不引用 controller |
+| `internal/entity` | 领域对象（`user.go`）、角色与权限码（`rbac.go`，约定 §5.5，代码固定）、错误码表（`errors.go`，与约定 §2.4 逐条一致）、`ValidationError`；不引用 pgx、生成代码、net/http（depguard 检查）。`nest_error.go`、`social.go` 只供 `repo/webapi/{sms,wechat,alipay}` 使用，B4 删除 |
+| `internal/usecase` | 业务规则：`auth`（注册、登录、刷新轮换与宽限期、一次性邮件令牌）、`session`（会话与吊销键）、`user`（当前用户与管理、最后一个管理员）、`note`（CRUD 示例）、`health`、`audit`；按账号、会话计数与只计失败的共享限流规则经 `usecase.Limits` 在用例内检查；返回 `entity.Error` / `entity.ValidationError`；不引用 controller |
 | `internal/controller/http` | 中间件链、操作表、校验适配器、鉴权与限流、幂等键、事务、审计、`policy.go`、ops 路由（health、metrics、`/openapi.json`、`/docs`）；`gen/` 为生成代码，`v1/` 实现 `gen.StrictServerInterface`，`httperr/` 写错误信封，`reqctx/` 为请求 ID、主体、操作 |
 | `internal/i18n` | go-i18n 消息文件 `locales/{zh,en}.json`（按 errorKey 与 `validation.<rule>` 组织）与 `Accept-Language` 解析 |
 | `internal/config` | caarlos0/env 解析约定 §9 与本服务变量，启动时一次性校验并列出全部问题 |
-| `internal/repo` | 端口在 `contracts.go`；`postgres/` 为 sqlc 查询与端口实现（请求事务经 context 传递，`AfterCommit` 登记提交后副作用，River 表在 `DATABASE_SCHEMA`），`redis/` 为缓存、锁、吊销键、幂等键（键带 `{OTEL_SERVICE_NAME}:` 前缀，吊销键 `auth:revoked:sid:` 除外；未配置 `REDIS_URL` 时进程内实现），`webapi/storage` 为 local / S3 文件存储，`webapi/{sms,wechat,alipay}` 为第三方客户端（B4 改写） |
-| `internal/worker` | River 客户端配置（otelriver）；尚无任务时 worker 进程空转 |
+| `internal/repo` | 端口在 `contracts.go`；`postgres/` 为 sqlc 查询与端口实现（请求事务经 context 传递，`AfterCommit` 登记提交后副作用，River 表在 `DATABASE_SCHEMA`），`redis/` 为缓存、锁、吊销键、幂等键、刷新宽限期暂存（键带 `{OTEL_SERVICE_NAME}:` 前缀，吊销键 `auth:revoked:sid:` 除外；未配置 `REDIS_URL` 时进程内实现），`webapi/mail` 为 SMTP 发信（未配置 `SMTP_URL` 时只写日志），`webapi/storage` 为 local / S3 文件存储，`webapi/{sms,wechat,alipay}` 为第三方客户端（B4 改写） |
+| `internal/worker` | River 客户端配置（otelriver）与任务：`mail` 队列由 worker 签发一次性令牌（只存哈希）并发信 |
+| `templates/` | 邮件模板 `mail/<kind>.{html,txt}.tmpl`，文案在 i18n 的 `mail.*` |
 | `migrations/`、`seeds/` | goose 迁移：`core/` 每个服务都执行，`identity/` 只在签发服务执行，版本表 `goose_<set>_version`；`seeds/seed.json` 为演示账号定义 |
 | `pkg/` | 与业务无关的封装，不引用 `internal/`：`clientip`（`TRUSTED_PROXIES`）、`jwtx`（EdDSA 签名、JWKS、验签）、`ratelimit`（GCRA 与共享规则表）、`telemetry`、`logger`、`pagination`、`phone`、`jsontime`、`postgres` 等 |
 
@@ -81,7 +84,7 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 | 契约 | `tests/contract`：bundle 无漂移、`/openapi.json` 与文件一致、路由与文档双向一致、operationId 规则、policy 与 `bearerAuth` 一致、错误响应引用 | `contract` |
 
 - 用例调用 `t.Parallel()`（paralleltest）；使用 `t.Setenv` 的用例除外。
-- 集成测试每个包一个 Postgres 容器：`testutil.StartDatabase` 先迁移模板库，用例用 `Clone(t)` 得到独立库，可并行。需要登录的用例用 `testutil.IssueAccessToken`（固定 Ed25519 测试密钥，`testutil.SigningKeyPEM()` 为对应的 `AUTH_SIGNING_KEY`）。
+- 集成测试每个包一个 Postgres 容器：`testutil.StartDatabase` 先迁移模板库，用例用 `Clone(t)` 得到独立库，可并行。需要登录的用例用 `testutil.IssueAccessToken`（固定 Ed25519 测试密钥，`testutil.SigningKeyPEM()` 为对应的 `AUTH_SIGNING_KEY`）。邮件用例用 `testutil.StartSMTP` 起进程内 SMTP 服务器，并启动 `app.NewWorkerClient` 处理 mail 队列，`Next(t, to).Token(t)` 取邮件链接中的令牌。
 - `internal/app` 的 HTTP 用例经 `testApp.do` 发请求，`/api/v1` 的每个响应都用 `openapi3filter.ValidateResponse` 对照 `openapi/openapi.json` 校验。
 - policy 中 `Tx: true` 的接口在事务内执行：2xx 与 4xx 提交，5xx 回滚，响应在提交后发出；鉴权在事务开始前完成，同一请求不会同时持有两条连接。
 - MinIO（`chainguard/minio`，按 digest 固定）同样由 testcontainers 启动。

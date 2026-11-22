@@ -207,7 +207,7 @@ func TestMigrationsLiveInTheServiceSchema(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
-	sets := []migrations.Set{migrations.Core()}
+	sets := []migrations.Set{migrations.Core(), migrations.Identity()}
 
 	require.NoError(t, app.MigrateUp(t.Context(), pool, "svc_test", sets, log))
 	require.NoError(t, app.MigrateUp(t.Context(), pool, "svc_test", sets, log))
@@ -215,6 +215,7 @@ func TestMigrationsLiveInTheServiceSchema(t *testing.T) {
 	tables := tablesIn(t, pool, "svc_test")
 	assert.Contains(t, tables, "audit_log")
 	assert.Contains(t, tables, "goose_core_version")
+	assert.Contains(t, tables, "app_user")
 	assert.Contains(t, tables, "river_job")
 
 	rows, err := pool.Query(t.Context(), `
@@ -234,7 +235,7 @@ SELECT indexname FROM pg_indexes WHERE schemaname = 'svc_test' AND tablename NOT
 	require.NoError(t, rows.Err())
 
 	require.NoError(t, app.MigrateDown(t.Context(), pool, "svc_test", sets, log))
-	assert.Equal(t, []string{"goose_core_version"}, tablesIn(t, pool, "svc_test"))
+	assert.Equal(t, []string{"goose_core_version", "goose_identity_version"}, tablesIn(t, pool, "svc_test"))
 
 	require.NoError(t, app.MigrateUp(t.Context(), pool, "svc_test", sets, log))
 	assert.Contains(t, tablesIn(t, pool, "svc_test"), "audit_log")

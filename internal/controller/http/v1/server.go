@@ -16,19 +16,25 @@ var _ gen.StrictServerInterface = (*Server)(nil)
 
 // Server implements the generated strict server interface.
 type Server struct {
-	notes usecase.Notes
-	log   *slog.Logger
+	notes    usecase.Notes
+	auth     usecase.Auth
+	sessions usecase.Sessions
+	users    usecase.Users
+	log      *slog.Logger
 }
 
 // Deps are the Server dependencies.
 type Deps struct {
-	Notes usecase.Notes
-	Log   *slog.Logger
+	Notes    usecase.Notes
+	Auth     usecase.Auth
+	Sessions usecase.Sessions
+	Users    usecase.Users
+	Log      *slog.Logger
 }
 
 // New returns a Server.
 func New(d *Deps) *Server {
-	return &Server{notes: d.Notes, log: d.Log}
+	return &Server{notes: d.Notes, auth: d.Auth, sessions: d.Sessions, users: d.Users, log: d.Log}
 }
 
 // Register mounts the generated strict handlers of s; parameter binding errors are 400s.

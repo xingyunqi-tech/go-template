@@ -1231,3 +1231,1122 @@ func (c_2 *MockNotesUpdateCall) DoAndReturn(f func(context.Context, uuid.UUID, u
 	c_2.Call = c_2.Call.DoAndReturn(f)
 	return c_2
 }
+
+// MockUsers is a mock of Users interface.
+type MockUsers struct {
+	ctrl     *gomock.Controller
+	recorder *MockUsersMockRecorder
+	isgomock struct{}
+}
+
+// MockUsersMockRecorder is the mock recorder for MockUsers.
+type MockUsersMockRecorder struct {
+	mock *MockUsers
+}
+
+// NewMockUsers creates a new mock instance.
+func NewMockUsers(ctrl *gomock.Controller) *MockUsers {
+	mock := &MockUsers{ctrl: ctrl}
+	mock.recorder = &MockUsersMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockUsers) EXPECT() *MockUsersMockRecorder {
+	return m.recorder
+}
+
+// CountActiveAdmins mocks base method.
+func (m *MockUsers) CountActiveAdmins(ctx context.Context, except uuid.UUID) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountActiveAdmins", ctx, except)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountActiveAdmins indicates an expected call of CountActiveAdmins.
+func (mr *MockUsersMockRecorder) CountActiveAdmins(ctx, except any) *MockUsersCountActiveAdminsCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountActiveAdmins", reflect.TypeOf((*MockUsers)(nil).CountActiveAdmins), ctx, except)
+	return &MockUsersCountActiveAdminsCall{Call: call}
+}
+
+// MockUsersCountActiveAdminsCall wrap *gomock.Call
+type MockUsersCountActiveAdminsCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUsersCountActiveAdminsCall) Return(arg0 int, arg1 error) *MockUsersCountActiveAdminsCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUsersCountActiveAdminsCall) Do(f func(context.Context, uuid.UUID) (int, error)) *MockUsersCountActiveAdminsCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUsersCountActiveAdminsCall) DoAndReturn(f func(context.Context, uuid.UUID) (int, error)) *MockUsersCountActiveAdminsCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// Create mocks base method.
+func (m *MockUsers) Create(ctx context.Context, u *repo.NewUser) (*entity.User, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, u)
+	ret0, _ := ret[0].(*entity.User)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockUsersMockRecorder) Create(ctx, u any) *MockUsersCreateCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockUsers)(nil).Create), ctx, u)
+	return &MockUsersCreateCall{Call: call}
+}
+
+// MockUsersCreateCall wrap *gomock.Call
+type MockUsersCreateCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUsersCreateCall) Return(arg0 *entity.User, arg1 error) *MockUsersCreateCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUsersCreateCall) Do(f func(context.Context, *repo.NewUser) (*entity.User, error)) *MockUsersCreateCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUsersCreateCall) DoAndReturn(f func(context.Context, *repo.NewUser) (*entity.User, error)) *MockUsersCreateCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// Get mocks base method.
+func (m *MockUsers) Get(ctx context.Context, id uuid.UUID) (*repo.UserRecord, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", ctx, id)
+	ret0, _ := ret[0].(*repo.UserRecord)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockUsersMockRecorder) Get(ctx, id any) *MockUsersGetCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockUsers)(nil).Get), ctx, id)
+	return &MockUsersGetCall{Call: call}
+}
+
+// MockUsersGetCall wrap *gomock.Call
+type MockUsersGetCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUsersGetCall) Return(u *repo.UserRecord, found bool, err error) *MockUsersGetCall {
+	c.Call = c.Call.Return(u, found, err)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUsersGetCall) Do(f func(context.Context, uuid.UUID) (*repo.UserRecord, bool, error)) *MockUsersGetCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUsersGetCall) DoAndReturn(f func(context.Context, uuid.UUID) (*repo.UserRecord, bool, error)) *MockUsersGetCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// GetByEmail mocks base method.
+func (m *MockUsers) GetByEmail(ctx context.Context, email string) (*repo.UserRecord, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByEmail", ctx, email)
+	ret0, _ := ret[0].(*repo.UserRecord)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetByEmail indicates an expected call of GetByEmail.
+func (mr *MockUsersMockRecorder) GetByEmail(ctx, email any) *MockUsersGetByEmailCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByEmail", reflect.TypeOf((*MockUsers)(nil).GetByEmail), ctx, email)
+	return &MockUsersGetByEmailCall{Call: call}
+}
+
+// MockUsersGetByEmailCall wrap *gomock.Call
+type MockUsersGetByEmailCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUsersGetByEmailCall) Return(u *repo.UserRecord, found bool, err error) *MockUsersGetByEmailCall {
+	c.Call = c.Call.Return(u, found, err)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUsersGetByEmailCall) Do(f func(context.Context, string) (*repo.UserRecord, bool, error)) *MockUsersGetByEmailCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUsersGetByEmailCall) DoAndReturn(f func(context.Context, string) (*repo.UserRecord, bool, error)) *MockUsersGetByEmailCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// GetForUpdate mocks base method.
+func (m *MockUsers) GetForUpdate(ctx context.Context, id uuid.UUID) (*repo.UserRecord, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetForUpdate", ctx, id)
+	ret0, _ := ret[0].(*repo.UserRecord)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetForUpdate indicates an expected call of GetForUpdate.
+func (mr *MockUsersMockRecorder) GetForUpdate(ctx, id any) *MockUsersGetForUpdateCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetForUpdate", reflect.TypeOf((*MockUsers)(nil).GetForUpdate), ctx, id)
+	return &MockUsersGetForUpdateCall{Call: call}
+}
+
+// MockUsersGetForUpdateCall wrap *gomock.Call
+type MockUsersGetForUpdateCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUsersGetForUpdateCall) Return(u *repo.UserRecord, found bool, err error) *MockUsersGetForUpdateCall {
+	c.Call = c.Call.Return(u, found, err)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUsersGetForUpdateCall) Do(f func(context.Context, uuid.UUID) (*repo.UserRecord, bool, error)) *MockUsersGetForUpdateCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUsersGetForUpdateCall) DoAndReturn(f func(context.Context, uuid.UUID) (*repo.UserRecord, bool, error)) *MockUsersGetForUpdateCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// List mocks base method.
+func (m *MockUsers) List(ctx context.Context, f *repo.UserFilter) ([]entity.User, int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "List", ctx, f)
+	ret0, _ := ret[0].([]entity.User)
+	ret1, _ := ret[1].(int)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// List indicates an expected call of List.
+func (mr *MockUsersMockRecorder) List(ctx, f any) *MockUsersListCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockUsers)(nil).List), ctx, f)
+	return &MockUsersListCall{Call: call}
+}
+
+// MockUsersListCall wrap *gomock.Call
+type MockUsersListCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUsersListCall) Return(users []entity.User, total int, err error) *MockUsersListCall {
+	c.Call = c.Call.Return(users, total, err)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUsersListCall) Do(f func(context.Context, *repo.UserFilter) ([]entity.User, int, error)) *MockUsersListCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUsersListCall) DoAndReturn(f func(context.Context, *repo.UserFilter) ([]entity.User, int, error)) *MockUsersListCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// LockAdmins mocks base method.
+func (m *MockUsers) LockAdmins(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LockAdmins", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// LockAdmins indicates an expected call of LockAdmins.
+func (mr *MockUsersMockRecorder) LockAdmins(ctx any) *MockUsersLockAdminsCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LockAdmins", reflect.TypeOf((*MockUsers)(nil).LockAdmins), ctx)
+	return &MockUsersLockAdminsCall{Call: call}
+}
+
+// MockUsersLockAdminsCall wrap *gomock.Call
+type MockUsersLockAdminsCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUsersLockAdminsCall) Return(arg0 error) *MockUsersLockAdminsCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUsersLockAdminsCall) Do(f func(context.Context) error) *MockUsersLockAdminsCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUsersLockAdminsCall) DoAndReturn(f func(context.Context) error) *MockUsersLockAdminsCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// MarkEmailVerified mocks base method.
+func (m *MockUsers) MarkEmailVerified(ctx context.Context, id uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkEmailVerified", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkEmailVerified indicates an expected call of MarkEmailVerified.
+func (mr *MockUsersMockRecorder) MarkEmailVerified(ctx, id any) *MockUsersMarkEmailVerifiedCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkEmailVerified", reflect.TypeOf((*MockUsers)(nil).MarkEmailVerified), ctx, id)
+	return &MockUsersMarkEmailVerifiedCall{Call: call}
+}
+
+// MockUsersMarkEmailVerifiedCall wrap *gomock.Call
+type MockUsersMarkEmailVerifiedCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUsersMarkEmailVerifiedCall) Return(arg0 error) *MockUsersMarkEmailVerifiedCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUsersMarkEmailVerifiedCall) Do(f func(context.Context, uuid.UUID) error) *MockUsersMarkEmailVerifiedCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUsersMarkEmailVerifiedCall) DoAndReturn(f func(context.Context, uuid.UUID) error) *MockUsersMarkEmailVerifiedCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// SetPassword mocks base method.
+func (m *MockUsers) SetPassword(ctx context.Context, id uuid.UUID, hash string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetPassword", ctx, id, hash)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetPassword indicates an expected call of SetPassword.
+func (mr *MockUsersMockRecorder) SetPassword(ctx, id, hash any) *MockUsersSetPasswordCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPassword", reflect.TypeOf((*MockUsers)(nil).SetPassword), ctx, id, hash)
+	return &MockUsersSetPasswordCall{Call: call}
+}
+
+// MockUsersSetPasswordCall wrap *gomock.Call
+type MockUsersSetPasswordCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUsersSetPasswordCall) Return(arg0 error) *MockUsersSetPasswordCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUsersSetPasswordCall) Do(f func(context.Context, uuid.UUID, string) error) *MockUsersSetPasswordCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUsersSetPasswordCall) DoAndReturn(f func(context.Context, uuid.UUID, string) error) *MockUsersSetPasswordCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// SetRoles mocks base method.
+func (m *MockUsers) SetRoles(ctx context.Context, id uuid.UUID, roles []string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetRoles", ctx, id, roles)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetRoles indicates an expected call of SetRoles.
+func (mr *MockUsersMockRecorder) SetRoles(ctx, id, roles any) *MockUsersSetRolesCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRoles", reflect.TypeOf((*MockUsers)(nil).SetRoles), ctx, id, roles)
+	return &MockUsersSetRolesCall{Call: call}
+}
+
+// MockUsersSetRolesCall wrap *gomock.Call
+type MockUsersSetRolesCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockUsersSetRolesCall) Return(arg0 error) *MockUsersSetRolesCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockUsersSetRolesCall) Do(f func(context.Context, uuid.UUID, []string) error) *MockUsersSetRolesCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockUsersSetRolesCall) DoAndReturn(f func(context.Context, uuid.UUID, []string) error) *MockUsersSetRolesCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// Update mocks base method.
+func (m *MockUsers) Update(ctx context.Context, id uuid.UUID, c *repo.UserChanges) (*entity.User, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Update", ctx, id, c)
+	ret0, _ := ret[0].(*entity.User)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// Update indicates an expected call of Update.
+func (mr *MockUsersMockRecorder) Update(ctx, id, c any) *MockUsersUpdateCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockUsers)(nil).Update), ctx, id, c)
+	return &MockUsersUpdateCall{Call: call}
+}
+
+// MockUsersUpdateCall wrap *gomock.Call
+type MockUsersUpdateCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c_2 *MockUsersUpdateCall) Return(u *entity.User, found bool, err error) *MockUsersUpdateCall {
+	c_2.Call = c_2.Call.Return(u, found, err)
+	return c_2
+}
+
+// Do rewrite *gomock.Call.Do
+func (c_2 *MockUsersUpdateCall) Do(f func(context.Context, uuid.UUID, *repo.UserChanges) (*entity.User, bool, error)) *MockUsersUpdateCall {
+	c_2.Call = c_2.Call.Do(f)
+	return c_2
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c_2 *MockUsersUpdateCall) DoAndReturn(f func(context.Context, uuid.UUID, *repo.UserChanges) (*entity.User, bool, error)) *MockUsersUpdateCall {
+	c_2.Call = c_2.Call.DoAndReturn(f)
+	return c_2
+}
+
+// MockSessions is a mock of Sessions interface.
+type MockSessions struct {
+	ctrl     *gomock.Controller
+	recorder *MockSessionsMockRecorder
+	isgomock struct{}
+}
+
+// MockSessionsMockRecorder is the mock recorder for MockSessions.
+type MockSessionsMockRecorder struct {
+	mock *MockSessions
+}
+
+// NewMockSessions creates a new mock instance.
+func NewMockSessions(ctrl *gomock.Controller) *MockSessions {
+	mock := &MockSessions{ctrl: ctrl}
+	mock.recorder = &MockSessionsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSessions) EXPECT() *MockSessionsMockRecorder {
+	return m.recorder
+}
+
+// ByRefreshForUpdate mocks base method.
+func (m *MockSessions) ByRefreshForUpdate(ctx context.Context, hash []byte) (*repo.SessionRecord, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ByRefreshForUpdate", ctx, hash)
+	ret0, _ := ret[0].(*repo.SessionRecord)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ByRefreshForUpdate indicates an expected call of ByRefreshForUpdate.
+func (mr *MockSessionsMockRecorder) ByRefreshForUpdate(ctx, hash any) *MockSessionsByRefreshForUpdateCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ByRefreshForUpdate", reflect.TypeOf((*MockSessions)(nil).ByRefreshForUpdate), ctx, hash)
+	return &MockSessionsByRefreshForUpdateCall{Call: call}
+}
+
+// MockSessionsByRefreshForUpdateCall wrap *gomock.Call
+type MockSessionsByRefreshForUpdateCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSessionsByRefreshForUpdateCall) Return(s *repo.SessionRecord, found bool, err error) *MockSessionsByRefreshForUpdateCall {
+	c.Call = c.Call.Return(s, found, err)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSessionsByRefreshForUpdateCall) Do(f func(context.Context, []byte) (*repo.SessionRecord, bool, error)) *MockSessionsByRefreshForUpdateCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSessionsByRefreshForUpdateCall) DoAndReturn(f func(context.Context, []byte) (*repo.SessionRecord, bool, error)) *MockSessionsByRefreshForUpdateCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// Create mocks base method.
+func (m *MockSessions) Create(ctx context.Context, s *repo.NewSession) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, s)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockSessionsMockRecorder) Create(ctx, s any) *MockSessionsCreateCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockSessions)(nil).Create), ctx, s)
+	return &MockSessionsCreateCall{Call: call}
+}
+
+// MockSessionsCreateCall wrap *gomock.Call
+type MockSessionsCreateCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSessionsCreateCall) Return(arg0 error) *MockSessionsCreateCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSessionsCreateCall) Do(f func(context.Context, *repo.NewSession) error) *MockSessionsCreateCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSessionsCreateCall) DoAndReturn(f func(context.Context, *repo.NewSession) error) *MockSessionsCreateCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// ForUpdate mocks base method.
+func (m *MockSessions) ForUpdate(ctx context.Context, id uuid.UUID) (*repo.SessionRecord, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForUpdate", ctx, id)
+	ret0, _ := ret[0].(*repo.SessionRecord)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ForUpdate indicates an expected call of ForUpdate.
+func (mr *MockSessionsMockRecorder) ForUpdate(ctx, id any) *MockSessionsForUpdateCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForUpdate", reflect.TypeOf((*MockSessions)(nil).ForUpdate), ctx, id)
+	return &MockSessionsForUpdateCall{Call: call}
+}
+
+// MockSessionsForUpdateCall wrap *gomock.Call
+type MockSessionsForUpdateCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSessionsForUpdateCall) Return(s *repo.SessionRecord, found bool, err error) *MockSessionsForUpdateCall {
+	c.Call = c.Call.Return(s, found, err)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSessionsForUpdateCall) Do(f func(context.Context, uuid.UUID) (*repo.SessionRecord, bool, error)) *MockSessionsForUpdateCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSessionsForUpdateCall) DoAndReturn(f func(context.Context, uuid.UUID) (*repo.SessionRecord, bool, error)) *MockSessionsForUpdateCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// History mocks base method.
+func (m *MockSessions) History(ctx context.Context, hash []byte) (*repo.RefreshHistory, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "History", ctx, hash)
+	ret0, _ := ret[0].(*repo.RefreshHistory)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// History indicates an expected call of History.
+func (mr *MockSessionsMockRecorder) History(ctx, hash any) *MockSessionsHistoryCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "History", reflect.TypeOf((*MockSessions)(nil).History), ctx, hash)
+	return &MockSessionsHistoryCall{Call: call}
+}
+
+// MockSessionsHistoryCall wrap *gomock.Call
+type MockSessionsHistoryCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSessionsHistoryCall) Return(h *repo.RefreshHistory, found bool, err error) *MockSessionsHistoryCall {
+	c.Call = c.Call.Return(h, found, err)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSessionsHistoryCall) Do(f func(context.Context, []byte) (*repo.RefreshHistory, bool, error)) *MockSessionsHistoryCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSessionsHistoryCall) DoAndReturn(f func(context.Context, []byte) (*repo.RefreshHistory, bool, error)) *MockSessionsHistoryCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// ListActive mocks base method.
+func (m *MockSessions) ListActive(ctx context.Context, userID uuid.UUID) ([]entity.Session, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListActive", ctx, userID)
+	ret0, _ := ret[0].([]entity.Session)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListActive indicates an expected call of ListActive.
+func (mr *MockSessionsMockRecorder) ListActive(ctx, userID any) *MockSessionsListActiveCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActive", reflect.TypeOf((*MockSessions)(nil).ListActive), ctx, userID)
+	return &MockSessionsListActiveCall{Call: call}
+}
+
+// MockSessionsListActiveCall wrap *gomock.Call
+type MockSessionsListActiveCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSessionsListActiveCall) Return(arg0 []entity.Session, arg1 error) *MockSessionsListActiveCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSessionsListActiveCall) Do(f func(context.Context, uuid.UUID) ([]entity.Session, error)) *MockSessionsListActiveCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSessionsListActiveCall) DoAndReturn(f func(context.Context, uuid.UUID) ([]entity.Session, error)) *MockSessionsListActiveCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// Revoke mocks base method.
+func (m *MockSessions) Revoke(ctx context.Context, userID, id uuid.UUID) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Revoke", ctx, userID, id)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Revoke indicates an expected call of Revoke.
+func (mr *MockSessionsMockRecorder) Revoke(ctx, userID, id any) *MockSessionsRevokeCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Revoke", reflect.TypeOf((*MockSessions)(nil).Revoke), ctx, userID, id)
+	return &MockSessionsRevokeCall{Call: call}
+}
+
+// MockSessionsRevokeCall wrap *gomock.Call
+type MockSessionsRevokeCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSessionsRevokeCall) Return(found bool, err error) *MockSessionsRevokeCall {
+	c.Call = c.Call.Return(found, err)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSessionsRevokeCall) Do(f func(context.Context, uuid.UUID, uuid.UUID) (bool, error)) *MockSessionsRevokeCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSessionsRevokeCall) DoAndReturn(f func(context.Context, uuid.UUID, uuid.UUID) (bool, error)) *MockSessionsRevokeCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// RevokeAll mocks base method.
+func (m *MockSessions) RevokeAll(ctx context.Context, userID uuid.UUID, keep *uuid.UUID) ([]uuid.UUID, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RevokeAll", ctx, userID, keep)
+	ret0, _ := ret[0].([]uuid.UUID)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RevokeAll indicates an expected call of RevokeAll.
+func (mr *MockSessionsMockRecorder) RevokeAll(ctx, userID, keep any) *MockSessionsRevokeAllCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevokeAll", reflect.TypeOf((*MockSessions)(nil).RevokeAll), ctx, userID, keep)
+	return &MockSessionsRevokeAllCall{Call: call}
+}
+
+// MockSessionsRevokeAllCall wrap *gomock.Call
+type MockSessionsRevokeAllCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSessionsRevokeAllCall) Return(arg0 []uuid.UUID, arg1 error) *MockSessionsRevokeAllCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSessionsRevokeAllCall) Do(f func(context.Context, uuid.UUID, *uuid.UUID) ([]uuid.UUID, error)) *MockSessionsRevokeAllCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSessionsRevokeAllCall) DoAndReturn(f func(context.Context, uuid.UUID, *uuid.UUID) ([]uuid.UUID, error)) *MockSessionsRevokeAllCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// Rotate mocks base method.
+func (m *MockSessions) Rotate(ctx context.Context, id uuid.UUID, oldHash, newHash []byte, now time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Rotate", ctx, id, oldHash, newHash, now)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Rotate indicates an expected call of Rotate.
+func (mr *MockSessionsMockRecorder) Rotate(ctx, id, oldHash, newHash, now any) *MockSessionsRotateCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rotate", reflect.TypeOf((*MockSessions)(nil).Rotate), ctx, id, oldHash, newHash, now)
+	return &MockSessionsRotateCall{Call: call}
+}
+
+// MockSessionsRotateCall wrap *gomock.Call
+type MockSessionsRotateCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockSessionsRotateCall) Return(arg0 error) *MockSessionsRotateCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockSessionsRotateCall) Do(f func(context.Context, uuid.UUID, []byte, []byte, time.Time) error) *MockSessionsRotateCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockSessionsRotateCall) DoAndReturn(f func(context.Context, uuid.UUID, []byte, []byte, time.Time) error) *MockSessionsRotateCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// MockTokens is a mock of Tokens interface.
+type MockTokens struct {
+	ctrl     *gomock.Controller
+	recorder *MockTokensMockRecorder
+	isgomock struct{}
+}
+
+// MockTokensMockRecorder is the mock recorder for MockTokens.
+type MockTokensMockRecorder struct {
+	mock *MockTokens
+}
+
+// NewMockTokens creates a new mock instance.
+func NewMockTokens(ctrl *gomock.Controller) *MockTokens {
+	mock := &MockTokens{ctrl: ctrl}
+	mock.recorder = &MockTokensMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockTokens) EXPECT() *MockTokensMockRecorder {
+	return m.recorder
+}
+
+// Consume mocks base method.
+func (m *MockTokens) Consume(ctx context.Context, purpose string, hash []byte) (uuid.UUID, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Consume", ctx, purpose, hash)
+	ret0, _ := ret[0].(uuid.UUID)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// Consume indicates an expected call of Consume.
+func (mr *MockTokensMockRecorder) Consume(ctx, purpose, hash any) *MockTokensConsumeCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Consume", reflect.TypeOf((*MockTokens)(nil).Consume), ctx, purpose, hash)
+	return &MockTokensConsumeCall{Call: call}
+}
+
+// MockTokensConsumeCall wrap *gomock.Call
+type MockTokensConsumeCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockTokensConsumeCall) Return(userID uuid.UUID, found bool, err error) *MockTokensConsumeCall {
+	c.Call = c.Call.Return(userID, found, err)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockTokensConsumeCall) Do(f func(context.Context, string, []byte) (uuid.UUID, bool, error)) *MockTokensConsumeCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockTokensConsumeCall) DoAndReturn(f func(context.Context, string, []byte) (uuid.UUID, bool, error)) *MockTokensConsumeCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// Issue mocks base method.
+func (m *MockTokens) Issue(ctx context.Context, userID uuid.UUID, purpose string, hash []byte, expires time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Issue", ctx, userID, purpose, hash, expires)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Issue indicates an expected call of Issue.
+func (mr *MockTokensMockRecorder) Issue(ctx, userID, purpose, hash, expires any) *MockTokensIssueCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Issue", reflect.TypeOf((*MockTokens)(nil).Issue), ctx, userID, purpose, hash, expires)
+	return &MockTokensIssueCall{Call: call}
+}
+
+// MockTokensIssueCall wrap *gomock.Call
+type MockTokensIssueCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockTokensIssueCall) Return(arg0 error) *MockTokensIssueCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockTokensIssueCall) Do(f func(context.Context, uuid.UUID, string, []byte, time.Time) error) *MockTokensIssueCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockTokensIssueCall) DoAndReturn(f func(context.Context, uuid.UUID, string, []byte, time.Time) error) *MockTokensIssueCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// MockMailQueue is a mock of MailQueue interface.
+type MockMailQueue struct {
+	ctrl     *gomock.Controller
+	recorder *MockMailQueueMockRecorder
+	isgomock struct{}
+}
+
+// MockMailQueueMockRecorder is the mock recorder for MockMailQueue.
+type MockMailQueueMockRecorder struct {
+	mock *MockMailQueue
+}
+
+// NewMockMailQueue creates a new mock instance.
+func NewMockMailQueue(ctrl *gomock.Controller) *MockMailQueue {
+	mock := &MockMailQueue{ctrl: ctrl}
+	mock.recorder = &MockMailQueueMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockMailQueue) EXPECT() *MockMailQueueMockRecorder {
+	return m.recorder
+}
+
+// Enqueue mocks base method.
+func (m *MockMailQueue) Enqueue(ctx context.Context, job *repo.MailJob) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Enqueue", ctx, job)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Enqueue indicates an expected call of Enqueue.
+func (mr *MockMailQueueMockRecorder) Enqueue(ctx, job any) *MockMailQueueEnqueueCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Enqueue", reflect.TypeOf((*MockMailQueue)(nil).Enqueue), ctx, job)
+	return &MockMailQueueEnqueueCall{Call: call}
+}
+
+// MockMailQueueEnqueueCall wrap *gomock.Call
+type MockMailQueueEnqueueCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockMailQueueEnqueueCall) Return(arg0 error) *MockMailQueueEnqueueCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockMailQueueEnqueueCall) Do(f func(context.Context, *repo.MailJob) error) *MockMailQueueEnqueueCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockMailQueueEnqueueCall) DoAndReturn(f func(context.Context, *repo.MailJob) error) *MockMailQueueEnqueueCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// MockMailer is a mock of Mailer interface.
+type MockMailer struct {
+	ctrl     *gomock.Controller
+	recorder *MockMailerMockRecorder
+	isgomock struct{}
+}
+
+// MockMailerMockRecorder is the mock recorder for MockMailer.
+type MockMailerMockRecorder struct {
+	mock *MockMailer
+}
+
+// NewMockMailer creates a new mock instance.
+func NewMockMailer(ctrl *gomock.Controller) *MockMailer {
+	mock := &MockMailer{ctrl: ctrl}
+	mock.recorder = &MockMailerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockMailer) EXPECT() *MockMailerMockRecorder {
+	return m.recorder
+}
+
+// Send mocks base method.
+func (m_2 *MockMailer) Send(ctx context.Context, m *repo.Mail) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "Send", ctx, m)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Send indicates an expected call of Send.
+func (mr *MockMailerMockRecorder) Send(ctx, m any) *MockMailerSendCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockMailer)(nil).Send), ctx, m)
+	return &MockMailerSendCall{Call: call}
+}
+
+// MockMailerSendCall wrap *gomock.Call
+type MockMailerSendCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockMailerSendCall) Return(arg0 error) *MockMailerSendCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockMailerSendCall) Do(f func(context.Context, *repo.Mail) error) *MockMailerSendCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockMailerSendCall) DoAndReturn(f func(context.Context, *repo.Mail) error) *MockMailerSendCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// MockRefreshGrace is a mock of RefreshGrace interface.
+type MockRefreshGrace struct {
+	ctrl     *gomock.Controller
+	recorder *MockRefreshGraceMockRecorder
+	isgomock struct{}
+}
+
+// MockRefreshGraceMockRecorder is the mock recorder for MockRefreshGrace.
+type MockRefreshGraceMockRecorder struct {
+	mock *MockRefreshGrace
+}
+
+// NewMockRefreshGrace creates a new mock instance.
+func NewMockRefreshGrace(ctrl *gomock.Controller) *MockRefreshGrace {
+	mock := &MockRefreshGrace{ctrl: ctrl}
+	mock.recorder = &MockRefreshGraceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockRefreshGrace) EXPECT() *MockRefreshGraceMockRecorder {
+	return m.recorder
+}
+
+// Get mocks base method.
+func (m *MockRefreshGrace) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", ctx, key)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockRefreshGraceMockRecorder) Get(ctx, key any) *MockRefreshGraceGetCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockRefreshGrace)(nil).Get), ctx, key)
+	return &MockRefreshGraceGetCall{Call: call}
+}
+
+// MockRefreshGraceGetCall wrap *gomock.Call
+type MockRefreshGraceGetCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockRefreshGraceGetCall) Return(sealed []byte, found bool, err error) *MockRefreshGraceGetCall {
+	c.Call = c.Call.Return(sealed, found, err)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockRefreshGraceGetCall) Do(f func(context.Context, string) ([]byte, bool, error)) *MockRefreshGraceGetCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockRefreshGraceGetCall) DoAndReturn(f func(context.Context, string) ([]byte, bool, error)) *MockRefreshGraceGetCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// Put mocks base method.
+func (m *MockRefreshGrace) Put(ctx context.Context, key string, sealed []byte, ttl time.Duration) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Put", ctx, key, sealed, ttl)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Put indicates an expected call of Put.
+func (mr *MockRefreshGraceMockRecorder) Put(ctx, key, sealed, ttl any) *MockRefreshGracePutCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockRefreshGrace)(nil).Put), ctx, key, sealed, ttl)
+	return &MockRefreshGracePutCall{Call: call}
+}
+
+// MockRefreshGracePutCall wrap *gomock.Call
+type MockRefreshGracePutCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockRefreshGracePutCall) Return(arg0 error) *MockRefreshGracePutCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockRefreshGracePutCall) Do(f func(context.Context, string, []byte, time.Duration) error) *MockRefreshGracePutCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockRefreshGracePutCall) DoAndReturn(f func(context.Context, string, []byte, time.Duration) error) *MockRefreshGracePutCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}

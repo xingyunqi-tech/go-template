@@ -187,3 +187,44 @@ func TestAuditsWriteTheAuditLog(t *testing.T) {
 	assert.Equal(t, actor, gotActor)
 	assert.Equal(t, map[string]any{"operationId": "createNote"}, data)
 }
+
+func TestInTxReportsATransactionTheDatabaseRolledBack(t *testing.T) {
+	t.Parallel()
+
+	db, pool := newDB(t)
+
+	err := db.InTx(t.Context(), func(ctx context.Context) error {
+		require.NoError(t, postgres.Exec(ctx, db, _insertAudit, "swallowed"))
+		_ = postgres.Exec(ctx, db, _insertAudit, nil)
+
+		return nil
+	})
+	require.ErrorIs(t, err, postgres.ErrRolledBack)
+	assert.Zero(t, countAudits(t, pool, "swallowed"))
+}
+
+func TestRequestTransactionTakesAConnectionAtItsFirstStatement(t *testing.T) {
+	t.Parallel()
+
+	db, pool := newDB(t)
+
+	ctx, tx, err := db.Begin(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), pool.Stat().AcquiredConns())
+
+	require.NoError(t, postgres.Exec(ctx, db, _insertAudit, "lazy"))
+	assert.Equal(t, int32(1), pool.Stat().AcquiredConns())
+
+	ok, err := tx.Commit(ctx)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, int32(0), pool.Stat().AcquiredConns())
+	assert.Equal(t, 1, countAudits(t, pool, "lazy"))
+
+	_, empty, err := db.Begin(t.Context())
+	require.NoError(t, err)
+
+	ok, err = empty.Commit(t.Context())
+	require.NoError(t, err)
+	assert.True(t, ok)
+}

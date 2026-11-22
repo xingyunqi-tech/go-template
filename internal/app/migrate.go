@@ -19,9 +19,14 @@ import (
 
 const _migrateConnections = 2
 
-// migrationSets lists the goose directories of the authentication role, in apply order.
-func migrationSets(_ config.Role) []migrations.Set {
-	return []migrations.Set{migrations.Core()}
+// migrationSets lists the goose directories of the authentication role, in apply order: a
+// verifier has no identity tables.
+func migrationSets(role config.Role) []migrations.Set {
+	if role == config.RoleVerifier {
+		return []migrations.Set{migrations.Core()}
+	}
+
+	return []migrations.Set{migrations.Core(), migrations.Identity()}
 }
 
 // Migrate creates DATABASE_SCHEMA and applies the goose and River migrations; down rolls them

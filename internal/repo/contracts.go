@@ -115,3 +115,149 @@ type Notes interface {
 	Update(ctx context.Context, owner, id uuid.UUID, c *entity.NoteChanges) (n *entity.Note, found bool, err error)
 	Delete(ctx context.Context, owner, id uuid.UUID) (found bool, err error)
 }
+
+// UserRecord is a user with its password hash, nil when no password is set.
+type UserRecord struct {
+	User         entity.User
+	PasswordHash *string
+}
+
+// NewUser is a user to create.
+type NewUser struct {
+	ID            uuid.UUID
+	Email         *string
+	Phone         *string
+	PasswordHash  *string
+	DisplayName   string
+	EmailVerified bool
+	Roles         []string
+}
+
+// UserFilter selects a page of users.
+type UserFilter struct {
+	Keyword *string
+	Status  *string
+	Role    *string
+	// Sort lists at most two keys among createdAt, -createdAt, email and -email; Keyword matches
+	// as a plain substring.
+	Sort   []string
+	Limit  int
+	Offset int
+}
+
+// UserChanges is a partial update of a user; nil fields keep their value.
+type UserChanges struct {
+	DisplayName *string
+	Status      *string
+}
+
+// Users stores the accounts; reads skip soft-deleted users. Create reports a taken email or
+// phone as user.emailTaken / user.phoneTaken.
+type Users interface {
+	Create(ctx context.Context, u *NewUser) (*entity.User, error)
+	Get(ctx context.Context, id uuid.UUID) (u *UserRecord, found bool, err error)
+	// GetForUpdate locks the user row until the transaction ends.
+	GetForUpdate(ctx context.Context, id uuid.UUID) (u *UserRecord, found bool, err error)
+	GetByEmail(ctx context.Context, email string) (u *UserRecord, found bool, err error)
+	Update(ctx context.Context, id uuid.UUID, c *UserChanges) (u *entity.User, found bool, err error)
+	SetPassword(ctx context.Context, id uuid.UUID, hash string) error
+	MarkEmailVerified(ctx context.Context, id uuid.UUID) error
+	SetRoles(ctx context.Context, id uuid.UUID, roles []string) error
+	List(ctx context.Context, f *UserFilter) (users []entity.User, total int, err error)
+	// LockAdmins takes the transaction lock every change that may remove an admin holds.
+	LockAdmins(ctx context.Context) error
+	// CountActiveAdmins counts the active admins other than except; uuid.Nil counts all.
+	CountActiveAdmins(ctx context.Context, except uuid.UUID) (int, error)
+}
+
+// NewSession is a session to create.
+type NewSession struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	RefreshHash []byte
+	AuthTime    time.Time
+	ExpiresAt   time.Time
+	UserAgent   string
+	IP          string
+}
+
+// SessionRecord is a session with its revocation time.
+type SessionRecord struct {
+	Session   entity.Session
+	RevokedAt *time.Time
+}
+
+// RefreshHistory is a rotated refresh token hash.
+type RefreshHistory struct {
+	SessionID uuid.UUID
+	RotatedAt time.Time
+}
+
+// Sessions stores the sessions and the refresh token hashes rotated out of them.
+type Sessions interface {
+	Create(ctx context.Context, s *NewSession) error
+	// ByRefreshForUpdate finds the session whose current refresh hash is hash and locks it.
+	ByRefreshForUpdate(ctx context.Context, hash []byte) (s *SessionRecord, found bool, err error)
+	// ForUpdate locks the session id.
+	ForUpdate(ctx context.Context, id uuid.UUID) (s *SessionRecord, found bool, err error)
+	// History finds a rotated refresh hash.
+	History(ctx context.Context, hash []byte) (h *RefreshHistory, found bool, err error)
+	// Rotate moves the current hash oldHash of session id to the history and sets newHash.
+	Rotate(ctx context.Context, id uuid.UUID, oldHash, newHash []byte, now time.Time) error
+	// Revoke revokes the active session id of userID.
+	Revoke(ctx context.Context, userID, id uuid.UUID) (found bool, err error)
+	// RevokeAll revokes the active sessions of userID except keep and returns their ids.
+	RevokeAll(ctx context.Context, userID uuid.UUID, keep *uuid.UUID) ([]uuid.UUID, error)
+	ListActive(ctx context.Context, userID uuid.UUID) ([]entity.Session, error)
+}
+
+// Token purposes.
+const (
+	TokenEmailVerify   = "email_verify"
+	TokenPasswordReset = "password_reset"
+)
+
+// Tokens stores the hashes of the one-time tokens.
+type Tokens interface {
+	// Issue stores a token hash for userID and invalidates the unused tokens of the purpose.
+	Issue(ctx context.Context, userID uuid.UUID, purpose string, hash []byte, expires time.Time) error
+	// Consume marks a valid unused token used and returns its user.
+	Consume(ctx context.Context, purpose string, hash []byte) (userID uuid.UUID, found bool, err error)
+}
+
+// Mail kinds.
+const (
+	MailVerifyEmail   = "verify_email"
+	MailResetPassword = "reset_password"
+)
+
+// MailJob asks the worker to issue a one-time token for a user and mail it.
+type MailJob struct {
+	Kind   string
+	UserID uuid.UUID
+	Locale string
+}
+
+// MailQueue enqueues mail jobs in the request transaction.
+type MailQueue interface {
+	Enqueue(ctx context.Context, job *MailJob) error
+}
+
+// Mail is a rendered message.
+type Mail struct {
+	To      string
+	Subject string
+	Text    string
+	HTML    string
+}
+
+// Mailer sends rendered messages.
+type Mailer interface {
+	Send(ctx context.Context, m *Mail) error
+}
+
+// RefreshGrace keeps the sealed token pair of a rotated refresh token for the grace period.
+type RefreshGrace interface {
+	Put(ctx context.Context, key string, sealed []byte, ttl time.Duration) error
+	Get(ctx context.Context, key string) (sealed []byte, found bool, err error)
+}

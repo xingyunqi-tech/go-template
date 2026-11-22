@@ -96,6 +96,8 @@ type Options struct {
 	Transactor          Transactor
 	Auditor             Auditor
 	Readiness           Readiness
+	// JWKS is served at /.well-known/jwks.json by the issuing service; nil leaves the route out.
+	JWKS []byte
 	// Metrics serves /metrics; nil leaves the route out. MetricsToken guards it when set.
 	Metrics      http.Handler
 	MetricsToken string

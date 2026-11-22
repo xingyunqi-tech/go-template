@@ -2,19 +2,27 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/mail"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/xingyunqi-tech/go-template/internal/app"
 	"github.com/xingyunqi-tech/go-template/internal/config"
+	"github.com/xingyunqi-tech/go-template/pkg/jwtx"
 	"github.com/xingyunqi-tech/go-template/pkg/logger"
 )
 
@@ -26,6 +34,8 @@ const (
 	exitUsage = 2
 
 	_healthcheckTimeout = 5 * time.Second
+	_minPassword        = 8
+	_maxPassword        = 128
 )
 
 const usage = `Usage: app <command>
@@ -36,16 +46,21 @@ Commands:
   migrate [up|down]
             create DATABASE_SCHEMA and apply the migrations, or roll them all back
   seed      insert the seed accounts
+  createsuperuser --email <email>
+            create an administrator, or make the account of email one; reads the password
+            from the first line of stdin
+  keys generate
+            print a new Ed25519 AUTH_SIGNING_KEY and its public key for AUTH_VERIFY_KEYS
   healthcheck [--ready]
             probe the local API liveness (or readiness) endpoint; exit 0 when it answers 200
   version   print the build version
 `
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-func run(args []string, stdout, stderr io.Writer) int {
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("app", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { _, _ = fmt.Fprint(stderr, usage) }
@@ -60,22 +75,36 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	switch fs.Arg(0) {
 	case "migrate":
-		switch fs.Arg(1) {
-		case "", "up":
-			return command(stderr, "migrate", app.Migrate(false))
-		case "down":
-			return command(stderr, "migrate down", app.Migrate(true))
-		default:
+		return migrate(fs, stderr)
+	case "healthcheck":
+		return healthcheck(fs.Args()[1:], stderr)
+	case "createsuperuser":
+		return createSuperuser(fs.Args()[1:], stdin, stderr)
+	case "keys":
+		if fs.Arg(1) != "generate" {
 			fs.Usage()
 
 			return exitUsage
 		}
-	case "healthcheck":
-		return healthcheck(fs.Args()[1:], stderr)
+
+		return generateKeys(stdout, stderr)
 	case "version":
 		_, _ = fmt.Fprintln(stdout, version)
 
 		return exitOK
+	default:
+		fs.Usage()
+
+		return exitUsage
+	}
+}
+
+func migrate(fs *flag.FlagSet, stderr io.Writer) int {
+	switch fs.Arg(1) {
+	case "", "up":
+		return command(stderr, "migrate", app.Migrate(false))
+	case "down":
+		return command(stderr, "migrate down", app.Migrate(true))
 	default:
 		fs.Usage()
 
@@ -179,4 +208,75 @@ func command(stderr io.Writer, name string, run runFunc) int {
 	}
 
 	return exitOK
+}
+
+// createSuperuser reads the password from the first line of stdin.
+func createSuperuser(args []string, stdin io.Reader, stderr io.Writer) int {
+	fs := flag.NewFlagSet("createsuperuser", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	email := fs.String("email", "", "administrator email")
+
+	if err := fs.Parse(args); err != nil || !validEmail(*email) {
+		_, _ = fmt.Fprintln(stderr, "usage: app createsuperuser --email <email> < password")
+
+		return exitUsage
+	}
+
+	line, err := bufio.NewReader(stdin).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		_, _ = fmt.Fprintln(stderr, "createsuperuser: read password:", err)
+
+		return exitError
+	}
+
+	pw := strings.TrimRight(line, "\r\n")
+	if n := utf8.RuneCountInString(pw); n < _minPassword || n > _maxPassword {
+		_, _ = fmt.Fprintf(stderr, "createsuperuser: the password must have %d to %d characters\n", _minPassword, _maxPassword)
+
+		return exitUsage
+	}
+
+	return command(stderr, "createsuperuser", app.CreateSuperuser(*email, pw))
+}
+
+// generateKeys prints a new signing key and its public key as PEM, with the kid.
+func generateKeys(stdout, stderr io.Writer) int {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "keys:", err)
+
+		return exitError
+	}
+
+	privPEM, err := jwtx.EncodePrivateKey(priv)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "keys:", err)
+
+		return exitError
+	}
+
+	pubPEM, err := jwtx.EncodePublicKey(pub)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "keys:", err)
+
+		return exitError
+	}
+
+	kid, err := jwtx.KeyID(pub)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "keys:", err)
+
+		return exitError
+	}
+
+	_, _ = fmt.Fprintf(stdout, "# kid %s\n# AUTH_SIGNING_KEY\n%s# public key, for AUTH_VERIFY_KEYS after the next rotation\n%s", kid, privPEM, pubPEM)
+
+	return exitOK
+}
+
+func validEmail(email string) bool {
+	addr, err := mail.ParseAddress(email)
+
+	return err == nil && addr.Address == email
 }

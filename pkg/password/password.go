@@ -1,5 +1,4 @@
-// Package password hashes passwords with argon2id or bcrypt, verifies both formats and reports
-// when a stored hash should be replaced with one in the preferred format.
+// Package password hashes passwords with argon2id as PHC strings (platform conventions §5.4).
 package password
 
 import (
@@ -9,68 +8,56 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
-	"golang.org/x/crypto/bcrypt"
 )
 
-// Algorithms accepted by New.
-const (
-	Argon2id = "argon2id"
-	Bcrypt   = "bcrypt"
-)
-
-const (
-	_argonMemoryKiB = 19_456
-	_argonTime      = 2
-	_argonThreads   = 1
-	_argonSaltLen   = 16
-	_argonKeyLen    = 32
-	_argonVersion   = 19
-	_bcryptCost     = 10
-	_argonPrefix    = "$argon2id$"
-	_phcParts       = 6
-)
-
-var (
-	// ErrUnknownAlgorithm reports an algorithm other than argon2id and bcrypt.
-	ErrUnknownAlgorithm = errors.New("password: unknown algorithm")
-	errMalformedHash    = errors.New("password: malformed argon2id hash")
-)
-
-type argonParams struct {
-	memory  uint32
-	time    uint32
-	threads uint8
+// Params are the argon2id parameters.
+type Params struct {
+	Memory  uint32
+	Time    uint32
+	Threads uint8
 }
 
-func defaultArgon() argonParams {
-	return argonParams{memory: _argonMemoryKiB, time: _argonTime, threads: _argonThreads}
+// Default is m=19456 KiB, t=2, p=1.
+func Default() Params {
+	return Params{Memory: _memoryKiB, Time: _passes, Threads: 1}
 }
 
-// Hasher hashes and verifies passwords; at most `concurrency` operations run at once.
+const (
+	_memoryKiB = 19456
+	_passes    = 2
+
+	_saltLen = 16
+	_keyLen  = 32
+	_parts   = 6
+)
+
+var errMalformed = errors.New("password: malformed hash")
+
+// Hasher hashes and verifies passwords, at most concurrency at a time.
 type Hasher struct {
-	algorithm string
-	slots     chan struct{}
+	params Params
+	slots  chan struct{}
+	dummy  string
 }
 
-// New returns a Hasher producing algorithm hashes.
-func New(algorithm string, concurrency int) (*Hasher, error) {
-	if algorithm != Argon2id && algorithm != Bcrypt {
-		return nil, fmt.Errorf("%w: %s", ErrUnknownAlgorithm, algorithm)
+// New returns a Hasher; it computes the dummy hash verified for unknown accounts.
+func New(params Params, concurrency int) (*Hasher, error) {
+	h := &Hasher{params: params, slots: make(chan struct{}, max(concurrency, 1)), dummy: ""}
+
+	dummy, err := h.hash("dummy-password-for-unknown-accounts")
+	if err != nil {
+		return nil, err
 	}
 
-	return &Hasher{algorithm: algorithm, slots: make(chan struct{}, max(concurrency, 1))}, nil
+	h.dummy = dummy
+
+	return h, nil
 }
 
 func (h *Hasher) acquire(ctx context.Context) error {
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("password: %w", err)
-	}
-
 	select {
 	case h.slots <- struct{}{}:
 		return nil
@@ -79,120 +66,86 @@ func (h *Hasher) acquire(ctx context.Context) error {
 	}
 }
 
-func (h *Hasher) release() {
-	<-h.slots
-}
+func (h *Hasher) release() { <-h.slots }
 
-// Hash hashes secret in the preferred format.
-func (h *Hasher) Hash(ctx context.Context, secret string) (string, error) {
+// Hash returns the PHC string of password.
+func (h *Hasher) Hash(ctx context.Context, password string) (string, error) {
 	if err := h.acquire(ctx); err != nil {
 		return "", err
 	}
 	defer h.release()
 
-	return h.hash(secret)
+	return h.hash(password)
 }
 
-func (h *Hasher) hash(secret string) (string, error) {
-	if h.algorithm == Bcrypt {
-		out, err := bcrypt.GenerateFromPassword([]byte(secret), _bcryptCost)
-		if err != nil {
-			return "", fmt.Errorf("password: bcrypt: %w", err)
-		}
-
-		return string(out), nil
-	}
-
-	salt := make([]byte, _argonSaltLen)
+func (h *Hasher) hash(password string) (string, error) {
+	salt := make([]byte, _saltLen)
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("password: salt: %w", err)
 	}
 
-	p := defaultArgon()
-	key := argon2.IDKey([]byte(secret), salt, p.time, p.memory, p.threads, _argonKeyLen)
+	key := argon2.IDKey([]byte(password), salt, h.params.Time, h.params.Memory, h.params.Threads, _keyLen)
 
-	return fmt.Sprintf("%sv=%d$m=%d,t=%d,p=%d$%s$%s",
-		_argonPrefix, _argonVersion, p.memory, p.time, p.threads, base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(key)), nil
+	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s", argon2.Version, h.params.Memory, h.params.Time,
+		h.params.Threads, b64(salt), b64(key)), nil
 }
 
-// VerifyAndUpdate reports whether one of the candidates matches stored; when it does and stored
-// is not in the preferred format or parameters, updated is a fresh hash of the matching candidate.
-func (h *Hasher) VerifyAndUpdate(ctx context.Context, stored string, candidates ...string) (ok bool, updated string, err error) {
+// Verify reports whether password matches encoded and whether encoded uses other parameters
+// than the Hasher's; an empty encoded is checked against the dummy hash and never matches.
+func (h *Hasher) Verify(ctx context.Context, encoded, password string) (ok, rehash bool, err error) {
 	if err := h.acquire(ctx); err != nil {
-		return false, "", err
+		return false, false, err
 	}
 	defer h.release()
 
-	for _, candidate := range candidates {
-		if !verify(stored, candidate) {
-			continue
-		}
+	if encoded == "" {
+		_, _, _ = verify(h.dummy, password)
 
-		if !h.needsRehash(stored) {
-			return true, "", nil
-		}
-
-		fresh, err := h.hash(candidate)
-		if err != nil {
-			return true, "", err
-		}
-
-		return true, fresh, nil
+		return false, false, nil
 	}
 
-	return false, "", nil
-}
-
-func (h *Hasher) needsRehash(stored string) bool {
-	if h.algorithm == Bcrypt {
-		cost, err := bcrypt.Cost([]byte(stored))
-
-		return err != nil || cost != _bcryptCost
-	}
-
-	p, _, _, err := parseArgon(stored)
-
-	return err != nil || p != defaultArgon()
-}
-
-func verify(stored, candidate string) bool {
-	if strings.HasPrefix(stored, _argonPrefix) {
-		p, salt, key, err := parseArgon(stored)
-		if err != nil {
-			return false
-		}
-
-		got := argon2.IDKey([]byte(candidate), salt, p.time, p.memory, p.threads, uint32(len(key))) //nolint:gosec // decoded hash lengths are far below uint32
-
-		return subtle.ConstantTimeCompare(got, key) == 1
-	}
-
-	return bcrypt.CompareHashAndPassword([]byte(stored), []byte(candidate)) == nil
-}
-
-func parseArgon(stored string) (p argonParams, salt, key []byte, err error) {
-	parts := strings.Split(stored, "$")
-	if len(parts) != _phcParts || parts[2] != "v="+strconv.Itoa(_argonVersion) {
-		return argonParams{}, nil, nil, errMalformedHash
-	}
-
-	var threads uint32
-
-	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &p.memory, &p.time, &threads); err != nil {
-		return argonParams{}, nil, nil, errMalformedHash
-	}
-
-	p.threads = uint8(min(threads, math.MaxUint8))
-
-	salt, err = base64.RawStdEncoding.DecodeString(parts[4])
+	ok, params, err := verify(encoded, password)
 	if err != nil {
-		return argonParams{}, nil, nil, errMalformedHash
+		return false, false, err
 	}
 
-	key, err = base64.RawStdEncoding.DecodeString(parts[5])
-	if err != nil || len(key) == 0 {
-		return argonParams{}, nil, nil, errMalformedHash
+	return ok, ok && params != h.params, nil
+}
+
+func verify(encoded, password string) (bool, Params, error) {
+	parts := strings.Split(encoded, "$")
+	if len(parts) != _parts || parts[1] != "argon2id" {
+		return false, Params{}, errMalformed
 	}
 
-	return p, salt, key, nil
+	var (
+		version int
+		p       Params
+	)
+
+	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil || version != argon2.Version {
+		return false, Params{}, errMalformed
+	}
+
+	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &p.Memory, &p.Time, &p.Threads); err != nil {
+		return false, Params{}, errMalformed
+	}
+
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		return false, Params{}, errMalformed
+	}
+
+	want, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil || len(want) == 0 {
+		return false, Params{}, errMalformed
+	}
+
+	got := argon2.IDKey([]byte(password), salt, p.Time, p.Memory, p.Threads, uint32(len(want))) //nolint:gosec // key length from a decoded hash
+
+	return subtle.ConstantTimeCompare(got, want) == 1, p, nil
+}
+
+func b64(b []byte) string {
+	return base64.RawStdEncoding.EncodeToString(b)
 }

@@ -237,3 +237,112 @@ func TestErrorSchemasArePublished(t *testing.T) {
 	assert.NotNil(t, doc.Components.SecuritySchemes["bearerAuth"])
 	assert.Equal(t, "3.1.0", doc.OpenAPI)
 }
+
+// identityOperation is an operation of platform conventions §11 with its request fields.
+type identityOperation struct {
+	method, path string
+	request      []string
+	status       string
+}
+
+// identityOperations are the §11 operations implemented so far.
+func identityOperations() map[string]identityOperation {
+	return map[string]identityOperation{
+		"registerWithEmail":       {"POST", "/api/v1/auth/email/register", []string{"email", "password", "displayName"}, "201"},
+		"loginWithEmail":          {"POST", "/api/v1/auth/email/login", []string{"email", "password"}, "200"},
+		"verifyEmail":             {"POST", "/api/v1/auth/email/verify", []string{"token"}, "200"},
+		"resendVerificationEmail": {"POST", "/api/v1/auth/email/verify/resend", nil, "202"},
+		"forgotPassword":          {"POST", "/api/v1/auth/password/forgot", []string{"email"}, "202"},
+		"resetPassword":           {"POST", "/api/v1/auth/password/reset", []string{"token", "password"}, "200"},
+		"refreshToken":            {"POST", "/api/v1/auth/refresh", []string{"refreshToken"}, "200"},
+		"logout":                  {"POST", "/api/v1/auth/logout", nil, "200"},
+		"getMe":                   {"GET", "/api/v1/me", nil, "200"},
+		"updateMe":                {"PATCH", "/api/v1/me", []string{"displayName", "avatarFileId"}, "200"},
+		"changePassword":          {"PUT", "/api/v1/me/password", []string{"currentPassword", "newPassword"}, "200"},
+		"listMySessions":          {"GET", "/api/v1/me/sessions", nil, "200"},
+		"revokeMySession":         {"DELETE", "/api/v1/me/sessions/{id}", nil, "200"},
+		"revokeOtherSessions":     {"POST", "/api/v1/me/sessions/revoke-others", nil, "200"},
+		"listUsers":               {"GET", "/api/v1/users", nil, "200"},
+		"createUser":              {"POST", "/api/v1/users", []string{"email", "phone", "password", "displayName"}, "201"},
+		"getUser":                 {"GET", "/api/v1/users/{id}", nil, "200"},
+		"updateUser":              {"PATCH", "/api/v1/users/{id}", []string{"displayName", "status"}, "200"},
+		"setUserRoles":            {"PUT", "/api/v1/users/{id}/roles", []string{"roles"}, "200"},
+		"listRoles":               {"GET", "/api/v1/roles", nil, "200"},
+		"listPermissions":         {"GET", "/api/v1/permissions", nil, "200"},
+	}
+}
+
+func propertyNames(s *openapi3.SchemaRef) []string {
+	names := make([]string, 0, len(s.Value.Properties))
+	for name := range s.Value.Properties {
+		names = append(names, name)
+	}
+
+	slices.Sort(names)
+
+	return names
+}
+
+func sorted(names []string) []string {
+	out := slices.Clone(names)
+	slices.Sort(out)
+
+	return out
+}
+
+func TestIdentityOperationsFollowTheConventions(t *testing.T) {
+	t.Parallel()
+
+	doc := loadDocument(t)
+
+	for id, want := range identityOperations() {
+		item := doc.Paths.Find(want.path)
+		if !assert.NotNil(t, item, "%s: %s is not documented", id, want.path) {
+			continue
+		}
+
+		op := item.GetOperation(want.method)
+		if !assert.NotNil(t, op, "%s: %s %s is not documented", id, want.method, want.path) {
+			continue
+		}
+
+		assert.Equal(t, id, op.OperationID, "%s %s", want.method, want.path)
+		assert.NotNil(t, op.Responses.Value(want.status), "%s answers %s", id, want.status)
+
+		for code := range op.Responses.Map() {
+			if strings.HasPrefix(code, "2") {
+				assert.Equal(t, want.status, code, "%s has one success status", id)
+			}
+		}
+
+		if want.request == nil {
+			assert.Nil(t, op.RequestBody, "%s takes no body", id)
+
+			continue
+		}
+
+		if assert.NotNil(t, op.RequestBody, "%s needs a body", id) {
+			schema := op.RequestBody.Value.Content.Get("application/json").Schema
+			assert.Equal(t, sorted(want.request), propertyNames(schema), id)
+		}
+	}
+}
+
+func TestIdentityObjectsHaveTheConventionFields(t *testing.T) {
+	t.Parallel()
+
+	schemas := loadDocument(t).Components.Schemas
+
+	for name, fields := range map[string][]string{
+		"User":          {"id", "email", "emailVerified", "phone", "displayName", "avatarUrl", "status", "roles", "hasPassword", "createdAt", "updatedAt"},
+		"Session":       {"id", "userAgent", "ip", "createdAt", "lastActiveAt", "current"},
+		"Role":          {"code", "name", "permissions"},
+		"Permission":    {"code"},
+		"LoginResponse": {"accessToken", "refreshToken", "expiresIn", "tokenType", "user"},
+	} {
+		if assert.Contains(t, schemas, name) {
+			assert.Equal(t, sorted(fields), propertyNames(schemas[name]), name)
+			assert.Equal(t, sorted(fields), sorted(schemas[name].Value.Required), "%s fields are all required", name)
+		}
+	}
+}

@@ -108,15 +108,20 @@ func call(t *testing.T, method, path, token, body string) *response {
 	return out
 }
 
-func token(t *testing.T) string {
-	t.Helper()
-
+// signingKey is AUTH_SIGNING_KEY of docker/docker-compose.ci.yaml: the seed is the bytes 1..32.
+func signingKey() ed25519.PrivateKey {
 	seed := make([]byte, ed25519.SeedSize)
 	for i := range seed {
 		seed[i] = byte(i + 1)
 	}
 
-	signer, err := jwtx.NewSigner(ed25519.NewKeyFromSeed(seed), _issuer, _audience)
+	return ed25519.NewKeyFromSeed(seed)
+}
+
+func token(t *testing.T) string {
+	t.Helper()
+
+	signer, err := jwtx.NewSigner(signingKey(), _issuer, _audience)
 	require.NoError(t, err)
 
 	iat, exp := jwtx.Lifetime(time.Now(), 15*time.Minute)

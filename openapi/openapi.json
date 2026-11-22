@@ -19,6 +19,17 @@
           "type": "string"
         }
       },
+      "Keyword": {
+        "description": "Matches the email, phone or display name",
+        "in": "query",
+        "name": "keyword",
+        "required": false,
+        "schema": {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
       "Limit": {
         "in": "query",
         "name": "limit",
@@ -45,6 +56,7 @@
         "required": false,
         "schema": {
           "default": 1,
+          "maximum": 100000,
           "minimum": 1,
           "type": "integer"
         }
@@ -60,11 +72,61 @@
           "type": "integer"
         }
       },
+      "RoleFilter": {
+        "in": "query",
+        "name": "role",
+        "required": false,
+        "schema": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "SessionID": {
+        "in": "path",
+        "name": "id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
       "Sort": {
         "in": "query",
         "name": "sort",
         "required": false,
         "schema": {
+          "type": "string"
+        }
+      },
+      "UserID": {
+        "in": "path",
+        "name": "id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "UserSort": {
+        "description": "Comma-separated fields of createdAt and email, - for descending",
+        "in": "query",
+        "name": "sort",
+        "required": false,
+        "schema": {
+          "default": "-createdAt",
+          "pattern": "^-?(createdAt|email)(,-?(createdAt|email))?$",
+          "type": "string"
+        }
+      },
+      "UserStatus": {
+        "in": "query",
+        "name": "status",
+        "required": false,
+        "schema": {
+          "enum": [
+            "active",
+            "disabled"
+          ],
           "type": "string"
         }
       }
@@ -182,6 +244,22 @@
       }
     },
     "schemas": {
+      "ChangePasswordInput": {
+        "properties": {
+          "currentPassword": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "newPassword": {
+            "$ref": "#/components/schemas/Password"
+          }
+        },
+        "required": [
+          "newPassword"
+        ],
+        "type": "object"
+      },
       "CreateNoteInput": {
         "properties": {
           "content": {
@@ -196,6 +274,41 @@
         },
         "required": [
           "title"
+        ],
+        "type": "object"
+      },
+      "CreateUserInput": {
+        "properties": {
+          "displayName": {
+            "$ref": "#/components/schemas/DisplayName"
+          },
+          "email": {
+            "format": "email",
+            "type": "string"
+          },
+          "password": {
+            "$ref": "#/components/schemas/Password"
+          },
+          "phone": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DisplayName": {
+        "maxLength": 64,
+        "type": "string"
+      },
+      "EmailInput": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "maxLength": 254,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
         ],
         "type": "object"
       },
@@ -226,6 +339,77 @@
           "errorKey",
           "data",
           "requestId"
+        ],
+        "type": "object"
+      },
+      "LoginInput": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "maxLength": 254,
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object"
+      },
+      "LoginResponse": {
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "expiresIn": {
+            "description": "Seconds until the access token expires",
+            "type": "integer"
+          },
+          "refreshToken": {
+            "type": "string"
+          },
+          "tokenType": {
+            "enum": [
+              "Bearer"
+            ],
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        },
+        "required": [
+          "accessToken",
+          "refreshToken",
+          "expiresIn",
+          "tokenType",
+          "user"
+        ],
+        "type": "object"
+      },
+      "LoginResponseEnvelope": {
+        "properties": {
+          "code": {
+            "const": 0,
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/LoginResponse"
+          },
+          "message": {
+            "const": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "data"
         ],
         "type": "object"
       },
@@ -343,6 +527,243 @@
         ],
         "type": "object"
       },
+      "Password": {
+        "maxLength": 128,
+        "minLength": 8,
+        "type": "string"
+      },
+      "Permission": {
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "PermissionListEnvelope": {
+        "properties": {
+          "code": {
+            "const": 0,
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            },
+            "type": "array"
+          },
+          "message": {
+            "const": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
+        "type": "object"
+      },
+      "RefreshInput": {
+        "properties": {
+          "refreshToken": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "refreshToken"
+        ],
+        "type": "object"
+      },
+      "RegisterInput": {
+        "properties": {
+          "displayName": {
+            "$ref": "#/components/schemas/DisplayName"
+          },
+          "email": {
+            "format": "email",
+            "maxLength": 254,
+            "type": "string"
+          },
+          "password": {
+            "$ref": "#/components/schemas/Password"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object"
+      },
+      "ResetPasswordInput": {
+        "properties": {
+          "password": {
+            "$ref": "#/components/schemas/Password"
+          },
+          "token": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "type": "object"
+      },
+      "Role": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "permissions"
+        ],
+        "type": "object"
+      },
+      "RoleListEnvelope": {
+        "properties": {
+          "code": {
+            "const": 0,
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "type": "array"
+          },
+          "message": {
+            "const": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
+        "type": "object"
+      },
+      "Session": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "lastActiveAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "userAgent": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "userAgent",
+          "ip",
+          "createdAt",
+          "lastActiveAt",
+          "current"
+        ],
+        "type": "object"
+      },
+      "SessionListEnvelope": {
+        "properties": {
+          "code": {
+            "const": 0,
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            },
+            "type": "array"
+          },
+          "message": {
+            "const": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
+        "type": "object"
+      },
+      "SetUserRolesInput": {
+        "properties": {
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "roles"
+        ],
+        "type": "object"
+      },
+      "TokenInput": {
+        "properties": {
+          "token": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      },
+      "UpdateMeInput": {
+        "minProperties": 1,
+        "properties": {
+          "avatarFileId": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "displayName": {
+            "$ref": "#/components/schemas/DisplayName"
+          }
+        },
+        "type": "object"
+      },
       "UpdateNoteInput": {
         "minProperties": 1,
         "properties": {
@@ -356,6 +777,162 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "UpdateUserInput": {
+        "minProperties": 1,
+        "properties": {
+          "displayName": {
+            "$ref": "#/components/schemas/DisplayName"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "User": {
+        "properties": {
+          "avatarUrl": {
+            "description": "May be a signed URL that expires; do not cache it for long",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "hasPassword": {
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "phone": {
+            "description": "E.164",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "emailVerified",
+          "phone",
+          "displayName",
+          "avatarUrl",
+          "status",
+          "roles",
+          "hasPassword",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "UserEnvelope": {
+        "properties": {
+          "code": {
+            "const": 0,
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/User"
+          },
+          "message": {
+            "const": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
+        "type": "object"
+      },
+      "UserPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/User"
+            },
+            "type": "array"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "type": "object"
+      },
+      "UserPageEnvelope": {
+        "properties": {
+          "code": {
+            "const": 0,
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/UserPage"
+          },
+          "message": {
+            "const": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
         "type": "object"
       },
       "ValidationErrorItem": {
@@ -440,6 +1017,661 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/auth/email/login": {
+      "post": {
+        "operationId": "loginWithEmail",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseEnvelope"
+                }
+              }
+            },
+            "description": "Sign in with email and password"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Sign in with email and password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/email/register": {
+      "post": {
+        "description": "Queues the verification email.",
+        "operationId": "registerWithEmail",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseEnvelope"
+                }
+              }
+            },
+            "description": "Register with email and password"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Register with email and password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/email/verify": {
+      "post": {
+        "operationId": "verifyEmail",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            },
+            "description": "Verify the email with the token of the verification email"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Verify the email with the token of the verification email",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/email/verify/resend": {
+      "post": {
+        "operationId": "resendVerificationEmail",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            },
+            "description": "Send the verification email again"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Send the verification email again",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            },
+            "description": "Sign the current session out"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Sign the current session out",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/password/forgot": {
+      "post": {
+        "description": "Answers 202 whether or not the email exists.",
+        "operationId": "forgotPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            },
+            "description": "Mail a password reset link"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Mail a password reset link",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/password/reset": {
+      "post": {
+        "description": "Signs every session of the user out.",
+        "operationId": "resetPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            },
+            "description": "Set a new password with the token of the reset email"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Set a new password with the token of the reset email",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "refreshToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseEnvelope"
+                }
+              }
+            },
+            "description": "Rotate the refresh token"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Rotate the refresh token",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "operationId": "getMe",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            },
+            "description": "Get the current user"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get the current user",
+        "tags": [
+          "me"
+        ]
+      },
+      "patch": {
+        "operationId": "updateMe",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            },
+            "description": "Update the current user"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Update the current user",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/password": {
+      "put": {
+        "description": "Signs the other sessions out. currentPassword is required once a password is set; without one, a recent sign-in is required.",
+        "operationId": "changePassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            },
+            "description": "Change the password"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Change the password",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/sessions": {
+      "get": {
+        "operationId": "listMySessions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionListEnvelope"
+                }
+              }
+            },
+            "description": "List the active sessions"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List the active sessions",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/sessions/revoke-others": {
+      "post": {
+        "operationId": "revokeOtherSessions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            },
+            "description": "Revoke every session but the current one"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Revoke every session but the current one",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/sessions/{id}": {
+      "delete": {
+        "operationId": "revokeMySession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            },
+            "description": "Revoke a session"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Revoke a session",
+        "tags": [
+          "me"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SessionID"
+        }
+      ]
+    },
     "/api/v1/notes": {
       "get": {
         "operationId": "listNotes",
@@ -689,6 +1921,390 @@
         "summary": "Update the title or content of a note",
         "tags": [
           "notes"
+        ]
+      }
+    },
+    "/api/v1/permissions": {
+      "get": {
+        "operationId": "listPermissions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionListEnvelope"
+                }
+              }
+            },
+            "description": "List the permission codes"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List the permission codes",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/roles": {
+      "get": {
+        "operationId": "listRoles",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleListEnvelope"
+                }
+              }
+            },
+            "description": "List the roles"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List the roles",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "operationId": "listUsers",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Keyword"
+          },
+          {
+            "$ref": "#/components/parameters/UserStatus"
+          },
+          {
+            "$ref": "#/components/parameters/RoleFilter"
+          },
+          {
+            "$ref": "#/components/parameters/UserSort"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPageEnvelope"
+                }
+              }
+            },
+            "description": "List users"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List users",
+        "tags": [
+          "users"
+        ]
+      },
+      "post": {
+        "operationId": "createUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            },
+            "description": "Create a user"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a user",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}": {
+      "get": {
+        "operationId": "getUser",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            },
+            "description": "Get a user"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get a user",
+        "tags": [
+          "users"
+        ]
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserID"
+        }
+      ],
+      "patch": {
+        "description": "Disabling a user signs all its sessions out.",
+        "operationId": "updateUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            },
+            "description": "Update the display name or status of a user"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Update the display name or status of a user",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/roles": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserID"
+        }
+      ],
+      "put": {
+        "description": "The roles must include user. Signs all sessions of the user out.",
+        "operationId": "setUserRoles",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserRolesInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            },
+            "description": "Replace the roles of a user"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Replace the roles of a user",
+        "tags": [
+          "users"
         ]
       }
     }

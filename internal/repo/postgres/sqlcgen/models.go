@@ -10,6 +10,20 @@ import (
 	"uuid"
 )
 
+type AppUser struct {
+	ID              uuid.UUID
+	Email           *string
+	Phone           *string
+	PasswordHash    *string
+	DisplayName     string
+	AvatarFileID    *uuid.UUID
+	Status          string
+	EmailVerifiedAt *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	DeletedAt       *time.Time
+}
+
 type AuditLog struct {
 	ID           uuid.UUID
 	ActorSub     *uuid.UUID
@@ -30,4 +44,39 @@ type Note struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt *time.Time
+}
+
+type Session struct {
+	ID           uuid.UUID
+	UserID       uuid.UUID
+	RefreshHash  []byte
+	AuthTime     time.Time
+	ExpiresAt    time.Time
+	RevokedAt    *time.Time
+	UserAgent    string
+	Ip           string
+	CreatedAt    time.Time
+	LastActiveAt time.Time
+}
+
+type SessionRefreshHistory struct {
+	RefreshHash []byte
+	SessionID   uuid.UUID
+	RotatedAt   time.Time
+}
+
+type UserRole struct {
+	UserID   uuid.UUID
+	RoleCode string
+}
+
+type UserToken struct {
+	ID            uuid.UUID
+	UserID        uuid.UUID
+	Purpose       string
+	TokenHash     []byte
+	ExpiresAt     time.Time
+	UsedAt        *time.Time
+	InvalidatedAt *time.Time
+	CreatedAt     time.Time
 }

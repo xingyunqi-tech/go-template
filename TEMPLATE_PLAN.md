@@ -259,7 +259,7 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 | claims | 约定 §5.1 全部 claim；`email_verified` 取签发时状态，`auth_time` 为登录时间、刷新时从会话行读取原样写入 |
 | JWKS | `GET /.well-known/jwks.json` 发布当前公钥与 `AUTH_VERIFY_KEYS`，每个 JWK 为 `kty: OKP`、`crv: Ed25519`，带 `kid`、`alg: EdDSA`、`use: sig`，`Cache-Control: max-age=300` |
 | 验证 | 签发角色用本地公钥集；验证角色用 `jwk.Cache` 注册 `AUTH_JWKS_URL`，注册时不等待首次拉取（启动与 ready 不依赖签发服务），未知 `kid` 触发刷新且两次刷新间隔 ≥ 30 秒；只接受头部 `alg: EdDSA` 且 `kid` 指向 OKP / Ed25519 JWK；校验 `iss` / `aud` / `exp`，时钟偏差 30 秒；过期返回 `auth.tokenExpired`，其他失败 `common.unauthorized`。约定 §5.1 的 RFC 9864 名称切换发生时，验证器同时接受 `EdDSA` 与 `Ed25519` |
-| 吊销 | 写入时机与 TTL 按约定 §5.1，由 `session` usecase 统一调用 `Revoker.Revoke(sid…)`；所有角色在验证后查询 `auth:revoked:sid:{sid}`；Redis 出错 503 `common.serviceUnavailable`；未配置 `REDIS_URL` 时用进程内集合 |
+| 吊销 | 写入时机与 TTL 按约定 §5.1；吊销键在请求事务提交前写出，改密、重置等请求因 5xx 回滚时已写出的键保留到 TTL（会话需重新登录，接受），由 `session` usecase 统一调用 `Revoker.Revoke(sid…)`；所有角色在验证后查询 `auth:revoked:sid:{sid}`；Redis 出错 503 `common.serviceUnavailable`；未配置 `REDIS_URL` 时用进程内集合 |
 | 会话寿命 | `session.expires_at` = 登录时间 + `AUTH_REFRESH_TTL`，轮换不延长（约定 §5.2） |
 | refresh 存储 | `session.refresh_hash` 为当前令牌 SHA-256；已轮换的哈希写入 `session_refresh_history`，保留到会话过期 |
 | 宽限期暂存 | 键 `{service}:auth:refresh:grace:{旧哈希}`，TTL 30 秒；值为新令牌对，AES-256-GCM 加密，密钥 = HKDF-SHA256(旧 refresh 明文, info=`refresh-grace`)，服务端不持有额外密钥，只有持旧令牌者能解密；未配置 `REDIS_URL` 时存进程内带过期的 map（单实例） |
@@ -283,10 +283,10 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 
 | 项 | 实现 |
 |---|---|
-| 注册 | 新用户 `status=active`、`email_verified_at` 为空、角色 `user`；同事务入队验证邮件；邮件链接以 `APP_FRONTEND_URL` 为基址 |
+| 注册 | 新用户 `status=active`、`email_verified_at` 为空、角色 `user`；同事务入队验证邮件；邮件链接以 `APP_FRONTEND_URL` 为基址。注册与登录的 policy 不开请求事务：argon2 在事务外计算 / 校验，之后由用例开短事务写用户、会话与任务。请求事务在第一条语句时才取连接并 `BEGIN`，`resetPassword`、`createUser` 先哈希再访问数据库，`changePassword` 在事务外读出旧哈希、两次 argon2 之后才写库，等待哈希槽位时都不占连接；`DB.InTx` 在 PostgreSQL 回滚失败事务时返回 `ErrRolledBack` |
 | 已验证邮箱 | policy `VerifiedEmail: true` 按 access 的 `email_verified` claim 判断，签发与验证角色相同；模板内暂无接口使用，由业务模块按需声明 |
 | 禁用账号 | 凭据正确且 `status=disabled` → 403 `auth.accountDisabled`；刷新时同样拒绝 |
-| 一次性令牌 | `user_token` 存 SHA-256；同类新令牌签发时旧令牌标记失效；有效期按约定 §11.1；失败 422 `auth.verificationTokenInvalid` |
+| 一次性令牌 | `user_token` 存 SHA-256；同类新令牌签发时旧令牌标记失效（签发时锁用户行，部分唯一索引 `user_token_user_id_purpose_key` 保证同一用途只有一枚有效令牌）；有效期按约定 §11.1；失败 422 `auth.verificationTokenInvalid`。令牌由 worker 在执行 mail 任务时签发：入队只带 `(kind, user_id, locale)`，明文令牌只出现在 worker 内存与邮件中，不进 `river_job`；重试会签发新令牌并使旧令牌失效 |
 | 短信验证码 | Redis `{service}:sms:code:{scene}:{phone}` 存哈希与尝试次数；`{service}:sms:cooldown:{phone}`（60 秒）、`{service}:sms:daily:{phone}:{日期}`（10 次）超出 429 `auth.sendTooFrequent` + `Retry-After`；`{service}:sms:fail:{phone}` 1 小时窗口累计 10 次失败后写 `{service}:sms:lock:{phone}`（1 小时），期间 429 `auth.verificationLocked`；短信网关调用失败 502 `common.badGateway` |
 | `sendSmsCode` 鉴权 | policy 为 optional；`scene=bind_phone` 时 usecase 要求已登录，否则 401 |
 | 短信登录 | 未注册手机号自动注册（约定 §11.1） |
@@ -348,7 +348,7 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 |---|---|---|
 | `app_user` | email、phone、password_hash（可空）、display_name、avatar_file_id、status（`active` / `disabled`）、email_verified_at、deleted_at | identity |
 | `user_role` | user_id、role_code（联合主键） | identity |
-| `user_identity` | user_id、provider（`wechat_miniapp` / `wechat_app` / `alipay`）、subject（openid 或支付宝 id）、union_id；`(provider, subject)` 唯一，`union_id` 普通索引 | identity |
+| `user_identity` | user_id、provider（`wechat_miniapp` / `wechat_app` / `alipay`）、subject（openid 或支付宝 id）、union_id；`(provider, subject)` 唯一，`union_id` 普通索引 | identity（B4 的 `00002` 加入） |
 | `session` | user_id、refresh_hash、auth_time、expires_at、revoked_at、user_agent、ip、last_active_at | identity |
 | `session_refresh_history` | refresh_hash（主键）、session_id、rotated_at | identity |
 | `user_token` | user_id、purpose（`email_verify` / `password_reset`）、token_hash、expires_at、used_at、invalidated_at | identity |
@@ -396,7 +396,7 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 | 账号注销 | `deleteMe` / `deleteUser`：同事务做最后管理员检查（§6.5）、软删用户、删除第三方身份、吊销全部会话、入队 `account.purge`（延时 `ACCOUNT_DELETION_GRACE`，River 唯一任务按 user_id 去重）；任务依次调用登记的 `Purger`（文件、笔记、审计匿名化、身份），全部成功后物理删除用户并经 `events.Publisher` 发布 `user.deleted`（CloudEvents 1.0 JSON）；补偿扫描重新入队超期未清理的用户 |
 | 事件 | `events.Publisher` / `events.Subscriber` 端口；传输方式、键与主题名由 monorepo 配置（`EVENTS_*`），消费者组取 `OTEL_SERVICE_NAME`；模板默认实现只写日志；验证角色收到 `user.deleted` 后入队 `account.purge`，只运行本服务的 `Purger` |
 | 审计 | policy `Audit: "<action>"` 的接口在成功后写 `audit_log`；`GET /api/v1/audit-logs`（`listAuditLogs`，`audit:read`，游标分页） |
-| 邮件 | 模板 `templates/mail/{verify_email,reset_password}.{html,txt}.tmpl`，文案走 i18n；未配置 `SMTP_URL` 时非生产只写日志 |
+| 邮件 | 模板 `templates/mail/{verify_email,reset_password}.{html,txt}.tmpl`，文案走 i18n 的 `mail.*`；`SMTP_URL` 为 `smtp://`（要求 STARTTLS；`?tls=none` 才允许明文，用于本地 Mailpit 与测试）或 `smtps://`（隐式 TLS），用户信息即认证；未配置时只写日志（掩码收件人与主题，不含正文链接），签发角色生产必填 |
 | 文件 | 约定 §11.5 的三个接口；用途在代码中登记：`avatar`（约定默认）与 `attachment`（图片 + pdf，20 MiB）。上传 policy 的请求体上限为各用途上限最大值 + 64 KiB，不受 `BODY_LIMIT` 约束，`MaxBytesReader` 超限映射为 413 `file.tooLarge`；`ValidateRequest` 设 `ExcludeRequestBody`。multipart 流式读取：`purpose` 在 `file` 之前时先校验用途并按该用途上限写入；`file` 在前时按最大上限写入临时对象，读到 `purpose` 后再校验大小与类型，不符则删除。类型取前 512 字节 `http.DetectContentType`，边写边计算 sha256 与大小。`File.url`：local 驱动为 `getFileContent` 签名地址（`expires`、`signature`，HMAC-SHA256，密钥 `FILE_URL_SECRET`），s3 驱动为预签名 GET，有效期 `FILE_URL_TTL`；`getFileContent` 带 `X-Content-Type-Options: nosniff`，非图片带 `Content-Disposition: attachment`，签名无效或过期 404 |
 | 停机 | SIGTERM → ready 503 → `http.Server.Shutdown(SHUTDOWN_TIMEOUT)` → River `Stop` → 关闭连接池 / Redis → flush OTel、Sentry |
 | 进程 | 同一镜像：`serve`、`worker`、`migrate` |
@@ -561,7 +561,11 @@ CI 不再访问 nestjs-template 与 fastapi-temp。
 | B2 | `Makefile`（`test-migrations`、`openapi`、`generate`、去掉 `module` 与 `MOCK_SOURCES` 中已删条目）、`sqlc.yaml`、`.pre-commit-config.yaml`、`scripts/check-generated.sh`、`.golangci.yml` depguard、`.testcoverage.yml` | §7.3、§11 |
 | B2 | `tests/contract/contract_test.go`、`tests/e2e/e2e_test.go`、`docker/docker-compose.{base,redis,postgres,ci}.yaml`、`docker/infra.compose.yaml`、`.env.example`、`.dockerignore` | §12；e2e 以 compose ci 的固定测试签名密钥签发 access；compose 与 `.env.example` 改为 `DATABASE_URL` / `REDIS_URL` 等新变量（e2e 需要），镜像 `postgres:18.7-alpine` |
 | B3 | `pkg/{jwtx,password}` | EdDSA 签发与 JWKS；仅 argon2id、假哈希 |
-| B3 | `cmd/app/main.go` | 新增 `keys generate`、重建 `createsuperuser` |
+| B3 | `cmd/app/main.go` | 新增 `keys generate`（打印私钥 PEM、公钥 PEM 与 kid）、重建 `createsuperuser --email`（密码读标准输入首行，已有账号则加 `admin` 并替换密码） |
+| B3 | `openapi/src/common.yaml`、`internal/controller/http/{execute.go,reqctx}` | `page` 上限 100000（offset 按 bigint 传入）；`listUsers` 的 `sort` 为逗号分隔的 `createdAt` / `email`（至多两个、不重复），`keyword` 按字面子串匹配（转义 `%`、`_`）；`reqctx.SetAuditTarget` 让处理器为无 path id、无响应 id 的审计接口（`changePassword`、`resetPassword`）写入用户 id |
+| B3 | `internal/entity/errors.go`、`internal/controller/http/httperr` | `Error.RetryAfter`：用例层限流的 429 带 `Retry-After` |
+| B3 | `internal/controller/http/{pipeline,policy,ops}.go`、`reqctx` | `reqctx.Client`（客户端 IP 与 User-Agent，供会话记录与按 IP 的用例限流）；§11.1–§11.3 的 policy（共享规则中按 IP / 用户计数的由路由器检查，按账号、会话计数与只计失败的由用例经 `usecase.Limits` 检查）；`Options.JWKS` 挂载 `/.well-known/jwks.json`。验证角色仍挂载身份接口，按方案在 B6 装配 |
+| B3 | `docker/docker-compose.ci.yaml`、`.dockerignore`、`.env.example`、`Makefile` | compose ci 加 Mailpit（宿主端口 `MAILPIT_PORT`，默认 18025）与 `SMTP_URL` / `APP_FRONTEND_URL`；镜像包含 `templates/`；`.env.example` 加 `SMTP_URL`、`MAIL_FROM`、`PASSWORD_HASH_CONCURRENCY`、`SEED_ADMIN_*`；`make keys` |
 | B4 | `internal/repo/webapi/{sms,wechat,alipay}/`、删除 `internal/entity/social.go` | `Provider` 实现；支付宝响应验签（`ALIPAY_PUBLIC_KEY`）；unionid；错误映射为 `auth.providerCodeInvalid` / `common.badGateway` |
 | B5 | `internal/repo/webapi/storage/` | 流式写入、签名地址、`DetectContentType` |
 | B5 | `internal/usecase/audit/`、`internal/worker/` | 查询接口与保留期清理；队列与周期任务（§8） |
@@ -574,7 +578,7 @@ CI 不再访问 nestjs-template 与 fastapi-temp。
 | 批 | 路径 |
 |---|---|
 | B2 | `internal/usecase/contracts.go`、`internal/usecase/note/`、`migrations/core/`、`internal/controller/http/v1/notes.go`、`internal/controller/http/validation.json`（生成）、`pkg/phone`、`testutil.IssueAccessToken`、`internal/entity/note.go`、`internal/entity/nest_error.go`（B4 客户端沿用的旧错误类型，随 B4 删除）、`internal/repo/postgres/notes.go`、`internal/repo/redis/{revocations,idempotency}.go`、`pkg/clientip`、`pkg/telemetry`、`internal/controller/http/testdata/spec.yaml`（路由测试用 spec） |
-| B3 | `migrations/identity/`、`internal/entity/{user,rbac}.go`、`internal/usecase/{auth,user,session}/`、`internal/controller/http/v1/{auth,me,users,roles,jwks}.go`、`internal/repo/webapi/mail/`、`templates/templates.go`、`templates/mail/*.tmpl`、`internal/i18n/locales` 中邮件文案 |
+| B3 | `migrations/identity/00001_identity.sql`（`app_user`、`user_role`、`session`、`session_refresh_history`、`user_token`）、`internal/entity/{user,rbac}.go`、`internal/usecase/{auth,user,session}/`、`internal/usecase/limits.go`、`internal/controller/http/v1/{auth,me,users,views}.go`（`listRoles` / `listPermissions` 在 `users.go`，JWKS 由 `ops.go` 提供）、`internal/repo/postgres/{users,sessions,tokens,mailqueue}.go` 与 queries、`internal/repo/redis/grace.go`、`internal/app/{identity,accounts}.go`、`pkg/password`、`internal/repo/webapi/mail/`、`templates/templates.go`、`templates/mail/*.tmpl`、`internal/i18n/locales` 中邮件文案、`internal/testutil/smtp.go`（go-smtp 进程内服务器）、`tests/e2e/auth_test.go` |
 | B4 | `internal/usecase/{sms,account}/`、`internal/usecase/auth/provider.go`、`internal/events/` |
 | B5 | `internal/usecase/file/`、`internal/controller/http/v1/{files,audit}.go` |
 | B6 | `cmd/modulegen/`、`templates/module/`、`docs/openapi.md`、`docs/benchmark.md` |
@@ -609,7 +613,7 @@ CI 不再访问 nestjs-template 与 fastapi-temp。
 |---|---|---|
 | B1 删除 | §14.1 / §14.2 的 B1 行：7 个无耦合业务模块与 region 种子、parity、drift、同步脚本、nestjs 压测；`docs/platform-conventions.md` 入库；CLAUDE.md 按 §14.5 B1 更新。notifications、alert、accountcleanup 与 v1 身份链路、nestjs 基线、validatorx、旧迁移留到 B2 | `make check`、`make test-integration`、`make test-contract`（重新生成 `docs/contract.md` 后）通过 |
 | B2 平台层与数据基础 | spec 源 + bundler + `/openapi.json`；§5 全部（信封、码表、校验适配器与格式、415 / 413、405 + Allow、401 头、i18n、请求头、CORS、限流、幂等键）、日志、telemetry 与指标、health；core 迁移、`DATABASE_SCHEMA`、River 进服务 schema；jwx 验签 + 吊销键检查 + `testutil.IssueAccessToken`；`notes` 示例；删除 §14.1 B2 行（含 notifications / alert / accountcleanup、v1 身份代码、邮件、modulegen） | 单元（码表、映射两种文档、格式、GCRA）；集成（notes 全链路含登录态 + 响应对照 spec、uuid 读写）；契约（health、notes、文档一致性）；e2e（health、notes）；`make test-migrations` |
-| B3 认证核心 | identity 迁移、EdDSA 签发 + JWKS、邮件模板与 `mail` 队列、约定 §11.1 邮箱类接口与 `refreshToken` / `logout`、§11.2 中 `getMe` / `updateMe`（`avatarFileId` 校验在 B5 补齐）/ `changePassword` / 会话三接口、§11.3 除 `deleteUser` 外全部、RBAC、`role.lastAdmin`（禁用 / 移除角色）、共享限流规则（除 `auth-sms`）、审计写入、seed、`createsuperuser`、`keys generate` | 集成：轮换并发、宽限期、历史重用、吊销时机、只计失败规则；契约：已实现的 §11 接口与对象字段；e2e 注册到登出 |
+| B3 认证核心 | identity 迁移、EdDSA 签发 + JWKS、邮件模板与 `mail` 队列、约定 §11.1 邮箱类接口与 `refreshToken` / `logout`、§11.2 中 `getMe` / `updateMe`（B5 之前没有可引用的文件，非 null 的 `avatarFileId` 一律 422 `exists`）/ `changePassword` / 会话三接口、§11.3 除 `deleteUser` 外全部、RBAC、`role.lastAdmin`（禁用 / 移除角色）、共享限流规则（除 `auth-sms`）、审计写入、seed、`createsuperuser`、`keys generate` | 集成：轮换并发、宽限期、历史重用、吊销时机、只计失败规则；契约：已实现的 §11 接口与对象字段；e2e 注册到登出 |
 | B4 短信、provider、注销 | `sendSmsCode`、`loginWithSms`、`bindPhone`、`auth-sms`；`listAuthProviders`、`loginWithProvider`（三个 provider）、`bindPhoneWithWechat`；`deleteMe` / `deleteUser`（含 `role.lastAdmin`）、`account.purge`、`user.deleted` 发布 | 单元（provider 客户端 httptest、支付宝验签、错误映射）；集成（短信限额与锁定、注销任务、软删后重新注册、事件发布）；e2e 注销 |
 | B5 文件、审计与任务 | `uploadFile`、`getFile`、`getFileContent`、`avatarFileId` 的 `exists` 校验；`listAuditLogs`；周期任务 | 集成（MinIO、类型识别、`purpose` 顺序、超限清理、签名地址）；e2e 上传 |
 | B6 共存与交付 | 验证角色装配与事件订阅、模块生成器、Makefile / compose / workflow / Dockerfile、§14.5 B6 文档、压测 | 契约 §11 全量；互通测试；`make ci`、`make test-e2e`、`make image` 本地通过；CI 全绿 |

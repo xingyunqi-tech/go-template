@@ -77,6 +77,17 @@ func TestProductionRequirements(t *testing.T) {
 	assert.False(t, cfg.App.Docs())
 }
 
+func TestProductionIssuerNeedsFrontendAndSMTP(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "svc")
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("AUTH_SIGNING_KEY", "pem")
+
+	_, err := config.Load()
+	require.ErrorIs(t, err, config.ErrInvalid)
+	assert.Contains(t, err.Error(), "APP_FRONTEND_URL")
+	assert.Contains(t, err.Error(), "SMTP_URL")
+}
+
 func TestSigningKeyAndJWKSURLAreExclusive(t *testing.T) {
 	t.Setenv("OTEL_SERVICE_NAME", "svc")
 	t.Setenv("AUTH_SIGNING_KEY", "pem")
@@ -97,6 +108,7 @@ func TestInvalidValuesAreReported(t *testing.T) {
 		"METRICS_TOKEN":         "short",
 		"AUTH_ACCESS_TTL":       "15",
 		"APP_DEFAULT_LOCALE":    "fr",
+		"SEED_ADMIN_PASSWORD":   "short",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("OTEL_SERVICE_NAME", "svc")

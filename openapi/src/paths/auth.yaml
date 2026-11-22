@@ -1,0 +1,218 @@
+paths:
+  /api/v1/auth/email/register:
+    post:
+      operationId: registerWithEmail
+      tags:
+      - auth
+      summary: Register with email and password
+      description: Queues the verification email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+      responses:
+        '201':
+          description: Register with email and password
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/auth/email/login:
+    post:
+      operationId: loginWithEmail
+      tags:
+      - auth
+      summary: Sign in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+      responses:
+        '200':
+          description: Sign in with email and password
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/auth/email/verify:
+    post:
+      operationId: verifyEmail
+      tags:
+      - auth
+      summary: Verify the email with the token of the verification email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenInput'
+      responses:
+        '200':
+          description: Verify the email with the token of the verification email
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                type: 'null'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/auth/email/verify/resend:
+    post:
+      operationId: resendVerificationEmail
+      tags:
+      - auth
+      summary: Send the verification email again
+      security:
+      - bearerAuth: []
+      responses:
+        '202':
+          description: Send the verification email again
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                type: 'null'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/password/forgot:
+    post:
+      operationId: forgotPassword
+      tags:
+      - auth
+      summary: Mail a password reset link
+      description: Answers 202 whether or not the email exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailInput'
+      responses:
+        '202':
+          description: Mail a password reset link
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                type: 'null'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/auth/password/reset:
+    post:
+      operationId: resetPassword
+      tags:
+      - auth
+      summary: Set a new password with the token of the reset email
+      description: Signs every session of the user out.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordInput'
+      responses:
+        '200':
+          description: Set a new password with the token of the reset email
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                type: 'null'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/auth/refresh:
+    post:
+      operationId: refreshToken
+      tags:
+      - auth
+      summary: Rotate the refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshInput'
+      responses:
+        '200':
+          description: Rotate the refresh token
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      tags:
+      - auth
+      summary: Sign the current session out
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Sign the current session out
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                type: 'null'
+        '401':
+          $ref: '#/components/responses/Unauthorized'

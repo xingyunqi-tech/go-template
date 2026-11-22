@@ -91,7 +91,7 @@ func (d *Database) prepareTemplate(ctx context.Context) error {
 
 	log := slog.New(slog.DiscardHandler)
 
-	return app.MigrateUp(ctx, pool, "public", []migrations.Set{migrations.Core()}, log) //nolint:wrapcheck // migration errors are wrapped
+	return app.MigrateUp(ctx, pool, "public", []migrations.Set{migrations.Core(), migrations.Identity()}, log) //nolint:wrapcheck // migration errors are wrapped
 }
 
 // Clone creates a private copy of the template database and returns its DSN; it is dropped

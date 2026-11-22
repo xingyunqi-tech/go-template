@@ -92,6 +92,10 @@ migrate-create: ## 新建顺序编号的 goose SQL 迁移（NAME=add_orders，SE
 seed: ## 写入种子数据（读取 .env）
 	$(ENV_RUN) $(GO) run ./cmd/app seed
 
+.PHONY: keys
+keys: ## 生成新的 Ed25519 签名密钥（AUTH_SIGNING_KEY）及其公钥（AUTH_VERIFY_KEYS）
+	$(GO) run ./cmd/app keys generate
+
 .PHONY: dev
 dev: ## 本地启动 API（读取 .env；端口 APP_PORT，默认 3000）
 	$(ENV_RUN) $(GO) run ./cmd/app serve

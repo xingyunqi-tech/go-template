@@ -43,7 +43,9 @@ func (p *pipeline) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r = r.WithContext(context.WithValue(reqctx.WithOperation(r.Context(), op.id), paramsKey{}, params))
+	ctx := reqctx.WithOperation(r.Context(), op.id)
+	ctx = reqctx.WithClient(ctx, &reqctx.Client{IP: p.opts.TrustedProxies.ClientIP(r), UserAgent: r.UserAgent()})
+	r = r.WithContext(context.WithValue(ctx, paramsKey{}, params))
 
 	r, err := p.prepare(w, r, op, params)
 	if err != nil {

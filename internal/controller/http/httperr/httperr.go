@@ -89,10 +89,15 @@ func validationData(ctx context.Context, v *entity.ValidationError, translate Tr
 }
 
 // Write writes err with the headers its status requires: WWW-Authenticate for 401, Retry-After
-// for 503 when the caller did not set one.
+// from the error, and for 503 a default one when nothing set it.
 func Write(ctx context.Context, w http.ResponseWriter, err error, translate Translate) (int, error) {
 	status, body := Build(ctx, err, translate)
 	h := w.Header()
+
+	var domain *entity.Error
+	if errors.As(err, &domain) && domain.RetryAfter > 0 {
+		h.Set("Retry-After", strconv.FormatInt(domain.RetryAfter, 10))
+	}
 
 	switch status {
 	case http.StatusUnauthorized:

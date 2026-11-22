@@ -232,11 +232,17 @@ func (p *pipeline) audited(op *operation, next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		buf := newBuffered(w)
+		target := &reqctx.AuditTarget{ResourceID: uuid.Nil(), ActorSub: uuid.Nil()}
+		ctx := reqctx.WithAuditTarget(r.Context(), target)
+		r = r.WithContext(ctx)
 
 		next.ServeHTTP(buf, r)
 
 		if status := buf.statusOr200(); status >= http.StatusOK && status < http.StatusMultipleChoices {
-			if err := p.opts.Auditor.Log(r.Context(), p.auditLog(r, op, spec, buf.body.Bytes())); err != nil {
+			l := p.auditLog(r, op, spec, buf.body.Bytes())
+			target.Apply(l)
+
+			if err := p.opts.Auditor.Log(ctx, l); err != nil {
 				p.errs.write(w, r, err)
 
 				return

@@ -1,0 +1,214 @@
+paths:
+  /api/v1/users:
+    get:
+      operationId: listUsers
+      tags:
+      - users
+      summary: List users
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - $ref: '#/components/parameters/UserStatus'
+      - $ref: '#/components/parameters/RoleFilter'
+      - $ref: '#/components/parameters/UserSort'
+      responses:
+        '200':
+          description: List users
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    post:
+      operationId: createUser
+      tags:
+      - users
+      summary: Create a user
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserInput'
+      responses:
+        '201':
+          description: Create a user
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/users/{id}:
+    parameters:
+    - $ref: '#/components/parameters/UserID'
+    get:
+      operationId: getUser
+      tags:
+      - users
+      summary: Get a user
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Get a user
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    patch:
+      operationId: updateUser
+      tags:
+      - users
+      summary: Update the display name or status of a user
+      description: Disabling a user signs all its sessions out.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserInput'
+      responses:
+        '200':
+          description: Update the display name or status of a user
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/users/{id}/roles:
+    parameters:
+    - $ref: '#/components/parameters/UserID'
+    put:
+      operationId: setUserRoles
+      tags:
+      - users
+      summary: Replace the roles of a user
+      description: The roles must include user. Signs all sessions of the user out.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserRolesInput'
+      responses:
+        '200':
+          description: Replace the roles of a user
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/roles:
+    get:
+      operationId: listRoles
+      tags:
+      - users
+      summary: List the roles
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: List the roles
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/permissions:
+    get:
+      operationId: listPermissions
+      tags:
+      - users
+      summary: List the permission codes
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: List the permission codes
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'

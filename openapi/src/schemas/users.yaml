@@ -1,0 +1,189 @@
+components:
+  schemas:
+    User:
+      type: object
+      required: [id, email, emailVerified, phone, displayName, avatarUrl, status, roles, hasPassword, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: [string, 'null']
+        emailVerified:
+          type: boolean
+        phone:
+          type: [string, 'null']
+          description: E.164
+        displayName:
+          type: string
+        avatarUrl:
+          type: [string, 'null']
+          description: May be a signed URL that expires; do not cache it for long
+        status:
+          type: string
+          enum: [active, disabled]
+        roles:
+          type: array
+          items:
+            type: string
+        hasPassword:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UserPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    Session:
+      type: object
+      required: [id, userAgent, ip, createdAt, lastActiveAt, current]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userAgent:
+          type: string
+        ip:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastActiveAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+    Role:
+      type: object
+      required: [code, name, permissions]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+    Permission:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+    DisplayName:
+      type: string
+      maxLength: 64
+    Password:
+      type: string
+      minLength: 8
+      maxLength: 128
+    UpdateMeInput:
+      type: object
+      minProperties: 1
+      properties:
+        displayName:
+          $ref: '#/components/schemas/DisplayName'
+        avatarFileId:
+          type: [string, 'null']
+          format: uuid
+    ChangePasswordInput:
+      type: object
+      required: [newPassword]
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 128
+        newPassword:
+          $ref: '#/components/schemas/Password'
+    CreateUserInput:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        password:
+          $ref: '#/components/schemas/Password'
+        displayName:
+          $ref: '#/components/schemas/DisplayName'
+    UpdateUserInput:
+      type: object
+      minProperties: 1
+      properties:
+        displayName:
+          $ref: '#/components/schemas/DisplayName'
+        status:
+          type: string
+          enum: [active, disabled]
+    SetUserRolesInput:
+      type: object
+      required: [roles]
+      properties:
+        roles:
+          type: array
+          items:
+            type: string
+  parameters:
+    UserID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SessionID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Keyword:
+      name: keyword
+      in: query
+      required: false
+      description: Matches the email, phone or display name
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 100
+    UserStatus:
+      name: status
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [active, disabled]
+    RoleFilter:
+      name: role
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+    UserSort:
+      name: sort
+      in: query
+      required: false
+      description: Comma-separated fields of createdAt and email, - for descending
+      schema:
+        type: string
+        pattern: '^-?(createdAt|email)(,-?(createdAt|email))?$'
+        default: -createdAt

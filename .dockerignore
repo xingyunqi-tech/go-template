@@ -7,5 +7,6 @@
 !internal/
 !openapi/
 !pkg/
+!templates/
 **/*_test.go
 **/testdata/

@@ -1,6 +1,12 @@
 package ratelimit
 
-import "time"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
+)
+
+const _accountDigits = 16
 
 // Subject kinds of a rule.
 const (
@@ -64,4 +70,16 @@ func IPSubject(subjectIP string) string {
 // UserSubject is the subject u:{sub}.
 func UserSubject(sub string) string {
 	return "u:" + sub
+}
+
+// AccountSubject is the subject a:{first 16 hex digits of SHA-256(normalized email or phone)}.
+func AccountSubject(normalized string) string {
+	sum := sha256.Sum256([]byte(normalized))
+
+	return "a:" + hex.EncodeToString(sum[:])[:_accountDigits]
+}
+
+// SessionSubject is the subject s:{sid}.
+func SessionSubject(sid string) string {
+	return "s:" + sid
 }

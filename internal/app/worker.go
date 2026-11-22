@@ -12,15 +12,37 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/xingyunqi-tech/go-template/internal/config"
+	"github.com/xingyunqi-tech/go-template/internal/i18n"
+	"github.com/xingyunqi-tech/go-template/internal/repo/postgres"
+	"github.com/xingyunqi-tech/go-template/internal/repo/redis"
 	"github.com/xingyunqi-tech/go-template/internal/worker"
 )
 
 const _stopAndCancelGrace = 5 * time.Second
 
 // NewWorkerClient builds the River client that works the queues and schedules the periodic
-// jobs; it is nil while no job is registered.
+// jobs; it is nil while no job is registered. The issuing service works the mail queue.
 func NewWorkerClient(cfg *config.Config, log *slog.Logger, infra *Infra) (*river.Client[pgx.Tx], error) {
-	riverCfg, workers := worker.Config(&worker.Deps{Schema: cfg.Database.Schema, Log: log})
+	deps := &worker.Deps{Schema: cfg.Database.Schema, Log: log, Mail: nil}
+
+	if cfg.Auth.Role() != config.RoleVerifier {
+		translator, err := i18n.New(cfg.App.DefaultLocale)
+		if err != nil {
+			return nil, fmt.Errorf("app: %w", err)
+		}
+
+		identity, err := newIdentity(&identityDeps{
+			cfg: cfg, log: log, db: postgres.NewDB(infra.Pool, _acquireTimeout, log), infra: infra, keys: nil,
+			translator: translator, limiter: nil, revoker: redis.NewRevocations(infra.Redis),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		deps.Mail = identity.Auth
+	}
+
+	riverCfg, workers := worker.Config(deps)
 	if workers == 0 {
 		return nil, nil //nolint:nilnil // nothing to work
 	}

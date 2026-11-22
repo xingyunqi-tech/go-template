@@ -327,6 +327,10 @@ func TestRevokedSessionsAndRateLimitsUseTheSharedKeys(t *testing.T) {
 	assert.Equal(t, "60", ok.Header.Get("X-RateLimit-Limit"))
 	assert.Equal(t, "59", ok.Header.Get("X-RateLimit-Remaining"))
 
+	for range 20 {
+		require.Equal(t, http.StatusOK, a.do(http.MethodGet, "/api/v1/notes", token, "").Status)
+	}
+
 	ipKey, err := a.infra.Redis.Get(t.Context(), "rl:app-test-ip:ip:127.0.0.1").Result()
 	require.NoError(t, err)
 	assert.Regexp(t, `^\d{13}$`, ipKey)

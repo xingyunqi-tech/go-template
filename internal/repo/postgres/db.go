@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/repo/postgres/sqlcgen"
 )
 
@@ -30,9 +31,35 @@ func NewDB(pool *pgxpool.Pool, acquireTimeout time.Duration, log *slog.Logger) *
 
 type txKey struct{}
 
+// txState is a request transaction; it takes a connection and begins at its first statement.
 type txState struct {
+	db          *DB
+	conn        *pgxpool.Conn
 	tx          pgx.Tx
 	afterCommit []func(context.Context)
+}
+
+// open begins the transaction unless it already has.
+func (s *txState) open(ctx context.Context) (pgx.Tx, error) {
+	if s.tx != nil {
+		return s.tx, nil
+	}
+
+	conn, err := s.db.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		conn.Release()
+
+		return nil, fmt.Errorf("postgres: begin: %w", err)
+	}
+
+	s.conn, s.tx = conn, tx
+
+	return tx, nil
 }
 
 // WithoutTx returns ctx detached from the request transaction.
@@ -49,7 +76,12 @@ func stateOf(ctx context.Context) *txState {
 // dbtx runs fn with the request transaction, or with a connection held only for fn.
 func (d *DB) dbtx(ctx context.Context, fn func(sqlcgen.DBTX) error) error {
 	if s := stateOf(ctx); s != nil {
-		return fn(s.tx)
+		tx, err := s.open(ctx)
+		if err != nil {
+			return err
+		}
+
+		return fn(tx)
 	}
 
 	conn, err := d.acquire(ctx)
@@ -67,7 +99,7 @@ func (d *DB) acquire(ctx context.Context) (*pgxpool.Conn, error) {
 
 	conn, err := d.pool.Acquire(acquireCtx)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: acquire connection: %w", err)
+		return nil, entity.Wrap(entity.KeyServiceUnavailable, fmt.Errorf("postgres: acquire connection: %w", err))
 	}
 
 	return conn, nil
@@ -77,37 +109,27 @@ func (d *DB) queries(ctx context.Context, fn func(*sqlcgen.Queries) error) error
 	return d.dbtx(ctx, func(db sqlcgen.DBTX) error { return fn(sqlcgen.New(db)) })
 }
 
-// Tx is an open request transaction.
+// Tx is a request transaction.
 type Tx struct {
 	db    *DB
-	conn  *pgxpool.Conn
 	state *txState
 }
 
-// Begin opens a transaction on its own connection and returns a context carrying it.
+// Begin returns a context carrying a transaction that takes its connection and begins at its
+// first statement.
 func (d *DB) Begin(ctx context.Context) (context.Context, *Tx, error) {
-	conn, err := d.acquire(ctx)
-	if err != nil {
-		return ctx, nil, err
-	}
+	state := &txState{db: d, conn: nil, tx: nil, afterCommit: nil}
 
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		conn.Release()
-
-		return ctx, nil, fmt.Errorf("postgres: begin: %w", err)
-	}
-
-	state := &txState{tx: tx, afterCommit: nil}
-
-	return context.WithValue(ctx, txKey{}, state), &Tx{db: d, conn: conn, state: state}, nil
+	return context.WithValue(ctx, txKey{}, state), &Tx{db: d, state: state}, nil
 }
 
 // Commit commits and then runs the after-commit callbacks; committed is false when PostgreSQL
 // rolled the failed transaction back instead.
 func (t *Tx) Commit(ctx context.Context) (committed bool, err error) {
-	err = t.state.tx.Commit(ctx)
-	t.conn.Release()
+	if t.state.tx != nil {
+		err = t.state.tx.Commit(ctx)
+		t.state.conn.Release()
+	}
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrTxCommitRollback) {
@@ -130,9 +152,13 @@ func (t *Tx) Commit(ctx context.Context) (committed bool, err error) {
 
 // Rollback discards the transaction and its after-commit callbacks.
 func (t *Tx) Rollback(ctx context.Context) {
-	defer t.conn.Release()
-
 	t.state.afterCommit = nil
+
+	if t.state.tx == nil {
+		return
+	}
+
+	defer t.state.conn.Release()
 
 	if err := t.state.tx.Rollback(context.WithoutCancel(ctx)); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
 		t.db.log.WarnContext(ctx, "rollback failed", "error", err.Error())
@@ -157,6 +183,9 @@ func IsDatabaseError(err error) bool {
 	return errors.As(err, &pgErr)
 }
 
+// ErrRolledBack reports a transaction PostgreSQL rolled back at commit after a failed statement.
+var ErrRolledBack = errors.New("postgres: transaction rolled back")
+
 // InTx runs fn in a transaction of its own, committed when fn succeeds.
 func (d *DB) InTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	txCtx, tx, err := d.Begin(WithoutTx(ctx))
@@ -170,8 +199,13 @@ func (d *DB) InTx(ctx context.Context, fn func(ctx context.Context) error) error
 		return err
 	}
 
-	if _, err := tx.Commit(ctx); err != nil {
+	committed, err := tx.Commit(ctx)
+	if err != nil {
 		return err
+	}
+
+	if !committed {
+		return ErrRolledBack
 	}
 
 	return nil

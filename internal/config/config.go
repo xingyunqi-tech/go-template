@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/go-playground/validator/v10"
@@ -36,6 +37,8 @@ const (
 	_redacted        = "***"
 	_developmentDSN  = "postgresql://root:secret@localhost:5432/api?sslmode=disable" //nolint:gosec // local development database of make infra
 	_minMetricsToken = 16
+	_minPassword     = 8
+	_maxPassword     = 128
 )
 
 var (
@@ -74,6 +77,8 @@ type Config struct {
 	HTTP      HTTP
 	Metrics   Metrics
 	Telemetry Telemetry
+	Mail      Mail
+	Seed      Seed
 }
 
 // App holds the process settings.
@@ -141,6 +146,21 @@ type Auth struct {
 	JWKSURL    string        `env:"AUTH_JWKS_URL"                         validate:"omitempty,url"`
 	AccessTTL  time.Duration `env:"AUTH_ACCESS_TTL"  envDefault:"15m"     validate:"gt=0"`
 	RefreshTTL time.Duration `env:"AUTH_REFRESH_TTL" envDefault:"720h"    validate:"gt=0"`
+	// HashConcurrency bounds the argon2id computations running at once.
+	HashConcurrency int `env:"PASSWORD_HASH_CONCURRENCY" envDefault:"2" validate:"min=1"`
+}
+
+// Mail configures the SMTP server of the issuing service; without SMTP_URL mails are only
+// logged.
+type Mail struct {
+	SMTPURL Secret `env:"SMTP_URL"`
+	From    string `env:"MAIL_FROM" envDefault:"no-reply@example.com" validate:"email"`
+}
+
+// Seed holds the administrator the production seed creates when no active admin exists.
+type Seed struct {
+	AdminEmail    string `env:"SEED_ADMIN_EMAIL"    validate:"omitempty,email"`
+	AdminPassword Secret `env:"SEED_ADMIN_PASSWORD"`
 }
 
 // Role is how this service takes part in authentication.
@@ -246,6 +266,10 @@ func (c *Config) problems() []string {
 		problems = append(problems, "AUTH_SIGNING_KEY, AUTH_JWKS_URL: only one of them may be set")
 	}
 
+	if pw := c.Seed.AdminPassword.Value(); pw != "" && (utf8.RuneCountInString(pw) < _minPassword || utf8.RuneCountInString(pw) > _maxPassword) {
+		problems = append(problems, fmt.Sprintf("SEED_ADMIN_PASSWORD: must have %d to %d characters", _minPassword, _maxPassword))
+	}
+
 	if token := c.Metrics.Token.Value(); token != "" && len(token) < _minMetricsToken {
 		problems = append(problems, fmt.Sprintf("METRICS_TOKEN: must be at least %d characters", _minMetricsToken))
 	}
@@ -278,15 +302,36 @@ func (c *Config) productionProblems() []string {
 		problems = append(problems, "RATE_LIMIT_ENABLED: must be true in production")
 	}
 
-	if c.Auth.Role() == RoleEphemeralIssuer {
-		problems = append(problems, "AUTH_SIGNING_KEY, AUTH_JWKS_URL: one of them is required in production")
-	}
+	problems = append(problems, c.authProblems()...)
 
 	if c.Telemetry.Prometheus() && c.Metrics.Token == "" && c.Metrics.Port == 0 {
 		problems = append(problems, "METRICS_TOKEN, METRICS_PORT: one of them is required in production when OTEL_METRICS_EXPORTER=prometheus")
 	}
 
 	return problems
+}
+
+// authProblems are the production requirements of the authentication role.
+func (c *Config) authProblems() []string {
+	switch c.Auth.Role() {
+	case RoleEphemeralIssuer:
+		return []string{"AUTH_SIGNING_KEY, AUTH_JWKS_URL: one of them is required in production"}
+	case RoleIssuer:
+		var problems []string
+
+		if c.App.FrontendURL == "" {
+			problems = append(problems, "APP_FRONTEND_URL: required in production for the issuing service")
+		}
+
+		if c.Mail.SMTPURL == "" {
+			problems = append(problems, "SMTP_URL: required in production for the issuing service")
+		}
+
+		return problems
+	case RoleVerifier:
+	}
+
+	return nil
 }
 
 // parseEnv parses every settings group of cfg, names the variable of every field that failed and

@@ -1,4 +1,4 @@
-# CI / e2e：生产镜像以 APP_ENV=production 起完整服务栈；AUTH_SIGNING_KEY 为 e2e 用例共用的固定测试密钥
+# CI / e2e：生产镜像以 APP_ENV=production 起完整服务栈；AUTH_SIGNING_KEY 为 e2e 用例共用的固定测试密钥，邮件发往 Mailpit
 #
 # 用法：make test-e2e
 
@@ -11,6 +11,9 @@ x-ci-env: &ci-env
   TRUSTED_PROXIES: '1'
   METRICS_TOKEN: ci-metrics-token-0123456789
   REDIS_URL: redis://redis:6379/0
+  APP_FRONTEND_URL: http://localhost:5173
+  SMTP_URL: smtp://mailpit:1025?tls=none
+  MAIL_FROM: no-reply@example.com
   AUTH_ISSUER: go-template-e2e
   AUTH_AUDIENCE: go-template-e2e
   AUTH_SIGNING_KEY: |
@@ -24,6 +27,16 @@ services:
 
   redis:
     ports: !reset []
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - '127.0.0.1:${MAILPIT_PORT:-18025}:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   migrate:
     environment: *ci-env
@@ -56,3 +69,5 @@ services:
     depends_on:
       seed:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy

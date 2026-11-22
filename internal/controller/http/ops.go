@@ -20,9 +20,10 @@ import (
 var ValidationDocument []byte
 
 const (
-	_scalarVersion   = "1.80.0"
-	_readyRetryAfter = "5"
-	_docsCSP         = "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
+	_jwksCacheControl = "max-age=300"
+	_scalarVersion    = "1.80.0"
+	_readyRetryAfter  = "5"
+	_docsCSP          = "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
 		"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self'"
 )
 
@@ -50,6 +51,14 @@ func mountOps(mux chi.Router, opts *Options, errs *errorWriter) {
 
 	if opts.Metrics != nil {
 		mux.Get("/metrics", metricsHandler(opts.Metrics, opts.MetricsToken, errs))
+	}
+
+	if opts.JWKS != nil {
+		mux.Get("/.well-known/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", _jwksCacheControl)
+			_, _ = w.Write(opts.JWKS)
+		})
 	}
 
 	if opts.DocsEnabled {
