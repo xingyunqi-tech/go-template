@@ -1,0 +1,53 @@
+# scripts/bench/run.sh 的 compose 叠加（相对路径按第一个文件所在的 docker/ 解析）：生产镜像，RATE_LIMIT_ENABLED=false 关闭限流（需要非生产 APP_ENV），api 限 API_CPUS / API_MEM
+
+x-bench-env: &bench-env
+  APP_ENV: test
+  LOG_LEVEL: warn
+  RATE_LIMIT_ENABLED: 'false'
+  REDIS_URL: redis://redis:6379/0
+  AUTH_ISSUER: go-template-bench
+  AUTH_AUDIENCE: go-template-bench
+  AUTH_SIGNING_KEY: |
+    -----BEGIN PRIVATE KEY-----
+    MC4CAQAwBQYDK2VwBCIEIAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g
+    -----END PRIVATE KEY-----
+  GOMEMLIMIT: 800MiB
+
+services:
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  migrate:
+    environment: *bench-env
+
+  seed:
+    image: go-template:local
+    pull_policy: never
+    env_file:
+      - ../.env.example
+    command: ['seed']
+    restart: 'no'
+    environment:
+      <<: *bench-env
+      DATABASE_URL: postgresql://${DATABASE_USERNAME:-root}:${DATABASE_PASSWORD:-secret}@postgres:5432/${DATABASE_NAME:-api}?sslmode=disable
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    ports: !reset []
+    environment: *bench-env
+    deploy:
+      resources:
+        limits:
+          cpus: '${API_CPUS:-2}'
+          memory: ${API_MEM:-1g}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  worker:
+    environment: *bench-env

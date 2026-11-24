@@ -1,0 +1,95 @@
+package v1
+
+import (
+	"context"
+
+	"github.com/xingyunqi-tech/go-template/internal/controller/http/gen"
+	"github.com/xingyunqi-tech/go-template/internal/controller/http/reqctx"
+	"github.com/xingyunqi-tech/go-template/internal/controller/http/response"
+	"github.com/xingyunqi-tech/go-template/internal/entity"
+	"github.com/xingyunqi-tech/go-template/pkg/jsontime"
+	"github.com/xingyunqi-tech/go-template/pkg/pagination"
+)
+
+func {{.name}}Of(n *entity.{{.Name}}) gen.{{.Name}} {
+	return gen.{{.Name}}{
+		Id: n.ID, Title: n.Title, Content: n.Content, CreatedAt: jsontime.New(n.CreatedAt), UpdatedAt: jsontime.New(n.UpdatedAt),
+	}
+}
+
+func {{.name}}Envelope(n *entity.{{.Name}}) gen.{{.Name}}Envelope {
+	return gen.{{.Name}}Envelope{Code: response.Code, Message: response.Message, Data: {{.name}}Of(n)}
+}
+
+// List{{.Plural}} handles GET /api/v1/{{.plural}}.
+func (s *Server) List{{.Plural}}(ctx context.Context, req gen.List{{.Plural}}RequestObject) (gen.List{{.Plural}}ResponseObject, error) {
+	cursor, limit := "", pagination.DefaultSize
+
+	if req.Params.Cursor != nil {
+		cursor = *req.Params.Cursor
+	}
+
+	if req.Params.Limit != nil {
+		limit = *req.Params.Limit
+	}
+
+	page, err := s.{{.plural}}.List(ctx, reqctx.PrincipalOf(ctx).Subject, cursor, limit)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	items := make([]gen.{{.Name}}, 0, len(page.Items))
+	for i := range page.Items {
+		items = append(items, {{.name}}Of(&page.Items[i]))
+	}
+
+	return gen.List{{.Plural}}200JSONResponse{
+		Code: response.Code, Message: response.Message, Data: gen.{{.Name}}Page{Items: items, NextCursor: page.NextCursor},
+	}, nil
+}
+
+// Create{{.Name}} handles POST /api/v1/{{.plural}}.
+func (s *Server) Create{{.Name}}(ctx context.Context, req gen.Create{{.Name}}RequestObject) (gen.Create{{.Name}}ResponseObject, error) {
+	content := ""
+	if req.Body.Content != nil {
+		content = *req.Body.Content
+	}
+
+	n, err := s.{{.plural}}.Create(ctx, reqctx.PrincipalOf(ctx).Subject, req.Body.Title, content)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	return gen.Create{{.Name}}201JSONResponse({{.name}}Envelope(n)), nil
+}
+
+// Get{{.Name}} handles GET /api/v1/{{.plural}}/{id}.
+func (s *Server) Get{{.Name}}(ctx context.Context, req gen.Get{{.Name}}RequestObject) (gen.Get{{.Name}}ResponseObject, error) {
+	n, err := s.{{.plural}}.Get(ctx, reqctx.PrincipalOf(ctx).Subject, req.Id)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	return gen.Get{{.Name}}200JSONResponse({{.name}}Envelope(n)), nil
+}
+
+// Update{{.Name}} handles PATCH /api/v1/{{.plural}}/{id}.
+func (s *Server) Update{{.Name}}(ctx context.Context, req gen.Update{{.Name}}RequestObject) (gen.Update{{.Name}}ResponseObject, error) {
+	n, err := s.{{.plural}}.Update(ctx, reqctx.PrincipalOf(ctx).Subject, req.Id, &entity.{{.Name}}Changes{
+		Title: req.Body.Title, Content: req.Body.Content,
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	return gen.Update{{.Name}}200JSONResponse({{.name}}Envelope(n)), nil
+}
+
+// Delete{{.Name}} handles DELETE /api/v1/{{.plural}}/{id}.
+func (s *Server) Delete{{.Name}}(ctx context.Context, req gen.Delete{{.Name}}RequestObject) (gen.Delete{{.Name}}ResponseObject, error) {
+	if err := s.{{.plural}}.Delete(ctx, reqctx.PrincipalOf(ctx).Subject, req.Id); err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	return gen.Delete{{.Name}}200JSONResponse{Code: response.Code, Message: response.Message, Data: nil}, nil
+}

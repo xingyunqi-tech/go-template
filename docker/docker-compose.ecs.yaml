@@ -2,7 +2,7 @@
 #
 # 首次部署：
 #   1. 在服务器上创建部署目录（对应 ALIYUN_PATH / TENCENT_PATH secret）
-#   2. 部署目录放置 .env（参考 docker/.env.ecs.example）
+#   2. 部署目录放置 .env（参考 docker/.env.ecs.example；DATABASE_URL、REDIS_URL 与本地存储目录由本文件给出）
 #   3. 后续部署由 CI/CD 同步本文件与 manage.sh 并重启服务
 #
 # 手动操作：
@@ -20,12 +20,9 @@ x-app: &app
 x-app-env: &app-env
   APP_ENV: production
   APP_PORT: '3000'
-  DATABASE_HOST: postgres
-  DATABASE_PORT: '5432'
-  REDIS_ENABLED: 'true'
-  REDIS_HOST: redis
-  REDIS_PORT: '6379'
-  FILE_LOCAL_ROOT: /home/nonroot/files
+  DATABASE_URL: postgresql://${DATABASE_USERNAME:-root}:${DATABASE_PASSWORD:-secret}@postgres:5432/${DATABASE_NAME:-api}?sslmode=disable
+  REDIS_URL: redis://redis:6379/0
+  STORAGE_LOCAL_ROOT: /home/nonroot/files
 
 services:
   migrate:

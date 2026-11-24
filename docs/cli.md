@@ -1,92 +1,53 @@
 # CLI
 
-`cmd/app` 编译为单一二进制（镜像中为 `/app`，`ENTRYPOINT ["/app"]`、默认 `CMD ["serve"]`），子命令用标准库 `flag` 分派，不引入 cobra。本地用 `go run ./cmd/app <命令>` 或对应的 Make 目标调用。
+镜像只含一个二进制 `/app`，本地用 `go run ./cmd/app <command>`。
+
+| 子命令 | 作用 |
+|---|---|
+| `serve` | HTTP API |
+| `worker` | River 队列 worker 与周期任务；`prometheus` 模式下在 `WORKER_METRICS_PORT` 提供 `/metrics` |
+| `migrate [up\|down]` | 创建 `DATABASE_SCHEMA` 并执行迁移，或全部回滚 |
+| `seed` | 写入种子账号（见 [database.md](database.md#seed)） |
+| `createsuperuser --email <email>` | 创建管理员，或把已有账号设为管理员（替换密码、启用、标记邮箱已验证、吊销全部会话）；密码从标准输入首行读取 |
+| `keys generate` | 打印新的 Ed25519 私钥 PEM（`AUTH_SIGNING_KEY`）、公钥 PEM（`AUTH_VERIFY_KEYS`）与 `kid` |
+| `healthcheck [--ready]` | 请求本机 `/health/live`（或 `/health/ready`），200 时退出码 0；用于容器健康检查 |
+| `version` | 打印构建版本 |
 
 ```bash
-go run ./cmd/app            # 打印用法
+printf '%s\n' 'S3cret-passw0rd' | go run ./cmd/app createsuperuser --email root@example.com
+go run ./cmd/app keys generate
 ```
-
-| 命令 | 说明 | Make |
-|---|---|---|
-| `app serve` | 启动 HTTP API（`APP_PORT`，默认 3000）；`DB_SCHEMA_OWNER=external` 时先检查表结构 | `make dev` |
-| `app worker` | 启动 River workers 与周期任务；`WORKER_METRICS_PORT`（默认 9464，0 关闭）上提供 `/<METRICS_PATH>`，与 API 用同一 `METRICS_TOKEN` 校验 | `make worker` |
-| `app migrate` | goose 迁移 + River 迁移；`DB_SCHEMA_OWNER=external` 时只检查表结构并迁移 `river` schema | `make migrate` |
-| `app seed` | 写入角色、状态、权限与初始账号，已存在的不覆盖，见 [database.md](database.md#seed)；完成后删除角色权限缓存（失败只告警，缓存最长 5 分钟后过期） | `make seed` |
-| `app permissions clear-cache` | 删除角色权限缓存 `permissions:v2:role-map`（Redis），Redis 不可达时退出码 1；`REDIS_ENABLED=false` 时各进程在内存中缓存，最长 5 分钟后失效，命令只输出提示 | – |
-| `app createsuperuser -email <email>` | 新建一个状态为启用的管理员（role 1），邮箱按登录接口相同的 `isEmail` 规则校验（需有顶级域名），密码取标准输入第一行（至少 6 个字符，按客户端做法先取 MD5 再哈希）；邮箱已存在时退出码 1。例：`printf '%s\n' "$PASSWORD" \| docker compose exec -T api /app createsuperuser -email root@example.com` | – |
-| `app healthcheck [--ready]` | 请求本机 `http://127.0.0.1:<APP_PORT>/<API_PREFIX>/v1/health/live`（`--ready` 时为 `health/ready`），200 时退出码 0，否则 1；compose 的 api 健康检查与 `deploy/manage.sh health` 使用它 | – |
-| `app version` | 打印构建版本（`-ldflags "-X main.version=..."`，`make image` 取 `git describe`） | – |
-
-- 每个命令启动时执行 `config.Load()`，配置有误时把全部问题打印到 stderr 并以退出码 1 结束；未知命令打印用法，退出码 2
-- 进程只读环境变量；Make 目标在调用前加载工作目录的 `.env`（`set -a; . ./.env`）
-- 收到 SIGINT / SIGTERM 后按 [architecture.md](architecture.md#进程模型) 的顺序优雅停机，`SHUTDOWN_TIMEOUT`（默认 30s）为上限
-
-## worker
-
-| 队列 | 任务（River kind） | 并发 | 尝试次数 | 说明 |
-|---|---|---|---|---|
-| `mail` | `send-mail` | 1 | 3 | 注册确认、确认新邮箱、找回密码；按任务里记录的请求语言渲染 |
-| `notification` | `send-email`、`send-sms`、`send-wechat-subscribe` | 5 | 3 | 每个 worker 进程每秒最多 10 个任务；结果写入通知的 `sentChannels` |
-| `account-cleanup` | `clean-account` | 1 | 5 | 按 order 执行各模块清理器；同一用户持 `lock:account-cleanup:user-{id}`，锁被占用时 30 秒后重试 |
-| `scheduler` | 周期任务，见下 | 1 | 1 | |
-
-失败后的等待为 `1s × 2^(n-1)`（`clean-account` 为 `10s × 2^(n-1)`），每次尝试结束计 `queue_jobs_total{queue_name, status}`。
-
-| 周期任务 | 时间 | 内容 |
-|---|---|---|
-| `cleanup-old-sessions` | 每天 03:00 UTC | 物理删除软删超过 7 天的会话 |
-| `cleanup-read-notifications` | 每天 04:00 UTC | 软删除 `readAt` 早于 30 天的已读通知 |
-| `account-cleanup-compensation` | 每小时第 25 分（Asia/Shanghai） | 已软删超过 30 分钟且没有 `account_cleanup` 记录的用户（按 id 升序，最多 200 个）重新入队 |
-
-多个 worker 实例同时运行时，River leader 选举保证每个周期任务只投递一次。
 
 ## 代码生成
 
-| 命令 | 输入 | 输出 |
-|---|---|---|
-| `make generate` | `openapi/nestjs-baseline.json` + `openapi/overlay.yaml` + `openapi/oapi-codegen.yaml`，范围取 `openapi/scope.yaml` | `internal/controller/http/gen/gen.go`（`tools/openapigen` 调用 oapi-codegen 库） |
-| | `migrations/` + `internal/repo/postgres/queries/*.sql`（`sqlc.yaml`） | `internal/repo/postgres/sqlcgen/` |
-| | Makefile `MOCK_SOURCES` 中声明端口的源文件（mockgen，`-typed`） | `internal/repo/mocks/`、`internal/usecase/<pkg>/mocks/` |
-| `make migrate-create NAME=<name>` | – | `migrations/000NN_<name>.sql`（goose `-s` 顺序编号，含 Up / Down 骨架） |
-| `make generate-check` | 同上 | 重新生成后检查生成代码与入库版本无差异 |
-
-生成文件不手改。新增端口时把其所在源文件加入 Makefile `MOCK_SOURCES`。pre-commit 钩子在 `openapi/`、`tools/openapigen/`、`migrations/`、sqlc 查询、`Makefile` 或 mock 源文件有暂存改动时重新生成并检查无差异（`scripts/check-generated.sh`）。
+| 命令 | 输入 → 输出 |
+|---|---|
+| `make openapi` | `openapi/src/` → `openapi/openapi.json`、`internal/controller/http/validation.json`、`internal/controller/http/gen/gen.go`（见 [openapi.md](openapi.md)） |
+| `make generate` | openapi + sqlc（`migrations/`、`internal/repo/postgres/queries/` → `sqlcgen/`）+ mockgen（`internal/repo/contracts.go` → `internal/repo/mocks/`） |
+| `make generate-check` | 重新生成后检查与入库版本一致（CI） |
 
 ## 模块生成器
 
-`cmd/modulegen` 按 nestjs 文档中某个 tag 的全部接口生成模块骨架：
-
 ```bash
-make module NAME=orders TAG=Orders
+make module NAME=task              # 按本人归属控制访问
+make module NAME=task PERMS=1      # 另登记 task:read / task:write 并在 policy 中要求
+make module NAME=category PLURAL=categories
 ```
 
-| 参数 | 说明 |
-|---|---|
-| `NAME`（`-name`） | Go 包名，小写字母开头，只含小写字母与数字 |
-| `TAG`（`-tag`） | `openapi/nestjs-baseline.json` 中的 tag，须至少有一个接口 |
+以 notes 模块为模板（`templates/module/`），生成：
 
-生成内容（模板在 `templates/module/`），目标文件已存在时报错退出、不覆盖：
+- `openapi/src/{paths,schemas}/<plural>.yaml`、core 迁移、sqlc 查询；
+- `internal/entity/<name>.go`、`internal/repo/postgres/<plural>.go`（含 `Purger`）、`internal/usecase/<name>/`、`internal/controller/http/v1/<plural>.go`；
+- 用例单元测试与 `internal/app/<plural>_integration_test.go`。
 
-| 文件 | 内容 |
-|---|---|
-| `internal/controller/http/v1/<NAME>.go` | 该 tag 每个 operation 的处理器桩，返回 501 |
-| `internal/usecase/<NAME>/<NAME>.go` | `Service` 与构造函数 |
-| `internal/repo/postgres/<NAME>.go` | 仓储实现骨架 |
-| `internal/repo/contracts.go` | 追加仓储端口接口 |
-| `openapi/scope.yaml` | 追加尚未列出的 operationId |
-
-命令结束时打印后续步骤：
-
-1. `make generate`
-2. 在 `internal/controller/http/policy.go` 为每个 operation 声明 policy（缺失时启动失败）
-3. 在 `internal/repo/postgres/queries/<NAME>.sql` 编写查询，并在 `internal/app` 组装 service
-
-接口只能来自 nestjs 文档：契约测试要求每个注册的路由都在 `openapi/nestjs-baseline.json` 中，见 [contract.md](contract.md)。
+并在 `// modulegen:<slot>` 锚点处登记 policy、v1 Server 字段、`internal/app` 组装、注销清理器与权限码，在 `repo/contracts.go`、`usecase/contracts.go` 末尾追加端口与用例接口，最后执行 `make generate` 与 `make fmt`。已存在同名文件时拒绝生成。生成后按业务修改字段，再跑 `make check` 与 `make test-integration`。
 
 ## 脚本
 
-| 脚本 | 用途 |
+| 脚本 | 作用 |
 |---|---|
-| `scripts/check-generated.sh` | pre-commit：生成代码新鲜度 |
-| `scripts/check-comment-history.sh` | pre-commit：新增注释与 `t.Run` 名中的变更历史句式告警（不阻断） |
-| `scripts/commit-msg.sh` | commit-msg：conventional commits，类型集合同 nestjs commitlint，标题 ≤72 字符 |
+| `scripts/bench/run.sh up\|bench\|down` | 压测（见 [benchmark.md](benchmark.md)） |
+| `scripts/check-generated.sh` | pre-commit：生成代码的输入有暂存改动时重新生成，生成结果有 diff 则失败 |
+| `scripts/check-comment-history.sh` | pre-commit：新增注释出现变更历史句式时告警 |
+| `scripts/commit-msg.sh` | commit-msg：conventional commits |
+| `deploy/manage.sh` | 服务器上的启停、日志与健康检查（见 [deploy.md](deploy.md)） |

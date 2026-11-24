@@ -4,6 +4,7 @@ package account
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -22,7 +23,8 @@ type TxRunner interface {
 	InTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
-// Deps are what the Service uses. Purgers run in order inside the purge transaction.
+// Deps are what the Service uses. Purgers run in order inside the purge transaction. A verifier
+// has no Users: it purges only its own data, on the user.deleted events of the issuer.
 type Deps struct {
 	Users      repo.Users
 	Identities repo.Identities
@@ -100,6 +102,10 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
 // transaction, user.deleted is published after it commits. A user that is not soft-deleted is
 // left alone; one already removed is purged again, which the purgers allow.
 func (s *Service) Purge(ctx context.Context, id uuid.UUID) error {
+	if s.Users == nil {
+		return s.purgeOwn(ctx, id)
+	}
+
 	deleted, found, err := s.Users.Deleted(ctx, id)
 	if err != nil {
 		return err //nolint:wrapcheck // repo errors are wrapped
@@ -142,9 +148,44 @@ const (
 	_sweepBatch  = 500
 )
 
+// purgeOwn runs the purgers of a verifier.
+func (s *Service) purgeOwn(ctx context.Context, id uuid.UUID) error {
+	return s.Tx.InTx(ctx, func(ctx context.Context) error { //nolint:wrapcheck // repo errors are wrapped
+		for _, p := range s.Purgers {
+			if err := p.Purge(ctx, id); err != nil {
+				return err //nolint:wrapcheck // repo errors are wrapped
+			}
+		}
+
+		return nil
+	})
+}
+
+// OnUserDeleted schedules, now, the purge of the user a user.deleted event names; other events
+// and events without a user id are dropped. A failed enqueue is returned so that the event is
+// delivered again.
+func (s *Service) OnUserDeleted(ctx context.Context, e *events.Event) error {
+	var data events.UserDeleted
+
+	err := json.Unmarshal(e.Data, &data)
+	if e.Type != events.TypeUserDeleted || err != nil || data.UserID == uuid.Nil() {
+		s.Log.WarnContext(ctx, "event dropped: not a user.deleted with a user id", "event_id", e.ID, "type", e.Type)
+
+		return nil
+	}
+
+	_, err = s.Queue.EnqueuePurge(ctx, data.UserID, s.Now())
+
+	return err //nolint:wrapcheck // repo errors are wrapped
+}
+
 // Sweep schedules the purge, now, of every user deleted longer than the grace period ago that is
 // still stored, page by page; a purge already waiting for a user is kept.
 func (s *Service) Sweep(ctx context.Context) error {
+	if s.Unpurged == nil {
+		return nil
+	}
+
 	now := s.Now()
 	before := now.Add(-s.Grace - _sweepMargin)
 

@@ -117,4 +117,25 @@ func TestMemoryEvictsWhenFull(t *testing.T) {
 	}
 
 	assert.LessOrEqual(t, len(l.tat), _memoryMaxKeys)
+	assert.Equal(t, len(l.tat), l.queue.Len())
+	assert.Contains(t, l.tat, _rule.Key(time.Duration(_memoryMaxKeys+4).String()))
+}
+
+func TestMemoryDropsExpiredKeysAndResets(t *testing.T) {
+	t.Parallel()
+
+	l, now := memoryLimiter(time.UnixMilli(1_000))
+
+	_, err := l.Consume(t.Context(), _rule, "a")
+	require.NoError(t, err)
+
+	*now = now.Add(time.Hour)
+
+	_, err = l.Consume(t.Context(), _rule, "b")
+	require.NoError(t, err)
+	assert.NotContains(t, l.tat, _rule.Key("a"))
+
+	require.NoError(t, l.Reset(t.Context(), _rule, "b"))
+	assert.Empty(t, l.tat)
+	assert.Zero(t, l.queue.Len())
 }

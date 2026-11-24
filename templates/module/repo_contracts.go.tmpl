@@ -1,0 +1,20 @@
+
+// {{.Name}}Page selects the {{.plural}} of an owner after a position, newest first.
+type {{.Name}}Page struct {
+	Owner uuid.UUID
+	// AfterCreatedAt and AfterID are the position of the last {{.name}} of the previous page; nil for
+	// the first page.
+	AfterCreatedAt *time.Time
+	AfterID        *uuid.UUID
+	Limit          int
+}
+
+// {{.Plural}} stores {{.plural}}; reads skip soft-deleted rows and the {{.plural}} of other owners.
+type {{.Plural}} interface {
+	Create(ctx context.Context, n *entity.{{.Name}}) (*entity.{{.Name}}, error)
+	// Get, Update and Delete report found=false for a {{.name}} that does not exist or is not owner's.
+	Get(ctx context.Context, owner, id uuid.UUID) (n *entity.{{.Name}}, found bool, err error)
+	List(ctx context.Context, p *{{.Name}}Page) ([]entity.{{.Name}}, error)
+	Update(ctx context.Context, owner, id uuid.UUID, c *entity.{{.Name}}Changes) (n *entity.{{.Name}}, found bool, err error)
+	Delete(ctx context.Context, owner, id uuid.UUID) (found bool, err error)
+}

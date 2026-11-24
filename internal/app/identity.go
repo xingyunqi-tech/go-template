@@ -180,7 +180,7 @@ func newIdentity(d *identityDeps) (*Identity, error) {
 		Accounts: accountuc.New(&accountuc.Deps{
 			Users: users, Identities: identities, Revocation: revocation, Queue: postgres.NewAccountQueue(inserter),
 			Unpurged:  postgres.NewMaintenance(d.db),
-			Purgers:   []repo.Purger{d.files, postgres.NewNotes(d.db), postgres.NewAudits(d.db)},
+			Purgers:   corePurgers(d.db, d.files),
 			Publisher: events.NewLog(d.log), Tx: d.db, Log: d.log, Grace: d.cfg.Account.DeletionGrace,
 			Source: d.cfg.Telemetry.ServiceName, Now: nil,
 		}),

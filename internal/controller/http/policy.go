@@ -139,5 +139,6 @@ func Policies() map[string]Policy {
 		"getNote":    {Auth: AuthJWT},
 		"updateNote": {Auth: AuthJWT, Tx: true, Audit: &Audit{Action: "note.update", Resource: "note"}},
 		"deleteNote": {Auth: AuthJWT, Tx: true, Audit: &Audit{Action: "note.delete", Resource: "note"}},
+		// modulegen:policies
 	}
 }

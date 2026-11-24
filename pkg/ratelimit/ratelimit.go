@@ -5,10 +5,10 @@
 package ratelimit
 
 import (
+	"container/heap"
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -123,13 +123,49 @@ type Limiter struct {
 	script *goredis.Script
 	now    func() time.Time
 
-	mu  sync.Mutex
-	tat map[string]int64
+	mu    sync.Mutex
+	tat   map[string]*entry
+	queue tatQueue
+}
+
+// entry is the theoretical arrival time of one key and its place in the queue.
+type entry struct {
+	key   string
+	tat   int64
+	index int
+}
+
+// tatQueue is a min-heap of entries by tat: the next key to expire comes first.
+type tatQueue []*entry
+
+func (q tatQueue) Len() int           { return len(q) }
+func (q tatQueue) Less(i, j int) bool { return q[i].tat < q[j].tat }
+
+func (q tatQueue) Swap(i, j int) {
+	q[i], q[j] = q[j], q[i]
+	q[i].index, q[j].index = i, j
+}
+
+func (q *tatQueue) Push(x any) {
+	e, _ := x.(*entry)
+	e.index = len(*q)
+	*q = append(*q, e)
+}
+
+func (q *tatQueue) Pop() any {
+	old := *q
+	e := old[len(old)-1]
+	old[len(old)-1] = nil
+	*q = old[:len(old)-1]
+
+	return e
 }
 
 // New returns a Limiter; client may be nil to keep the state in process.
 func New(client *goredis.Client) *Limiter {
-	return &Limiter{redis: client, script: goredis.NewScript(script), now: time.Now, mu: sync.Mutex{}, tat: map[string]int64{}}
+	return &Limiter{
+		redis: client, script: goredis.NewScript(script), now: time.Now, mu: sync.Mutex{}, tat: map[string]*entry{}, queue: nil,
+	}
 }
 
 var errReply = errors.New("ratelimit: unexpected script reply")
@@ -151,7 +187,7 @@ func (l *Limiter) Reset(ctx context.Context, rule Rule, subject string) error {
 
 	if l.redis == nil {
 		l.mu.Lock()
-		delete(l.tat, key)
+		l.forget(key)
 		l.mu.Unlock()
 
 		return nil
@@ -200,38 +236,44 @@ func (l *Limiter) checkMemory(rule Rule, key string, peek bool) Decision {
 
 	now := l.now().UnixMilli()
 
-	d, next := Gcra(rule, l.tat[key], now, peek)
+	var tat int64
+	if e, ok := l.tat[key]; ok {
+		tat = e.tat
+	}
+
+	d, next := Gcra(rule, tat, now, peek)
 	if !d.Allowed || peek {
 		return d
 	}
 
-	if _, ok := l.tat[key]; !ok && len(l.tat) >= _memoryMaxKeys {
-		l.evict(now)
+	if e, ok := l.tat[key]; ok {
+		e.tat = next
+		heap.Fix(&l.queue, e.index)
+
+		return d
 	}
 
-	l.tat[key] = next
+	l.evict(now)
+
+	e := &entry{key: key, tat: next, index: 0}
+	l.tat[key] = e
+	heap.Push(&l.queue, e)
 
 	return d
 }
 
-// evict drops expired keys, then the keys expiring first while still full.
+// evict drops the expired keys, then the keys expiring first while full.
 func (l *Limiter) evict(now int64) {
-	for k, v := range l.tat {
-		if v <= now {
-			delete(l.tat, k)
-		}
+	for l.queue.Len() > 0 && (l.queue[0].tat <= now || l.queue.Len() >= _memoryMaxKeys) {
+		e, _ := heap.Pop(&l.queue).(*entry)
+		delete(l.tat, e.key)
 	}
+}
 
-	for len(l.tat) >= _memoryMaxKeys {
-		oldest, first := "", int64(math.MaxInt64)
-
-		for k, v := range l.tat {
-			if v < first {
-				oldest, first = k, v
-			}
-		}
-
-		delete(l.tat, oldest)
+func (l *Limiter) forget(key string) {
+	if e, ok := l.tat[key]; ok {
+		heap.Remove(&l.queue, e.index)
+		delete(l.tat, key)
 	}
 }
 

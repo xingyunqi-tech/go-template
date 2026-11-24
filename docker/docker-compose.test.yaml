@@ -1,16 +1,14 @@
-# 测试环境：从源码构建镜像，APP_ENV=test，Mailpit 收信，种子数据一次性写入；宿主机可对其运行 tests/e2e
+# 测试环境：从源码构建镜像，APP_ENV=test，Mailpit 收信，种子数据一次性写入；供手工联调，完整 e2e 用 make test-e2e
 #
 # 用法：
 #   docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.redis.yaml -f docker/docker-compose.postgres.yaml -f docker/docker-compose.test.yaml up --build --wait
-#   APP_URL=http://localhost:3000 go test -count=1 -tags e2e ./tests/e2e/...
 
 name: go-template-test
 
 x-test-env: &test-env
   APP_ENV: test
-  MAIL_HOST: mailpit
-  MAIL_PORT: '1025'
-  MAIL_IGNORE_TLS: 'true'
+  SMTP_URL: smtp://mailpit:1025?tls=none
+  APP_FRONTEND_URL: http://localhost:5173
 
 services:
   postgres:
@@ -43,9 +41,8 @@ services:
     restart: 'no'
     environment:
       <<: *test-env
-      DATABASE_HOST: postgres
-      REDIS_ENABLED: 'true'
-      REDIS_HOST: redis
+      DATABASE_URL: postgresql://${DATABASE_USERNAME:-root}:${DATABASE_PASSWORD:-secret}@postgres:5432/${DATABASE_NAME:-api}?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -1,0 +1,116 @@
+// Package {{.name}} manages the {{.plural}} of their owner.
+package {{.name}}
+
+import (
+	"context"
+	"errors"
+	"time"
+	"uuid"
+
+	"github.com/xingyunqi-tech/go-template/internal/entity"
+	"github.com/xingyunqi-tech/go-template/internal/repo"
+	"github.com/xingyunqi-tech/go-template/internal/usecase"
+	"github.com/xingyunqi-tech/go-template/pkg/pagination"
+)
+
+// _cursorLayout keeps the microseconds PostgreSQL stores, so that the next page starts exactly
+// after the last {{.name}}.
+const _cursorLayout = time.RFC3339Nano
+
+const _minChanges = 1
+
+// Service implements usecase.{{.Plural}}.
+type Service struct {
+	{{.plural}} repo.{{.Plural}}
+}
+
+var _ usecase.{{.Plural}} = (*Service)(nil)
+
+// New returns a Service.
+func New({{.plural}} repo.{{.Plural}}) *Service {
+	return &Service{ {{- .plural}}: {{.plural -}} }
+}
+
+func notFound(found bool, err error) error {
+	if err == nil && !found {
+		return entity.New(entity.KeyNotFound)
+	}
+
+	return err
+}
+
+// List implements usecase.{{.Plural}}.
+func (s *Service) List(ctx context.Context, owner uuid.UUID, cursor string, limit int) (pagination.CursorPage[entity.{{.Name}}], error) {
+	page := &repo.{{.Name}}Page{Owner: owner, AfterCreatedAt: nil, AfterID: nil, Limit: limit + 1}
+
+	if cursor != "" {
+		after, id, err := decodeCursor(cursor)
+		if err != nil {
+			return pagination.CursorPage[entity.{{.Name}}]{}, err
+		}
+
+		page.AfterCreatedAt, page.AfterID = &after, &id
+	}
+
+	rows, err := s.{{.plural}}.List(ctx, page)
+	if err != nil {
+		return pagination.CursorPage[entity.{{.Name}}]{}, err //nolint:wrapcheck // repo errors are wrapped
+	}
+
+	return pagination.NewCursorPage(rows, limit, func(n entity.{{.Name}}) pagination.Cursor {
+		return pagination.Cursor{Key: n.CreatedAt.UTC().Format(_cursorLayout), ID: n.ID.String()}
+	}), nil
+}
+
+func decodeCursor(cursor string) (time.Time, uuid.UUID, error) {
+	invalid := entity.Invalid("query.cursor", entity.RuleFormat, map[string]any{"format": "cursor"})
+
+	c, err := pagination.DecodeCursor(cursor)
+	if err != nil {
+		return time.Time{}, uuid.Nil(), invalid
+	}
+
+	after, err := time.Parse(_cursorLayout, c.Key)
+	if err != nil {
+		return time.Time{}, uuid.Nil(), errors.Join(invalid, err)
+	}
+
+	id, err := uuid.Parse(c.ID)
+	if err != nil {
+		return time.Time{}, uuid.Nil(), errors.Join(invalid, err)
+	}
+
+	return after, id, nil
+}
+
+// Create implements usecase.{{.Plural}}.
+func (s *Service) Create(ctx context.Context, owner uuid.UUID, title, content string) (*entity.{{.Name}}, error) {
+	return s.{{.plural}}.Create(ctx, &entity.{{.Name}}{ //nolint:wrapcheck // repo errors are wrapped
+		ID: uuid.NewV7(), OwnerSub: owner, Title: title, Content: content, CreatedAt: time.Time{}, UpdatedAt: time.Time{},
+	})
+}
+
+// Get implements usecase.{{.Plural}}.
+func (s *Service) Get(ctx context.Context, owner, id uuid.UUID) (*entity.{{.Name}}, error) {
+	n, found, err := s.{{.plural}}.Get(ctx, owner, id)
+
+	return n, notFound(found, err)
+}
+
+// Update implements usecase.{{.Plural}}.
+func (s *Service) Update(ctx context.Context, owner, id uuid.UUID, c *entity.{{.Name}}Changes) (*entity.{{.Name}}, error) {
+	if c.Title == nil && c.Content == nil {
+		return nil, entity.Invalid("body", entity.RuleMinProperties, map[string]any{"minProperties": _minChanges})
+	}
+
+	n, found, err := s.{{.plural}}.Update(ctx, owner, id, c)
+
+	return n, notFound(found, err)
+}
+
+// Delete implements usecase.{{.Plural}}.
+func (s *Service) Delete(ctx context.Context, owner, id uuid.UUID) error {
+	found, err := s.{{.plural}}.Delete(ctx, owner, id)
+
+	return notFound(found, err)
+}

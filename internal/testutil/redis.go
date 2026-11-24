@@ -62,8 +62,7 @@ type RedisPool struct {
 	dbs   chan int
 }
 
-// RedisDB is a borrowed logical database, addressed the same way as REDIS_HOST:REDIS_PORT and
-// REDIS_DB.
+// RedisDB is a borrowed logical database; URL gives it as REDIS_URL.
 type RedisDB struct {
 	Addr string
 	DB   int

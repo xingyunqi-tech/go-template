@@ -14,7 +14,7 @@ make image        # docker buildx build --load -t go-template:local .
 |---|---|
 | api | `serve`（默认 `CMD`） |
 | worker | `worker`（River 队列与周期任务） |
-| migrate | `migrate`（goose + River 迁移；`DB_SCHEMA_OWNER=external` 时只校验表结构并迁移 `river` schema） |
+| migrate | `migrate`（创建 `DATABASE_SCHEMA`，执行 core、identity（签发服务）与 River 迁移） |
 | seed | `seed` |
 
 镜像内没有 shell、curl、wget，健康检查用二进制自带的子命令：compose 中 api 服务的 healthcheck 为 `/app healthcheck`（存活），`deploy/manage.sh` 用 `docker compose exec -T api /app healthcheck --ready`（就绪）。
@@ -35,10 +35,10 @@ make image        # docker buildx build --load -t go-template:local .
 |---|---|
 | `docker-compose.base.yaml` | `migrate`（一次性）、`api`（从源码构建 `go-template:local`，宿主端口 `APP_PORT`，默认 3000）、`worker`；配置取 `.env.example` |
 | `docker-compose.postgres.yaml` | `postgres`（宿主端口 `DATABASE_PORT`，默认 5432） |
-| `docker-compose.redis.yaml` | `redis`（宿主端口 `REDIS_PORT`，默认 6379），为 api / worker 设置 `REDIS_ENABLED=true` |
-| `docker-compose.dev.yaml` | 镜像 `go-template:dev`、`APP_ENV=development`；`mailpit`（SMTP 宿主端口 `MAIL_PORT` 默认 1025，UI `MAIL_CLIENT_PORT` 默认 1080）；`seed` 在 migrate 之后写入演示账号；`develop.watch` 在 `cmd/`、`internal/`、`pkg/`、`migrations/`、`seeds/`、`templates/`、`openapi/`、`go.mod`、`go.sum` 变更时重新构建 api 与 worker |
-| `docker-compose.test.yaml` | `APP_ENV=test`；`mailpit`（只映射 UI）；`seed`；postgres / redis 不映射宿主端口 |
-| `docker-compose.ci.yaml` | 生产镜像以 `APP_ENV=production` 运行，CI 用密钥、`TRUST_PROXY=1`；`seed` 以 `APP_ENV=test` 写入演示账号；api 只绑定 `127.0.0.1` |
+| `docker-compose.redis.yaml` | `redis`（宿主端口 `REDIS_PORT`，默认 6379），为 api / worker 设置 `REDIS_URL` |
+| `docker-compose.dev.yaml` | 镜像 `go-template:dev`、`APP_ENV=development`、`SMTP_URL` 指向 Mailpit；`mailpit`（SMTP 宿主端口 `MAIL_PORT` 默认 1025，UI `MAIL_CLIENT_PORT` 默认 1080）；`seed` 在 migrate 之后写入演示账号；`develop.watch` 在 `cmd/`、`internal/`、`pkg/`、`migrations/`、`seeds/`、`templates/`、`openapi/`、`go.mod`、`go.sum` 变更时重新构建 api 与 worker |
+| `docker-compose.test.yaml` | `APP_ENV=test`；`mailpit`（只映射 UI）；`seed`；postgres / redis 不映射宿主端口；供手工联调 |
+| `docker-compose.ci.yaml` | 生产镜像以 `APP_ENV=production` 运行，固定测试签名密钥与 `AUTH_VERIFY_KEYS` 旧公钥、`TRUSTED_PROXIES=1`；`seed` 以 `APP_ENV=test` 写入演示账号；api 与 worker 共享文件卷；`migrate-verifier` + `api-verifier`（`AUTH_JWKS_URL` 指向 api、独立 schema `verifier`，宿主端口 `VERIFIER_PORT`，默认 3001）；端口只绑定 `127.0.0.1` |
 | `docker-compose.ecs.yaml` | 服务器：migrate、seed（profile `seed`）、api、worker、postgres、redis；镜像 `IMAGE_FULL_NAME`，配置取部署目录 `.env` |
 
 开发服务栈：
@@ -50,13 +50,7 @@ docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.redis
 
 本机已有服务占用默认端口时，通过 `APP_PORT`、`DATABASE_PORT`、`REDIS_PORT`、`MAIL_PORT`、`MAIL_CLIENT_PORT` 改宿主端口。也可以只用 `make infra` 起依赖，再 `make dev` / `make worker` 在本机运行。
 
-测试服务栈，宿主机对其运行 e2e：
-
-```bash
-docker compose -f docker/docker-compose.base.yaml -f docker/docker-compose.redis.yaml \
-  -f docker/docker-compose.postgres.yaml -f docker/docker-compose.test.yaml up --build --wait
-APP_URL=http://localhost:3000 go test -count=1 -tags e2e ./tests/e2e/...
-```
+完整的黑盒测试用 `make test-e2e`（ci 组合，结束后删除栈与数据卷）。
 
 ## 服务器部署
 
@@ -78,20 +72,23 @@ compose 文件写死项目名 `go-template`，所有调用都是 `docker compose
 2. 创建部署目录，放置 `.env`：`cp docker/.env.ecs.example .env` 后填写；首次部署设 `RUN_SEEDS=true`，写入后改回 `false`
 3. 同步 `deploy/manage.sh` 与 `docker/docker-compose.ecs.yaml`，执行 `./deploy/manage.sh start`；之后由 CI/CD 同步并重启
 
-`docker-compose.ecs.yaml` 固定以下变量，`.env` 中的值不生效：`APP_ENV=production`、容器内 `APP_PORT=3000`（宿主端口取 `.env` 的 `APP_PORT`）、`DATABASE_HOST=postgres`、`DATABASE_PORT=5432`、`REDIS_ENABLED=true`、`REDIS_HOST=redis`、`REDIS_PORT=6379`、`FILE_LOCAL_ROOT=/home/nonroot/files`。`DATABASE_URL` 非空时覆盖分项数据库配置。
+`docker-compose.ecs.yaml` 固定以下变量，`.env` 中的值不生效：`APP_ENV=production`、容器内 `APP_PORT=3000`（宿主端口取 `.env` 的 `APP_PORT`）、`DATABASE_URL`（由 `DATABASE_USERNAME`、`DATABASE_PASSWORD`、`DATABASE_NAME` 组装，主机 `postgres`）、`REDIS_URL=redis://redis:6379/0`、`STORAGE_LOCAL_ROOT=/home/nonroot/files`。
 
-生产 `.env` 检查项（不满足时 api / worker / migrate 启动失败并一次列出全部问题）：
+生产启动时一次列出全部配置问题，满足以下要求才能启动 api / worker / migrate：
 
 | 变量 | 要求 |
 |---|---|
-| `AUTH_JWT_SECRET`、`AUTH_REFRESH_SECRET`、`AUTH_FORGOT_SECRET`、`AUTH_CONFIRM_EMAIL_SECRET` | ≥32 字符且互不相同 |
-| `MAIL_HOST`、`MAIL_DEFAULT_EMAIL`、`MAIL_DEFAULT_NAME` | 必填 |
-| `METRICS_TOKEN` | 设置时 ≥16 字符；未设置时生产拒绝访问 `/metrics` 与完整 `/api/v1/health` |
-| `WORKER_METRICS_PORT` | worker 指标端口（默认 9464，容器网络内抓取 `http://worker:9464/<METRICS_PATH>`），0 关闭 |
-| `FILE_DRIVER` 及 S3 变量 | 非 `local` 时 `ACCESS_KEY_ID`、`SECRET_ACCESS_KEY`、`AWS_DEFAULT_S3_BUCKET`、`AWS_S3_REGION` 必填 |
-| `FRONTEND_DOMAIN` | CORS 白名单，逗号分隔 |
-| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | `RUN_SEEDS=true` 时两项都设置才创建管理员 |
-| `TRUST_PROXY` | 反向代理层数 |
+| `REDIS_URL`、`CORS_ORIGINS`、`DATABASE_URL` | 必填；`RATE_LIMIT_ENABLED` 必须为 `true` |
+| `AUTH_SIGNING_KEY` 或 `AUTH_JWKS_URL` | 二选一；签发服务另需 `APP_FRONTEND_URL`、`SMTP_URL`、`SMS_PROVIDER=aliyun` 与 `ALIYUN_SMS_*` |
+| `METRICS_TOKEN` 或 `METRICS_PORT` | `OTEL_METRICS_EXPORTER=prometheus` 时其一；`METRICS_TOKEN` 至少 16 字符 |
+| `FILE_URL_SECRET` | `STORAGE_DRIVER=local` 时必填，至少 32 字符；`s3` 时 `S3_BUCKET`、`S3_REGION` 必填 |
+| `WECHAT_*`、`ALIPAY_*` | 每个 provider 的凭据全设或全不设 |
+| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | `RUN_SEEDS=true` 且没有 active 管理员时创建管理员 |
+| `TRUSTED_PROXIES` | 反向代理层数或 CIDR 列表 |
+
+local 存储要求 api 与 worker 共享 `STORAGE_LOCAL_ROOT`（注销清理在 worker 执行）；多台服务器部署时改用 `STORAGE_DRIVER=s3`。
+
+健康检查：`/health/live` 总是 200；`/health/ready` 检查 Postgres 与 Redis，不检查第三方与 JWKS，停机期间返回 503。worker 指标在 `WORKER_METRICS_PORT`（默认 9464）。
 
 数据卷：`postgres-data`、`redis-data`、`uploaded-files`（挂载到 api 与 worker 的 `/home/nonroot`，local 驱动的文件在其中的 `files/`）。
 

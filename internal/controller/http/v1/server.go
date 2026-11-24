@@ -24,7 +24,8 @@ type Server struct {
 	accounts usecase.Accounts
 	files    usecase.Files
 	audits   usecase.Audits
-	log      *slog.Logger
+	// modulegen:fields
+	log *slog.Logger
 }
 
 // Deps are the Server dependencies.
@@ -37,13 +38,17 @@ type Deps struct {
 	Accounts usecase.Accounts
 	Files    usecase.Files
 	Audits   usecase.Audits
-	Log      *slog.Logger
+	// modulegen:deps
+	Log *slog.Logger
 }
 
 // New returns a Server.
 func New(d *Deps) *Server {
 	return &Server{
-		notes: d.Notes, auth: d.Auth, sessions: d.Sessions, users: d.Users, sms: d.SMS, accounts: d.Accounts, files: d.Files, audits: d.Audits, log: d.Log,
+		notes: d.Notes, auth: d.Auth, sessions: d.Sessions, users: d.Users, sms: d.SMS, accounts: d.Accounts,
+		files: d.Files, audits: d.Audits,
+		// modulegen:new
+		log: d.Log,
 	}
 }
 

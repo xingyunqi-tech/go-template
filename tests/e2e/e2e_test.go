@@ -78,12 +78,19 @@ type response struct {
 func call(t *testing.T, method, path, token, body string) *response {
 	t.Helper()
 
+	return callAt(t, baseURL(), method, path, token, body)
+}
+
+// callAt sends a request to the service at base.
+func callAt(t *testing.T, base, method, path, token, body string) *response {
+	t.Helper()
+
 	var reader io.Reader = http.NoBody
 	if body != "" {
 		reader = bytes.NewReader([]byte(body))
 	}
 
-	req, err := http.NewRequestWithContext(t.Context(), method, baseURL()+path, reader)
+	req, err := http.NewRequestWithContext(t.Context(), method, base+path, reader)
 	require.NoError(t, err)
 
 	if body != "" {
@@ -108,20 +115,36 @@ func call(t *testing.T, method, path, token, body string) *response {
 	return out
 }
 
-// signingKey is AUTH_SIGNING_KEY of docker/docker-compose.ci.yaml: the seed is the bytes 1..32.
-func signingKey() ed25519.PrivateKey {
+// keyFromSeed is the Ed25519 key whose seed is the 32 bytes from first on.
+func keyFromSeed(first byte) ed25519.PrivateKey {
 	seed := make([]byte, ed25519.SeedSize)
 	for i := range seed {
-		seed[i] = byte(i + 1)
+		seed[i] = first + byte(i)
 	}
 
 	return ed25519.NewKeyFromSeed(seed)
 }
 
+// signingKey is AUTH_SIGNING_KEY of docker/docker-compose.ci.yaml: the seed is the bytes 1..32.
+func signingKey() ed25519.PrivateKey {
+	return keyFromSeed(1)
+}
+
+// oldKey is the private key of AUTH_VERIFY_KEYS of docker/docker-compose.ci.yaml: bytes 33..64.
+func oldKey() ed25519.PrivateKey {
+	return keyFromSeed(33)
+}
+
 func token(t *testing.T) string {
 	t.Helper()
 
-	signer, err := jwtx.NewSigner(signingKey(), _issuer, _audience)
+	return tokenSignedBy(t, signingKey())
+}
+
+func tokenSignedBy(t *testing.T, key ed25519.PrivateKey) string {
+	t.Helper()
+
+	signer, err := jwtx.NewSigner(key, _issuer, _audience)
 	require.NoError(t, err)
 
 	iat, exp := jwtx.Lifetime(time.Now(), 15*time.Minute)

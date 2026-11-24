@@ -1,4 +1,4 @@
-# CI / e2e：生产镜像以 APP_ENV=production 起完整服务栈；AUTH_SIGNING_KEY 为 e2e 用例共用的固定测试密钥，邮件发往 Mailpit，短信账号为占位值（e2e 不发短信），local 驱动的文件目录由 api 与 worker 共享（卷 uploaded-files）
+# CI / e2e：生产镜像以 APP_ENV=production 起完整服务栈；AUTH_SIGNING_KEY 为 e2e 用例共用的固定测试密钥（AUTH_VERIFY_KEYS 为种子 33..64 的旧密钥），api-verifier 为经 AUTH_JWKS_URL 验证的另一服务（独立 schema），邮件发往 Mailpit，短信账号为占位值（e2e 不发短信），local 驱动的文件目录由 api 与 worker 共享（卷 uploaded-files）
 #
 # 用法：make test-e2e
 
@@ -29,6 +29,24 @@ x-ci-env: &ci-env
     -----BEGIN PRIVATE KEY-----
     MC4CAQAwBQYDK2VwBCIEIAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g
     -----END PRIVATE KEY-----
+  AUTH_VERIFY_KEYS: |
+    -----BEGIN PUBLIC KEY-----
+    MCowBQYDK2VwAyEA5/FioQvsVZr+oZXk3OhLaVaNXSywlj60RsBoXisX8vA=
+    -----END PUBLIC KEY-----
+
+x-verifier: &verifier
+  image: go-template:local
+  pull_policy: never
+  env_file:
+    - ../.env.example
+  environment:
+    <<: *ci-env
+    AUTH_SIGNING_KEY: ''
+    AUTH_VERIFY_KEYS: ''
+    AUTH_JWKS_URL: http://api:3000/.well-known/jwks.json
+    DATABASE_SCHEMA: verifier
+    OTEL_SERVICE_NAME: go-template-verifier
+    DATABASE_URL: postgresql://${DATABASE_USERNAME:-root}:${DATABASE_PASSWORD:-secret}@postgres:5432/${DATABASE_NAME:-api}?sslmode=disable
 
 services:
   postgres:
@@ -83,6 +101,30 @@ services:
       seed:
         condition: service_completed_successfully
       mailpit:
+        condition: service_healthy
+
+  migrate-verifier:
+    <<: *verifier
+    command: ['migrate']
+    restart: 'no'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api-verifier:
+    <<: *verifier
+    command: ['serve']
+    ports:
+      - '127.0.0.1:${VERIFIER_PORT:-3001}:3000'
+    healthcheck:
+      test: ['CMD', '/app', 'healthcheck']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      migrate-verifier:
+        condition: service_completed_successfully
+      api:
         condition: service_healthy
 
 volumes:

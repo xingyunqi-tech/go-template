@@ -72,6 +72,7 @@ func TestMasks(t *testing.T) {
 
 	assert.Equal(t, "a***@example.com", logger.MaskEmail("alice@example.com"))
 	assert.Equal(t, "***", logger.MaskEmail("nope"))
+	assert.Equal(t, "张***@example.com", logger.MaskEmail("张三@example.com"))
 	assert.Equal(t, "+86138****0000", logger.MaskPhone("+8613800000000"))
 	assert.Equal(t, "***", logger.MaskPhone("12345"))
 }

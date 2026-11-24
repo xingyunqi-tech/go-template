@@ -1,0 +1,49 @@
+//go:build integration
+
+package app_test
+
+import (
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/xingyunqi-tech/go-template/internal/testutil"
+)
+
+func Test{{.Plural}}LifeCycle(t *testing.T) {
+	t.Parallel()
+
+	a := newApp(t, nil, nil)
+	token := testutil.IssueAccessToken(t, &testutil.TokenOptions{Roles: []string{ {{- if .Perms}}"admin", {{end}}"user"}})
+
+	created := a.do(http.MethodPost, "/api/v1/{{.plural}}", token, `{"title":"first"}`)
+	require.Equal(t, http.StatusCreated, created.Status, created.Raw)
+
+	id, _ := created.data()["id"].(string)
+
+	list := a.do(http.MethodGet, "/api/v1/{{.plural}}", token, "")
+	require.Equal(t, http.StatusOK, list.Status, list.Raw)
+
+	updated := a.do(http.MethodPatch, "/api/v1/{{.plural}}/"+id, token, `{"title":"second"}`)
+	require.Equal(t, http.StatusOK, updated.Status, updated.Raw)
+	assert.Equal(t, "second", updated.data()["title"])
+
+	other := testutil.IssueAccessToken(t, &testutil.TokenOptions{Roles: []string{ {{- if .Perms}}"admin", {{end}}"user"}})
+	assert.Equal(t, http.StatusNotFound, a.do(http.MethodGet, "/api/v1/{{.plural}}/"+id, other, "").Status)
+
+	require.Equal(t, http.StatusOK, a.do(http.MethodDelete, "/api/v1/{{.plural}}/"+id, token, "").Status)
+	assert.Equal(t, http.StatusNotFound, a.do(http.MethodGet, "/api/v1/{{.plural}}/"+id, token, "").Status)
+}
+{{- if .Perms}}
+
+func Test{{.Plural}}NeedTheirPermissions(t *testing.T) {
+	t.Parallel()
+
+	a := newApp(t, nil, nil)
+	token := testutil.IssueAccessToken(t, &testutil.TokenOptions{Roles: []string{"user"}})
+
+	assert.Equal(t, http.StatusForbidden, a.do(http.MethodGet, "/api/v1/{{.plural}}", token, "").Status)
+}
+{{- end}}

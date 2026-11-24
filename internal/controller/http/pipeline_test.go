@@ -1,12 +1,14 @@
 package http_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -416,4 +418,54 @@ func TestUnreachableKeySetIsUnavailable(t *testing.T) {
 	r := h.do(http.MethodGet, "/api/v1/private", "", "Authorization", _bearer+h.token([]string{"user"}, true, time.Now()))
 	assert.Equal(t, http.StatusServiceUnavailable, r.Code)
 	assert.Equal(t, "common.serviceUnavailable", r.key())
+}
+
+// withoutOperation drops the operation of method and path from the document and its policy.
+func withoutOperation(t *testing.T, path, method, id string) func(*httpapi.Options) {
+	t.Helper()
+
+	return func(o *httpapi.Options) {
+		var doc map[string]any
+
+		require.NoError(t, json.Unmarshal(o.ValidationDocument, &doc))
+
+		paths, _ := doc["paths"].(map[string]any)
+		item, _ := paths[path].(map[string]any)
+		delete(item, method)
+
+		if len(item) == 0 || (len(item) == 1 && item["parameters"] != nil) {
+			delete(paths, path)
+		}
+
+		raw, err := json.Marshal(doc)
+		require.NoError(t, err)
+
+		o.ValidationDocument = raw
+
+		policies := testPolicies()
+		delete(policies, id)
+		o.Policies = policies
+	}
+}
+
+func TestUndocumentedRoutesAreNotServed(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, true, withoutOperation(t, "/api/v1/private", "get", "getPrivate"))
+
+	r := h.do(http.MethodGet, "/api/v1/private", "")
+	assert.Equal(t, http.StatusNotFound, r.Code)
+	assert.Equal(t, "common.notFound", r.key())
+}
+
+func TestAllowListsOnlyTheServedMethods(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, true, withoutOperation(t, "/api/v1/items/{id}", "delete", "deleteItem"))
+
+	r := h.do(http.MethodDelete, "/api/v1/items/"+uuid.NewV7().String(), "")
+	assert.Equal(t, http.StatusMethodNotAllowed, r.Code)
+	assert.Equal(t, "GET", r.Header().Get("Allow"))
+
+	assert.Equal(t, http.StatusOK, h.do(http.MethodGet, "/api/v1/items/"+uuid.NewV7().String(), "").Code)
 }

@@ -1,7 +1,6 @@
 # go-template
 
 Go 后端模板，对外行为遵守 `docs/platform-conventions.md`（跨语言平台约定），导出自身的 OpenAPI 3.1 文档供前端生成客户端。
-**v2 迁移进行中**：本文件按 `TEMPLATE_PLAN.md` 的批次更新，与约定或方案冲突时以二者为准。
 模块路径 `github.com/xingyunqi-tech/go-template`，Go 版本见 `go.mod`。完整方案与阶段划分见 `TEMPLATE_PLAN.md`。
 
 ## 命令：一律通过 Makefile
@@ -16,6 +15,7 @@ Go 后端模板，对外行为遵守 `docs/platform-conventions.md`（跨语言�
 | 本地启动 API / 队列 worker | `make dev` / `make worker` |
 | 由 `openapi/src` 生成 `openapi/openapi.json`、校验文档与 oapi-codegen 代码 | `make openapi` |
 | 生成代码（openapi、sqlc、mockgen） | `make generate` |
+| 以 notes 为模板生成 CRUD 模块 | `make module NAME=<name> [PLURAL=<plural>] [PERMS=1]` |
 | 新建迁移（goose 顺序编号） | `make migrate-create NAME=<name> [SET=core\|identity]` |
 | 格式化 | `make fmt` |
 | lint（golangci-lint、typos、`go mod tidy -diff`） | `make lint` |
@@ -27,6 +27,8 @@ Go 后端模板，对外行为遵守 `docs/platform-conventions.md`（跨语言�
 | e2e（构建镜像，compose 启动后黑盒测试） | `make test-e2e` |
 | 覆盖率门槛（单元 + 集成 + 契约，≥80%） | `make coverage` |
 | 本地 CI | `make ci` |
+
+压测不经 Makefile：`scripts/bench/run.sh up|bench|down`（见 `docs/benchmark.md`）。
 
 `make check` = lint + vet + 单元测试，是 pre-push 钩子。宣称改动完成之前，`make check`、`make test-integration`、`make test-contract` 必须通过；涉及部署形态的改动再跑 `make test-e2e` 与 `make image`。
 
@@ -57,14 +59,15 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 | `internal/config` | caarlos0/env 解析约定 §9 与本服务变量，启动时一次性校验并列出全部问题 |
 | `internal/repo` | 端口在 `contracts.go`；`postgres/` 为 sqlc 查询与端口实现（请求事务经 context 传递，`AfterCommit` 登记提交后副作用，River 表在 `DATABASE_SCHEMA`），`redis/` 为缓存、锁、吊销键、幂等键、刷新宽限期暂存、短信验证码与发送 / 失败计数（键带 `{OTEL_SERVICE_NAME}:` 前缀，吊销键 `auth:revoked:sid:` 除外；未配置 `REDIS_URL` 时进程内实现），`webapi/mail` 为 SMTP 发信（未配置 `SMTP_URL` 时只写日志），`webapi/storage` 为 local / S3 文件存储（local 写 `<key>.part` 后改名，S3 经临时文件上传），`webapi/sms` 为阿里云 Dysms（`SMS_PROVIDER=log` 只写日志），`webapi/{wechat,alipay}` 为 provider（失败映射为 `auth.providerCodeInvalid` / `common.badGateway`，支付宝响应用 `ALIPAY_PUBLIC_KEY` 验签）；第三方基址由 `ALIYUN_SMS_ENDPOINT`、`WECHAT_API_BASE`、`ALIPAY_GATEWAY` 配置 |
 | `internal/worker` | River 客户端配置（otelriver）与任务：`mail` 队列由 worker 签发一次性令牌（只存哈希）并发信；`account` 队列执行 `account.purge`（依次调用 `Purger`、物理删除用户、发布 `user.deleted`）；每小时的周期任务 `maintenance` 与 `account.sweep`（leader 执行，启动时先跑一次） |
-| `internal/events` | `user.deleted` 等事件（CloudEvents 1.0 JSON）与 `Publisher` 端口；默认实现只写日志 |
-| `templates/` | 邮件模板 `mail/<kind>.{html,txt}.tmpl`，文案在 i18n 的 `mail.*` |
+| `internal/events` | `user.deleted` 等事件（CloudEvents 1.0 JSON）与 `Publisher` / `Subscriber` 端口；默认实现只写日志、不接收事件 |
+| `templates/` | 邮件模板 `mail/<kind>.{html,txt}.tmpl`（文案在 i18n 的 `mail.*`）；`module/` 为模块生成器的模板，由 notes 模块派生，改 notes 时同步 |
 | `migrations/`、`seeds/` | goose 迁移：`core/` 每个服务都执行，`identity/` 只在签发服务执行，版本表 `goose_<set>_version`；`seeds/seed.json` 为演示账号定义 |
 | `pkg/` | 与业务无关的封装，不引用 `internal/`：`optional`（区分缺省与 null 的 JSON 字段，spec 中以 `x-go-type` 引用）、`clientip`（`TRUSTED_PROXIES`）、`jwtx`（EdDSA 签名、JWKS、验签）、`ratelimit`（GCRA 与共享规则表）、`telemetry`、`logger`、`pagination`、`phone`、`jsontime`、`postgres` 等 |
 
 - 配置只从 `config.Config` 读取，业务代码禁止 `os.Getenv`（forbidigo）。
 - 日志用 `log/slog`，禁止 `fmt.Print*` 与标准库 `log`。
-- 构造函数手写，在 `internal/app` 组装，不引入 wire / fx。
+- 构造函数手写，在 `internal/app` 组装，不引入 wire / fx。认证角色：`AUTH_SIGNING_KEY` 为签发服务；只设 `AUTH_JWKS_URL` 为验证服务，`internal/app/document.go` 从文档与 policy 中去掉 tag 为 `auth`、`me`、`users` 的操作（这些路由 404），只迁移 core，worker 订阅 `user.deleted` 后只运行 `corePurgers`。
+- `// modulegen:<slot>` 是 `cmd/modulegen` 插入登记代码的锚点（policy、v1 Server、`internal/app` 组装与 `corePurgers`、`rbac.go`），不删不改。
 - 未导出的包级常量以下划线开头（`_scalarVersion`）；`mnd` 拒绝裸数字，先定义常量。
 - 表名单数 snake_case，主键 `uuid DEFAULT uuidv7()`（应用侧 `uuid.NewV7()` 生成），时间 `timestamptz`；约束与索引命名 `<table>_pkey`、`<table>_<columns>_key|fkey|idx|check`。core 表引用用户只存 `sub`，不建跨 schema 外键。
 
@@ -81,7 +84,7 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 |---|---|---|
 | 单元 | 与源码同目录 `*_test.go` | 无 |
 | 集成 | 与源码同目录 `*_integration_test.go`，夹具在 `internal/testutil` | `integration` |
-| e2e | `tests/e2e`（compose ci：生产镜像，固定测试签名密钥） | `e2e` |
+| e2e | `tests/e2e`（compose ci：生产镜像，固定测试签名密钥；`api-verifier` 为验证服务，`VERIFIER_URL` 默认 http://localhost:3001） | `e2e` |
 | 契约 | `tests/contract`：bundle 无漂移、`/openapi.json` 与文件一致、路由与文档双向一致、operationId 规则、policy 与 `bearerAuth` 一致、错误响应引用 | `contract` |
 
 - 用例调用 `t.Parallel()`（paralleltest）；使用 `t.Setenv` 的用例除外。
@@ -122,4 +125,4 @@ prek pre-commit 钩子会对新增注释与 `t.Run` 名中的变更历史句式�
 - push 同理，且比 commit 更严：没听到"推 / push"就不要推。
 - 通过 Agent 派发的子任务同样受本规则约束，派发时必须把本规则原文写进提示词。
 
-提交信息为 conventional commits（类型同 nestjs commitlint，标题 ≤72 字符），由 commit-msg 钩子检查。
+提交信息为 conventional commits（类型 feat、fix、docs、style、refactor、perf、test、build、ci、chore、revert；标题 ≤72 字符，正文每行 ≤100 字符），由 commit-msg 钩子检查。

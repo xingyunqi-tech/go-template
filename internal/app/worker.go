@@ -12,42 +12,80 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/xingyunqi-tech/go-template/internal/config"
+	"github.com/xingyunqi-tech/go-template/internal/events"
 	"github.com/xingyunqi-tech/go-template/internal/i18n"
 	"github.com/xingyunqi-tech/go-template/internal/repo/postgres"
 	"github.com/xingyunqi-tech/go-template/internal/repo/redis"
+	accountuc "github.com/xingyunqi-tech/go-template/internal/usecase/account"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/audit"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/file"
 	maintenanceuc "github.com/xingyunqi-tech/go-template/internal/usecase/maintenance"
 	"github.com/xingyunqi-tech/go-template/internal/worker"
 )
 
-const _stopAndCancelGrace = 5 * time.Second
+const (
+	_stopAndCancelGrace = 5 * time.Second
+	_subscribeRetry     = time.Second
+	_subscribeRetryMax  = time.Minute
+)
 
-// NewWorkerClient builds the River client that works the queues and schedules the periodic
-// jobs; it is nil while no job is registered. The issuing service works the mail queue.
+// subscribe consumes user.deleted until ctx is canceled, subscribing again with a growing delay
+// after a failure.
+func subscribe(ctx context.Context, sub events.Subscriber, h events.Handler, log *slog.Logger) {
+	delay := _subscribeRetry
+
+	for {
+		err := sub.Subscribe(ctx, events.TypeUserDeleted, h)
+		if err == nil || ctx.Err() != nil {
+			return
+		}
+
+		log.ErrorContext(ctx, "user.deleted subscription failed, retrying", "error", err.Error(), "retry_in", delay)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+
+		delay = min(delay*2, _subscribeRetryMax) //nolint:mnd // doubling
+	}
+}
+
+// NewWorkerClient builds the River client that works the queues and schedules the periodic jobs.
+// The issuing service works the mail queue.
 func NewWorkerClient(cfg *config.Config, log *slog.Logger, infra *Infra) (*river.Client[pgx.Tx], error) {
+	client, _, err := newWorker(cfg, log, infra)
+
+	return client, err
+}
+
+// newWorker also returns the handler of the user.deleted events a verifier consumes.
+func newWorker(cfg *config.Config, log *slog.Logger, infra *Infra) (*river.Client[pgx.Tx], events.Handler, error) {
 	db := postgres.NewDB(infra.Pool, _acquireTimeout, log)
 	maintenance := &maintenanceuc.Deps{
 		Identity: nil, Audits: audit.New(postgres.NewAudits(db)), Retention: cfg.Audit.Retention, Log: log, Now: nil,
 	}
 	deps := &worker.Deps{Schema: cfg.Database.Schema, Log: log, Mail: nil, Accounts: nil, Maintenance: nil}
 
-	if cfg.Auth.Role() != config.RoleVerifier {
-		files, err := newFiles(cfg, db, log)
+	files, err := newFiles(cfg, db, log)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var onUserDeleted events.Handler
+
+	if cfg.Auth.Role() == config.RoleVerifier {
+		accounts, err := verifierAccounts(cfg, log, infra, db, files)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		translator, err := i18n.New(cfg.App.DefaultLocale)
+		deps.Accounts, onUserDeleted = accounts, accounts.OnUserDeleted
+	} else {
+		identity, err := workerIdentity(cfg, log, infra, db, files)
 		if err != nil {
-			return nil, fmt.Errorf("app: %w", err)
-		}
-
-		identity, err := newIdentity(&identityDeps{
-			cfg: cfg, log: log, db: db, infra: infra, keys: nil,
-			translator: translator, limiter: nil, revoker: redis.NewRevocations(infra.Redis), files: files,
-		})
-		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		deps.Mail, deps.Accounts = identity.Auth, identity.Accounts
@@ -56,19 +94,42 @@ func NewWorkerClient(cfg *config.Config, log *slog.Logger, infra *Infra) (*river
 
 	deps.Maintenance = maintenanceuc.New(maintenance)
 
-	riverCfg, workers := worker.Config(deps)
-	if workers == 0 {
-		return nil, nil //nolint:nilnil // nothing to work
-	}
-
+	riverCfg, _ := worker.Config(deps)
 	riverCfg.ErrorHandler = jobErrors{log: log, report: reportError(cfg)}
 
 	client, err := river.NewClient(riverpgxv5.New(infra.Pool), riverCfg)
 	if err != nil {
-		return nil, fmt.Errorf("app: river: %w", err)
+		return nil, nil, fmt.Errorf("app: river: %w", err)
 	}
 
-	return client, nil
+	return client, onUserDeleted, nil
+}
+
+// workerIdentity builds the identity use cases the worker of the issuing service runs.
+func workerIdentity(cfg *config.Config, log *slog.Logger, infra *Infra, db *postgres.DB, files *file.Service) (*Identity, error) {
+	translator, err := i18n.New(cfg.App.DefaultLocale)
+	if err != nil {
+		return nil, fmt.Errorf("app: %w", err)
+	}
+
+	return newIdentity(&identityDeps{
+		cfg: cfg, log: log, db: db, infra: infra, keys: nil,
+		translator: translator, limiter: nil, revoker: redis.NewRevocations(infra.Redis), files: files,
+	})
+}
+
+// verifierAccounts purges the data of this service for the users the issuer deleted.
+func verifierAccounts(cfg *config.Config, log *slog.Logger, infra *Infra, db *postgres.DB, files *file.Service) (*accountuc.Service, error) {
+	inserter, err := newInsertClient(cfg, log, infra)
+	if err != nil {
+		return nil, err
+	}
+
+	return accountuc.New(&accountuc.Deps{
+		Users: nil, Identities: nil, Revocation: nil, Queue: postgres.NewAccountQueue(inserter), Unpurged: nil,
+		Purgers:   corePurgers(db, files),
+		Publisher: nil, Tx: db, Log: log, Grace: 0, Source: cfg.Telemetry.ServiceName, Now: nil,
+	}), nil
 }
 
 // Work runs the queue workers and periodic jobs until ctx is canceled, then lets running jobs
@@ -80,7 +141,7 @@ func Work(ctx context.Context, cfg *config.Config, log *slog.Logger, obs *Observ
 	}
 	defer infra.Close()
 
-	client, err := NewWorkerClient(cfg, log, infra)
+	client, onUserDeleted, err := newWorker(cfg, log, infra)
 	if err != nil {
 		return err
 	}
@@ -93,15 +154,12 @@ func Work(ctx context.Context, cfg *config.Config, log *slog.Logger, obs *Observ
 		defer stop()
 	}
 
-	if client == nil {
-		log.InfoContext(ctx, "worker idle: no jobs registered")
-		<-ctx.Done()
-
-		return nil
-	}
-
 	if err := client.Start(context.WithoutCancel(ctx)); err != nil {
 		return fmt.Errorf("app: start worker: %w", err)
+	}
+
+	if onUserDeleted != nil {
+		go subscribe(ctx, events.NewLog(log), onUserDeleted, log)
 	}
 
 	log.InfoContext(ctx, "worker started")

@@ -1,0 +1,145 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"uuid"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/xingyunqi-tech/go-template/internal/entity"
+	"github.com/xingyunqi-tech/go-template/internal/repo"
+	"github.com/xingyunqi-tech/go-template/internal/repo/postgres/sqlcgen"
+)
+
+// {{.Plural}} implements repo.{{.Plural}}.
+type {{.Plural}} struct {
+	db *DB
+}
+
+// New{{.Plural}} returns {{.Plural}}.
+func New{{.Plural}}(db *DB) *{{.Plural}} {
+	return &{{.Plural}}{db: db}
+}
+
+var _ repo.{{.Plural}} = (*{{.Plural}})(nil)
+
+func {{.name}}Of(n *sqlcgen.{{.Name}}) *entity.{{.Name}} {
+	return &entity.{{.Name}}{
+		ID: n.ID, OwnerSub: n.OwnerSub, Title: n.Title, Content: n.Content, CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt,
+	}
+}
+
+// Create implements repo.{{.Plural}}.
+func (r *{{.Plural}}) Create(ctx context.Context, n *entity.{{.Name}}) (*entity.{{.Name}}, error) {
+	var out *entity.{{.Name}}
+
+	err := r.db.queries(ctx, func(q *sqlcgen.Queries) error {
+		row, err := q.Create{{.Name}}(ctx, sqlcgen.Create{{.Name}}Params{ID: n.ID, OwnerSub: n.OwnerSub, Title: n.Title, Content: n.Content})
+		if err != nil {
+			return err //nolint:wrapcheck // wrapped below
+		}
+
+		out = {{.name}}Of(row)
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("postgres: create {{.name}}: %w", err)
+	}
+
+	return out, nil
+}
+
+// one runs a query returning a single {{.name}}; found is false when it returned no row.
+func (r *{{.Plural}}) one(ctx context.Context, op string, fn func(q *sqlcgen.Queries) (*sqlcgen.{{.Name}}, error)) (*entity.{{.Name}}, bool, error) {
+	var out *entity.{{.Name}}
+
+	err := r.db.queries(ctx, func(q *sqlcgen.Queries) error {
+		row, err := fn(q)
+		if err != nil {
+			return err
+		}
+
+		out = {{.name}}Of(row)
+
+		return nil
+	})
+
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, false, nil
+	case err != nil:
+		return nil, false, fmt.Errorf("postgres: %s {{.name}}: %w", op, err)
+	}
+
+	return out, true, nil
+}
+
+// Get implements repo.{{.Plural}}.
+func (r *{{.Plural}}) Get(ctx context.Context, owner, id uuid.UUID) (*entity.{{.Name}}, bool, error) {
+	return r.one(ctx, "get", func(q *sqlcgen.Queries) (*sqlcgen.{{.Name}}, error) {
+		return q.Get{{.Name}}(ctx, sqlcgen.Get{{.Name}}Params{ID: id, OwnerSub: owner}) //nolint:wrapcheck // wrapped by one
+	})
+}
+
+// Update implements repo.{{.Plural}}.
+func (r *{{.Plural}}) Update(ctx context.Context, owner, id uuid.UUID, c *entity.{{.Name}}Changes) (*entity.{{.Name}}, bool, error) {
+	return r.one(ctx, "update", func(q *sqlcgen.Queries) (*sqlcgen.{{.Name}}, error) {
+		return q.Update{{.Name}}(ctx, sqlcgen.Update{{.Name}}Params{Title: c.Title, Content: c.Content, ID: id, OwnerSub: owner}) //nolint:wrapcheck // wrapped by one
+	})
+}
+
+// List implements repo.{{.Plural}}.
+func (r *{{.Plural}}) List(ctx context.Context, p *repo.{{.Name}}Page) ([]entity.{{.Name}}, error) {
+	var out []entity.{{.Name}}
+
+	err := r.db.queries(ctx, func(q *sqlcgen.Queries) error {
+		rows, err := q.List{{.Plural}}(ctx, sqlcgen.List{{.Plural}}Params{
+			OwnerSub: p.Owner, AfterCreatedAt: p.AfterCreatedAt, AfterID: p.AfterID, RowLimit: int32(p.Limit), //nolint:gosec // limits are at most 101
+		})
+		if err != nil {
+			return err //nolint:wrapcheck // wrapped below
+		}
+
+		out = make([]entity.{{.Name}}, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, *{{.name}}Of(row))
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list {{.plural}}: %w", err)
+	}
+
+	return out, nil
+}
+
+// Delete implements repo.{{.Plural}}.
+func (r *{{.Plural}}) Delete(ctx context.Context, owner, id uuid.UUID) (bool, error) {
+	var n int64
+
+	err := r.db.queries(ctx, func(q *sqlcgen.Queries) error {
+		var err error
+
+		n, err = q.SoftDelete{{.Name}}(ctx, sqlcgen.SoftDelete{{.Name}}Params{ID: id, OwnerSub: owner})
+
+		return err //nolint:wrapcheck // wrapped below
+	})
+	if err != nil {
+		return false, fmt.Errorf("postgres: delete {{.name}}: %w", err)
+	}
+
+	return n > 0, nil
+}
+
+// Purge implements repo.Purger: it removes every {{.name}} of the owner.
+func (r *{{.Plural}}) Purge(ctx context.Context, owner uuid.UUID) error {
+	if err := r.db.queries(ctx, func(q *sqlcgen.Queries) error { return q.PurgeOwner{{.Plural}}(ctx, owner) }); err != nil {
+		return fmt.Errorf("postgres: purge {{.plural}}: %w", err)
+	}
+
+	return nil
+}

@@ -1,0 +1,59 @@
+components:
+  schemas:
+    {{.Name}}:
+      type: object
+      required: [id, title, content, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    {{.Name}}Page:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/{{.Name}}'
+        nextCursor:
+          type: [string, 'null']
+    Create{{.Name}}Input:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        content:
+          type: string
+          maxLength: 10000
+    Update{{.Name}}Input:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        content:
+          type: string
+          maxLength: 10000
+  parameters:
+    {{.Name}}ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid

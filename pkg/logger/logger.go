@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -134,14 +135,16 @@ func redacted(key string) bool {
 	return strings.Contains(key, "password") || strings.Contains(key, "token")
 }
 
-// MaskEmail keeps the first character of the local part: a***@example.com.
+// MaskEmail keeps the first character, not byte, of the local part: a***@example.com.
 func MaskEmail(email string) string {
 	local, domain, ok := strings.Cut(email, "@")
 	if !ok || local == "" {
 		return "***"
 	}
 
-	return local[:1] + "***@" + domain
+	first, _ := utf8.DecodeRuneInString(local)
+
+	return string(first) + "***@" + domain
 }
 
 // MaskPhone hides the eight characters before the last four: +86138****0000.

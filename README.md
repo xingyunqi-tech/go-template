@@ -1,127 +1,83 @@
 # go-template
 
-Go 后端模板。HTTP API 契约与 [nestjs-template](https://github.com/xingyunqi-tech/nestjs-template)（`release/exam-prep` 分支 `02fdb4d`，见 `openapi/SOURCE`）一致：vite-vue3-temp、uniapp-template 由 `/docs-json` 经 Orval 生成的前端可在两个后端之间无改动切换。改造方案见 [TEMPLATE_PLAN.md](TEMPLATE_PLAN.md)，开发约定见 [CLAUDE.md](CLAUDE.md)。
-
-| 项 | 选型 |
-|---|---|
-| 语言 | Go 1.27（`go.mod`） |
-| Web | 标准库 `net/http` + chi；spec-first：oapi-codegen strict server，输入为 nestjs 导出的 OpenAPI 文档 |
-| 数据 | PostgreSQL 18、pgx v5、sqlc、goose |
-| 缓存 / 锁 / 限流 | Redis 8、go-redis（GCRA 限流，Redis 不可用时回落进程内） |
-| 队列 / 定时任务 | River（Postgres） |
-| 认证 | golang-jwt 双令牌 + 会话、argon2id / bcrypt |
-| 可观测性 | log/slog、Prometheus client_golang、OpenTelemetry、Sentry |
-| 分层 | `cmd/` + `internal/{entity,usecase,repo,controller}` + `pkg/`（源自 evrone/go-clean-template） |
-| 质量 | golangci-lint v2、typos、testify + testcontainers-go、prek 钩子 |
+Go 后端模板：对外行为遵守 [跨语言平台约定](docs/platform-conventions.md)，导出自身的 OpenAPI 3.1 文档（`/openapi.json`）供前端生成客户端。只提供基础能力，外加一个 CRUD 示例模块 `notes`，业务在此之上添加。可作为同一 monorepo 中的一个服务，与 Python / Java 模板共存。
 
 ## 功能
 
-- 统一响应信封、错误翻译（i18n en / zh）、与 nestjs ValidationPipe 等价的校验、Request ID、CORS、安全头、限流，Express 路由语义
-- 认证：邮箱、手机号密码、短信验证码、微信（小程序 / App / 手机号）、支付宝；JWT access + refresh 轮换；会话（设备）管理；RBAC
-- 用户管理、文件上传（`local` / `s3` / `s3-presigned`）与私有文件
-- 通用模块：notifications
-- 健康检查、Prometheus 指标、审计、运营告警、账号注销清理、邮件（中英模板）、定时任务
-- `/docs-json` 逐字节输出 nestjs 完整 OpenAPI 基线（含本模板未实现的接口，如考试业务与地址、收藏、反馈、配置、行政区划、协议、应用信息，请求返回 404 信封），`/docs` 为 Scalar 页面；`SWAGGER_ENABLED` 控制，未设置时生产关闭
-- 模块骨架生成器：按 nestjs 文档中的 tag 生成处理器、usecase、repo
+| 类别 | 内容 |
+|---|---|
+| 平台 | 错误信封与 errorKey 码表、字段级校验错误、i18n（zh / en）、Request ID、CORS、安全头、请求体限制、GCRA 限流、幂等键、健康检查、Prometheus 或 OTLP 指标、OTel 链路、Sentry、`/docs`（Scalar） |
+| 认证（签发服务） | 邮箱 + 密码、手机号 + 短信验证码、微信小程序 / 微信 App / 支付宝登录（配置凭据后启用）、EdDSA JWT + JWKS、refresh 轮换与 30 秒宽限期、会话管理、改密与找回、当前用户、用户与角色管理、账号注销 |
+| 验证服务 | 设 `AUTH_JWKS_URL` 只验证签发服务的令牌，共享吊销键；订阅 `user.deleted` 清理本服务数据（事件传输需在 monorepo 中接入） |
+| 文件 | 本地或 S3 兼容存储，按内容识别类型，签名地址 |
+| 基础服务 | 邮件（SMTP）、River 队列与周期任务、审计日志与查询 |
+| 工具 | `make module NAME=<name>` 以 notes 为模板生成 CRUD 模块 |
 
 ## 快速开始
 
-前置：Go 1.27、Docker。
+需要 Go（版本见 `go.mod`）与 Docker。
 
 ```bash
-make install      # 下载 golangci-lint / prek / typos / sqlc 到 bin/，安装 Git 钩子
+make install            # 工具二进制与 Git 钩子
 cp .env.example .env
-make infra        # Postgres 18 :5432、Redis 8 :6379
-make migrate      # goose 迁移 + River 迁移
-make seed         # 角色、状态、权限与初始账号
-make dev          # http://localhost:3000
-make worker       # 另开终端：队列 worker 与周期任务（邮件、通知、账号清理）
+make keys               # 生成 AUTH_SIGNING_KEY，填入 .env（不设时非生产以临时密钥运行）
+make infra              # 本地 Postgres、Redis（端口 DATABASE_PORT / REDIS_PORT）
+make migrate && make seed
+make dev                # API：http://localhost:3000，文档 /docs
+make worker             # 另开终端：队列 worker 与周期任务
 ```
 
-- `.env.example` 中 `REDIS_ENABLED=false`，缓存、锁、限流使用进程内实现；改为 `true` 后连接 `make infra` 启动的 Redis。队列在 Postgres 上，邮件、通知、账号清理始终需要 worker 进程；生产强制 `REDIS_ENABLED=true`
-- 未设置 `MAIL_HOST` 时（非生产）邮件只写 worker 日志；`SMS_MOCK_MODE=true` 时验证码只写 API 日志
-- 非生产环境 seed 账号：`admin@example.com` / `john.doe@example.com`，密码 `Secret00`（接口传 MD5）
+种子账号（非生产）：`admin@example.com` 与 `user@example.com`，密码 `Passw0rd!`。生产用 `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` 或 `go run ./cmd/app createsuperuser --email <email>`。
 
-| 路由 | 说明 |
-|---|---|
-| `GET /` | 应用信息 |
-| `GET /api/health` | 简单健康检查 |
-| `GET /api/v1/health`、`/api/v1/health/live`、`/api/v1/health/ready` | terminus 形状的健康检查与探针 |
-| `/api/v1/auth/*` | 邮箱 / 手机 / 微信 / 支付宝登录注册、刷新令牌、个人资料、改密、注销、会话管理 |
-| `/api/v1/users` | 用户管理（管理员） |
-| `GET /docs-json`、`GET /docs` | OpenAPI 文档（与 nestjs 逐字节相同）、Scalar 页面 |
-| `GET /metrics` | Prometheus 指标（监控令牌） |
+认证角色由变量决定：设 `AUTH_SIGNING_KEY` 为签发服务（挂载约定 §11.1–§11.3 与 JWKS，迁移 identity 表）；只设 `AUTH_JWKS_URL` 为验证服务；两者都设时启动失败。
 
 ## Make 目标
 
-| 目标 | 说明 |
-|---|---|
-| `make install` | 下载工具二进制并安装 Git 钩子（`make tools` 只下载） |
-| `make infra` | 启动本地 Postgres 与 Redis |
-| `make migrate` / `make seed` | 迁移 / 种子数据（读取 `.env`） |
-| `make dev` / `make worker` | 本地启动 API / 队列 worker（读取 `.env`） |
-| `make generate` | oapi-codegen（`openapi/scope.yaml` 范围内）+ sqlc |
-| `make generate-check` | 重新生成后检查生成代码与入库版本一致 |
-| `make module NAME=orders TAG=Orders` | 按 nestjs 文档 tag 生成模块骨架并加入 `scope.yaml` |
-| `make fmt` | gofumpt + gci |
-| `make lint` | golangci-lint（主模块与 tools 模块）、typos、`go mod tidy -diff`（`make lint-new` 只报告相对 HEAD 新增的问题，`make typos` 只做拼写检查） |
-| `make vet` | `go vet`（含全部测试标签）+ `go build` |
-| `make check` | lint + vet + 单元测试（pre-push 钩子） |
-| `make test` | 第 1 层：单元测试 |
-| `make test-integration` | 第 2 层：集成测试（testcontainers，需要 Docker） |
-| `make test-e2e` | 第 3 层：构建镜像，compose 启动完整服务栈后黑盒测试 |
-| `make test-contract` | 第 4 层：契约测试（含全部 nestjs 校验 oracle 用例） |
-| `make test-migrations` | 空库 up → sqlc vet → down-to 0 → up，检查约束与索引命名（需要 `make infra`） |
-| `make coverage` | 合并单元、集成、契约覆盖率并校验 ≥80% |
-| `make vuln` / `make gitleaks` / `make security` | govulncheck / gitleaks / 两者 |
-| `make hadolint` / `make workflow-lint` | Dockerfile 检查 / actionlint + zizmor |
-| `make build` | 交叉编译 linux amd64 / arm64 到 `bin/` |
-| `make image` / `make image-scan` | 构建生产镜像 `go-template:local` / Trivy 扫描 |
-| `make ci` | 本地运行 CI 中的全部检查 |
-| `make clean` | 清理 `bin/` 与 `coverage/` |
+`make help` 列出全部目标。常用：
 
-`make help` 列出全部目标与说明。
+| 目标 | 作用 |
+|---|---|
+| `make check` | lint + vet + 单元测试（pre-push 钩子） |
+| `make test-integration` / `test-contract` / `test-e2e` / `test-migrations` | 集成（testcontainers）/ 契约 / e2e（compose 生产镜像）/ 迁移检查 |
+| `make coverage` | 单元 + 集成 + 契约覆盖率，门槛 80% |
+| `make generate` | OpenAPI bundle 与 oapi-codegen、sqlc、mockgen |
+| `make module NAME=<name> [PLURAL=<plural>] [PERMS=1]` | 生成 CRUD 模块 |
+| `make ci` | 本地运行 CI 的全部 job |
 
 ## 目录结构
 
 ```
-cmd/app/            单一二进制：serve、worker、migrate、seed、healthcheck、version
-cmd/modulegen/      模块骨架生成器
-internal/
-  app/              组装与进程生命周期
-  config/           环境变量解析与校验
-  entity/           领域对象与领域错误
-  usecase/          业务流程（接口在 contracts.go）
-  repo/             postgres（sqlc）、redis、webapi（邮件、存储、短信、微信、支付宝）
-  controller/http/  中间件、Express 路由语义、请求管线、policy.go；gen/ 为生成代码，v1/ 为处理器
-  worker/           River workers 与周期任务
-  metrics/、i18n/、testutil/
-pkg/                与业务无关的封装（validatorx、ratelimit、password、jwtx、jsontime……）
-openapi/            nestjs 基线、validation.json、scope.yaml、overlay.yaml
-migrations/、seeds/、templates/、db/
-tests/              contract、e2e
-docker/、deploy/、scripts/、tools/
+cmd/app/            子命令：serve / worker / migrate / seed / createsuperuser / keys / healthcheck / version
+cmd/modulegen/      模块生成器
+internal/app/       组装与生命周期，按认证角色装配
+internal/controller/http/   中间件链、操作表、policy；gen/ 生成代码，v1/ 处理器
+internal/usecase/   业务规则（auth、sms、account、session、user、file、audit、maintenance、note、health）
+internal/repo/      端口与实现：postgres/、redis/、webapi/{mail,sms,wechat,alipay,storage}
+internal/entity/    领域对象、错误码表、角色与权限码
+internal/events/    user.deleted 事件
+internal/worker/    River workers 与周期任务
+migrations/{core,identity}/   goose 迁移
+openapi/src/        接口定义源文件（spec-first）
+templates/          邮件模板、模块模板
+tests/{contract,e2e}/
+scripts/bench/      压测
 ```
-
-详见 [docs/architecture.md](docs/architecture.md)。
-
-## 镜像与 Compose
-
-`Dockerfile` 多阶段构建，运行时为 `gcr.io/distroless/static-debian13:nonroot`，镜像只含一个静态二进制 `/app`（迁移、种子数据、邮件模板、OpenAPI 文档都已 `embed`）。`docker/` 下的 compose 文件按组合使用：`docker-compose.base.yaml`（migrate、api、worker）叠加 `docker-compose.postgres.yaml`、`docker-compose.redis.yaml`，再叠加 `dev` / `test` / `ci` 之一；服务器部署用独立的 `docker-compose.ecs.yaml`；`infra.compose.yaml` 只启动本地依赖（`make infra`）。详见 [docs/deploy.md](docs/deploy.md)。
 
 ## 文档
 
-| 文档 | 内容 |
+| 文件 | 内容 |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | 目录结构、分层、policy、请求链路、进程模型、基础设施 |
-| [docs/auth.md](docs/auth.md) | 登录方式、JWT 与会话、密码、短信验证码、RBAC |
-| [docs/database.md](docs/database.md) | 连接配置、模型与迁移、事务、共库、seed |
-| [docs/deploy.md](docs/deploy.md) | 镜像、compose、deploy/manage.sh、GitHub Actions |
-| [docs/testing.md](docs/testing.md) | 四层测试与运行方式 |
-| [docs/cli.md](docs/cli.md) | 子命令、worker、代码生成与模块生成器、脚本 |
-| [docs/contract.md](docs/contract.md) | spec-first 生成、未实现接口、与 nestjs 的行为差异 |
-| [CLAUDE.md](CLAUDE.md) | 开发约定（AI 助手同样遵守） |
+| [docs/platform-conventions.md](docs/platform-conventions.md) | 跨语言平台约定（三仓库相同，不在本仓库修改） |
+| [docs/architecture.md](docs/architecture.md) | 分层、请求链路、进程模型、认证角色、事件、Connect 接入 |
+| [docs/openapi.md](docs/openapi.md) | spec 源文件、bundler 与生成流程、新增接口步骤 |
+| [docs/auth.md](docs/auth.md) | 令牌实现、轮换与宽限期、登录方式与 provider 变量 |
+| [docs/database.md](docs/database.md) | schema、两个迁移目录、命名规则、事务 |
+| [docs/cli.md](docs/cli.md) | 子命令、`keys generate`、模块生成器 |
+| [docs/testing.md](docs/testing.md) | 各层测试与运行方式 |
+| [docs/deploy.md](docs/deploy.md) | 镜像、compose、健康检查、环境变量、服务器部署 |
+| [docs/benchmark.md](docs/benchmark.md) | 压测方法与结果 |
+| [TEMPLATE_PLAN.md](TEMPLATE_PLAN.md) | v2 方案与实施批次 |
 
 ## 许可证
 
-[MIT](LICENSE)
+见 [LICENSE](LICENSE)。

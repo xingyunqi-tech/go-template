@@ -320,7 +320,7 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 
 | 项 | 实现 |
 |---|---|
-| 认证角色 | `AUTH_SIGNING_KEY` 已设置 → 签发：挂载约定 §11.1–§11.3、§11.5 与 JWKS，迁移 identity 表；只设置 `AUTH_JWKS_URL` → 验证：不挂载 §11.1–§11.3，§11.5 按配置挂载；两者都设置启动失败；都未设置时生产启动失败，非生产生成进程内临时 Ed25519 密钥并以签发角色运行（记 warn，重启后令牌失效） |
+| 认证角色 | `AUTH_SIGNING_KEY` 已设置 → 签发：挂载约定 §11.1–§11.3、§11.5 与 JWKS，迁移 identity 表；只设置 `AUTH_JWKS_URL` → 验证：不挂载 §11.1–§11.3（`internal/app/document.go` 从校验文档、发布文档与 policy 中去掉 tag 为 `auth`、`me`、`users` 的操作；未进文档的生成路由 404，`Allow` 只列出提供的方法），并删去不再被引用的 components（`securitySchemes` 保留），tag `auth`、`me`、`users` 保留给身份接口；挂载 §11.5、notes 与 `listAuditLogs`，不发布 JWKS；两者都设置启动失败；都未设置时生产启动失败，非生产生成进程内临时 Ed25519 密钥并以签发角色运行（记 warn，重启后令牌失效） |
 | 角色与权限 | 按约定 §5.5 由代码固定：`internal/entity/rbac.go` 声明角色、平台权限码、本服务私有权限码及其授予角色；`admin` 自动拥有本服务全部权限码；不建角色 / 权限表、不缓存 |
 | 私有权限码 | 只在本服务生效；`listRoles` / `listPermissions` 只反映签发服务自己的权限码；模板本身不声明私有权限码 |
 | 多角色 | `user_role(user_id, role_code)`；每个用户都有 `user`；access 的 `roles` claim 为全部角色代码 |
@@ -397,7 +397,7 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 | 队列 | River：`mail`、`account`、`default`；默认 5 次尝试、指数退避；事务内 `InsertTx` |
 | 定时任务 | River 周期任务（leader 选举，每小时，`RunOnStart`）：`maintenance`（`usecase/maintenance`：签发角色删除过期会话及其 refresh 历史、过期 / 已用 / 已失效的 `user_token`；所有角色删除 `AUDIT_RETENTION` 之前的审计日志，每条 DELETE 至多 10000 行、循环到删完），`account.sweep`（签发角色：软删超过 `ACCOUNT_DELETION_GRACE` + 1 小时仍未清理的用户按 `(deleted_at, id)` 分页、每页 500 个全部重新入队 `account.purge`，已有任务的跳过，日志只计新入队数） |
 | 账号注销 | `deleteMe` / `deleteUser`：同事务做最后管理员检查（§6.5）、软删用户、删除第三方身份、吊销全部会话、入队 `account.purge`（`account` 队列，延时 `ACCOUNT_DELETION_GRACE`，River 唯一任务按 user_id 去重）；任务对仍未软删的用户不做处理，否则在一个事务内依次调用登记的 `Purger`（文件对象与行、笔记删除、审计日志的 `actor_sub` 与 `ip` 清空）并物理删除用户（会话、令牌、角色级联），提交后经 `events.Publisher` 发布 `user.deleted`（CloudEvents 1.0 JSON，`source` 为 `OTEL_SERVICE_NAME`）；发布失败由 River 重试，重试时清理可重复执行；补偿扫描见「定时任务」 |
-| 事件 | `events.Publisher`（B4）/ `events.Subscriber`（B6）端口；传输方式、键与主题名由 monorepo 配置（`EVENTS_*`，模板不预设变量），消费者组取 `OTEL_SERVICE_NAME`；模板默认实现只写日志；验证角色收到 `user.deleted` 后入队 `account.purge`，只运行本服务的 `Purger` |
+| 事件 | `events.Publisher` / `events.Subscriber` 端口；传输方式、键与主题名由 monorepo 配置（`EVENTS_*`，模板不预设变量），消费者组取 `OTEL_SERVICE_NAME`；模板默认发布器只写日志、订阅器不接收事件；验证角色的 worker 订阅 `user.deleted`（订阅失败后按 1 秒起、至多 1 分钟的退避重新订阅；类型不符或没有 userId 的事件丢弃，入队失败返回错误以便重投），收到后立即入队 `account.purge`，只运行本服务的 `corePurgers`（文件、笔记、审计匿名化），不删用户、不再发布 |
 | 审计 | policy `Audit: "<action>"` 的接口在成功后写 `audit_log`；`GET /api/v1/audit-logs`（`listAuditLogs`，`audit:read`，游标分页） |
 | 邮件 | 模板 `templates/mail/{verify_email,reset_password}.{html,txt}.tmpl`，文案走 i18n 的 `mail.*`；`SMTP_URL` 为 `smtp://`（要求 STARTTLS；`?tls=none` 才允许明文，用于本地 Mailpit 与测试）或 `smtps://`（隐式 TLS），用户信息即认证；未配置时只写日志（掩码收件人与主题，不含正文链接），签发角色生产必填 |
 | 文件 | 约定 §11.5 的三个接口；用途在代码中登记（`entity/file.go`）：`avatar`（约定默认）与 `attachment`（图片 + pdf，20 MiB）。上传 policy（`Upload: true`）的请求体上限为各用途上限最大值 + 64 KiB，不受 `BODY_LIMIT` 约束，读取超限映射为 413 `file.tooLarge`；`ValidateRequest` 设 `ExcludeRequestBody`，并对去掉请求体的请求副本校验（openapi3filter 的安全检查会整块读入请求体）。multipart 流式读取：`purpose` 在 `file` 之前时先校验用途并按该用途上限写入；`file` 在前时按最大上限写入临时对象，读到 `purpose` 后再校验大小与类型，不符则删除。类型取前 512 字节 `http.DetectContentType`，边写边计算 sha256 与大小；同一请求多于一个 `file` 为 422 `maxItems`，缺字段 422 `required`；文件名取 base name，非法 UTF-8 替换为 U+FFFD、去掉控制字符，至多 255 字符；写存储失败为 500，读请求体失败为 400。`File.url`：local 驱动为相对路径 `/api/v1/files/{id}/content?expires=&signature=`（HMAC-SHA256 签 `id.expires`，密钥 `FILE_URL_SECRET`，非生产未设置时进程启动随机生成），s3 驱动为预签名 GET（非图片带 `response-content-disposition: attachment`），有效期 `FILE_URL_TTL`；`expires`、`signature` 在 spec 中为可选、不限长的字符串，缺失或无效一律 404；`storage` 与当前 `STORAGE_DRIVER` 不同的文件不生成地址（`User.avatarUrl` 为 null，`File.url` 为空串）；下载在发出 200 之后复制失败时不再写错误信封；local 驱动要求 api 与 worker 共享 `STORAGE_LOCAL_ROOT`（ci 栈用卷 `uploaded-files`）；`getFileContent` 带 `X-Content-Type-Options: nosniff`，非图片带 `Content-Disposition: attachment`，签名无效或过期 404 |
@@ -464,7 +464,7 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 | `_typos.toml` | 删除 `db/nestjs-schema.sql` 排除项 |
 | CLAUDE.md 约定 | 注释规范、提交与推送原文保留 |
 
-模块生成器 `make module NAME=<name> [PERMS=1]` 以 `note` 为模板生成：`openapi/src/paths|schemas/<name>.yaml`、core 迁移、sqlc 查询、repo / usecase / handler、`Purger`、policy 条目、单元与集成测试骨架，然后执行 `make generate`。默认与 `note` 相同，只按本人归属控制访问、不声明权限码；`PERMS=1` 时在 `rbac.go` 登记私有权限码 `<name>:read`、`<name>:write`（不授予其他角色，`admin` 自动拥有）并在 policy 中引用。
+模块生成器 `make module NAME=<name> [PLURAL=<plural>] [PERMS=1]`（`cmd/modulegen`，模板 `templates/module/` 由 note 模块文件替换名称派生）以 `note` 为模板生成：`openapi/src/paths|schemas/<name>.yaml`、core 迁移、sqlc 查询、repo / usecase / handler、`Purger`、policy 条目、单元与集成测试骨架，然后执行 `make generate`。默认与 `note` 相同，只按本人归属控制访问、不声明权限码；`PERMS=1` 时在 `rbac.go` 登记私有权限码 `<name>:read`、`<name>:write`（不授予其他角色，`admin` 自动拥有）并在 policy 中引用。登记处为代码中的 `modulegen:<slot>` 锚点（policy、v1 Server 字段 / Deps / New、`internal/app` 的 import、模块组装与 `corePurgers`、`rbac.go`、`.golangci.yml` 的 `dupl` 排除），端口与用例接口追加到两个 `contracts.go` 末尾。全部文件先在内存中渲染与插入，成功后才写盘；拒绝 Go 关键字与预声明标识符、PostgreSQL 保留字、entity 中已有的同名标识符、spec 中已有的同名 path 或 component，以及已存在的文件。生成的模块与 note 结构相同，`dupl` 只对 note 的三个文件、两个 `contracts.go` 与生成器登记的模块文件关闭。
 
 ---
 
@@ -475,7 +475,7 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 | 单元 | usecase（mock 端口）；`pkg/*`；错误码表与约定 §2.4 逐条一致；校验映射、格式注册、码点长度（§5.1）；Request ID 正则与 UUIDv7 生成；`Accept-Language` 匹配；jsontime 输入输出；E.164 规范化；日志脱敏与掩码；`TRUSTED_PROXIES` 取 IP 与 IPv6 /64；GCRA 计算、`peek` 模式与 `X-RateLimit-*` 语义（突发、剩余、恢复秒数、多规则取最少）；RBAC 映射与 `admin` 全权限；JWS 头 `kid` 与 JWK 形状 | 同目录 `*_test.go` |
 | 集成 | repo SQL 与约束；refresh 轮换（并发只产生一对、宽限期返回同一对、历史哈希重用吊销、`auth.refreshTokenInvalid`、会话寿命不随轮换延长）；吊销键写入时机与 TTL、Redis 出错 503；限流 Lua（Redis `TIME`、键值格式、Redis 出错时共享 / 私有规则行为、只计失败规则）；短信冷却 / 日上限 / 锁定；幂等键（实际路径作用域、2xx / 4xx 回放、5xx 释放、进行中、请求体不同）；`role.lastAdmin` 并发；软删后重新注册；微信 openid / unionid 回填；River 入队与周期任务；文件（MinIO、类型识别、`purpose` 先后两种顺序、超限清理、签名地址与响应头）；邮件（测试 SMTP 服务器 + golden）；完整路由的 HTTP 级测试：405 + `Allow`、尾斜杠 404、401 `WWW-Authenticate`、public 接口带无效令牌按匿名、413 / 415 / 422，**每个响应经 `openapi3filter.ValidateResponse` 对照 `openapi/openapi.json` 校验** | 同目录 `*_integration_test.go`，`integration` |
 | 契约 | 已实现的约定 §11 operationId 方法与路径一致，请求 / 响应字段集合与 §11.4 对象一致；`make openapi` 后 `openapi.json` 无 diff；`GET /openapi.json` 与文件逐字节相同；`chi.Walk` 路由集合与 spec paths 双向一致（白名单：`/metrics`、`/docs`、`/openapi.json`、`/health/live`、`/health/ready`、`/.well-known/jwks.json`）；operationId 唯一且 lowerCamelCase；422 响应引用 `ValidationErrorResponse`、其余 4xx / 5xx 引用 `ErrorResponse`；每个 operation 有 policy；鉴权 operation 声明 `bearerAuth`。各批只核对该批已实现的子集，B6 起要求 §11 全量 | `tests/contract`，`contract` |
-| 互通 | 固定测试密钥签发的 access 可由 JWKS 验证（含 `AUTH_VERIFY_KEYS` 中的旧密钥）；验证角色实例经 `AUTH_JWKS_URL` 拉取签发实例公钥后鉴权成功，签发实例登出后验证实例因吊销键返回 401；`email_verified` claim 驱动 `VerifiedEmail` | `tests/e2e` |
+| 互通 | 固定测试密钥签发的 access 可由 JWKS 验证（含 `AUTH_VERIFY_KEYS` 中的旧密钥，种子为字节 33..64）；ci 栈的 `api-verifier`（独立 schema `verifier`）经 `AUTH_JWKS_URL` 拉取签发实例公钥后鉴权成功，签发实例登出后验证实例因吊销键返回 401，且不提供身份接口；`VerifiedEmail` 由 controller 单测覆盖（模板内无接口使用） | `tests/e2e` |
 | e2e | compose：migrate → seed → api + worker；B2 为 health 与 notes；B3 起注册 → 验证邮件（Mailpit）→ 登录 → 刷新 → 会话 → 登出；B4 起注销；B5 起上传；未配置凭据时 `listAuthProviders` 为空数组 | `tests/e2e`，`e2e` |
 
 - 集成夹具沿用 testcontainers + 模板库克隆（`Clone(t)`）与 Redis 逻辑库池；`PostgresImage` 改为 `18.7-alpine`
@@ -578,9 +578,10 @@ CI 不再访问 nestjs-template 与 fastapi-temp。
 | B5 | `internal/controller/http/{policy,validate}.go`、`v1/{me,users,auth,views}.go`、`internal/usecase/user`、`tools/openapigen` | policy `Upload`；`avatarFileId` 的 `exists` 校验与 null 清除（`pkg/optional`，spec 用 `x-go-type`，bundler 输出的文档去掉 `x-go-*`）；`User.avatarUrl` 由文件用例批量生成 |
 | B5 | `docker/docker-compose.ci.yaml`、`.env.example` | ci 栈 api 与 worker 共享卷 `uploaded-files`（`STORAGE_LOCAL_ROOT=/home/nonroot/files`）与 `FILE_URL_SECRET`；`.env.example` 加文件与审计变量 |
 | B5 | `internal/usecase/audit/`、`internal/worker/`、`internal/usecase/account` | 查询接口（`listAuditLogs`：游标分页，`actorSub`、`action` 筛选）与保留期清理；周期任务（§8）；`account.Sweep` |
-| B6 | `deploy/manage.sh`、`Dockerfile`、`docker/*.yaml`、`docker/.env.ecs.example`、`.env.example`、`.github/workflows/check.yml`、`scripts/commit-msg.sh` | §11、§13；`docker-compose.ecs.yaml` / `.env.ecs.example` 的生产签发服务需要 `SMS_PROVIDER=aliyun` 与 `ALIYUN_SMS_*`（B4 起启动校验） |
-| B6 | `scripts/bench/` | 本服务自身压测 |
-| B6 | `pkg/logger`、`pkg/ratelimit` | `MaskEmail` 按字符而非字节截取本地部分；进程内限流器满 10000 键后的淘汰改为不全表扫描 |
+| B6 | `docker/docker-compose.{ecs,dev,test,ci}.yaml`、`docker/.env.ecs.example`、`scripts/commit-msg.sh` | ecs 组装 `DATABASE_URL`、`REDIS_URL`、`STORAGE_LOCAL_ROOT`，`.env.ecs.example` 按 §10 与约定 §9 重写；dev / test 改用 `SMTP_URL`、`DATABASE_URL`、`REDIS_URL`；ci 加 `AUTH_VERIFY_KEYS` 与 `migrate-verifier` / `api-verifier`；commit-msg 头注释去掉 nestjs。`deploy/manage.sh`、`Dockerfile`、`check.yml`（job 已与 §13 一致）不需要修改 |
+| B6 | `internal/controller/http/{pipeline,operations}.go`、`internal/app/{app,worker,purgers,document}.go`、`internal/usecase/account`、`internal/events` | 验证角色装配（§6.5）；`user.deleted` 订阅；模块锚点；`corePurgers` |
+| B6 | `scripts/bench/` | `run.sh up\|bench\|down` + `bench.js`（k6，`grafana/k6` 镜像在 compose 网络内运行）+ `compose.yaml`（生产镜像、`RATE_LIMIT_ENABLED=false` 关闭限流（需要非生产 `APP_ENV`）、api 限 2 CPU / 1 GiB）；接口 `getMe`、`listNotes`、`createNote`、`refreshToken`、`loginWithEmail` |
+| B6 | `pkg/logger`、`pkg/ratelimit` | `MaskEmail` 按字符截取本地部分；进程内限流器以 TAT 最小堆淘汰（过期键与满 10000 键时 O(log n)） |
 
 ### 14.3 新建
 
@@ -590,7 +591,7 @@ CI 不再访问 nestjs-template 与 fastapi-temp。
 | B3 | `migrations/identity/00001_identity.sql`（`app_user`、`user_role`、`session`、`session_refresh_history`、`user_token`）、`internal/entity/{user,rbac}.go`、`internal/usecase/{auth,user,session}/`、`internal/usecase/limits.go`、`internal/controller/http/v1/{auth,me,users,views}.go`（`listRoles` / `listPermissions` 在 `users.go`，JWKS 由 `ops.go` 提供）、`internal/repo/postgres/{users,sessions,tokens,mailqueue}.go` 与 queries、`internal/repo/redis/grace.go`、`internal/app/{identity,accounts}.go`、`pkg/password`、`internal/repo/webapi/mail/`、`templates/templates.go`、`templates/mail/*.tmpl`、`internal/i18n/locales` 中邮件文案、`internal/testutil/smtp.go`（go-smtp 进程内服务器）、`tests/e2e/auth_test.go` |
 | B4 | `internal/usecase/{sms,account}/`、`internal/usecase/auth/provider.go`、`internal/usecase/phone.go`、`internal/events/`、`internal/entity/identity.go`、`migrations/identity/00002_user_identity.sql`、`internal/repo/postgres/{identities,accountqueue}.go` 与 `queries/identities.sql`、`internal/repo/redis/sms.go`、`internal/testutil/logbuffer.go`、`internal/app/{sms,provider,account}_integration_test.go` |
 | B5 | `internal/usecase/file/`、`internal/usecase/maintenance/`、`internal/controller/http/v1/{files,audit}.go`、`internal/entity/file.go`、`migrations/core/00003_file.sql`、`internal/repo/postgres/{files,maintenance}.go` 与 `queries/{files,maintenance}.sql`、`pkg/optional`、`internal/app/files.go`、`openapi/src/{paths,schemas}/{files,audit}.yaml`、`tests/e2e/files_test.go` |
-| B6 | `cmd/modulegen/`、`templates/module/`、`docs/openapi.md`、`docs/benchmark.md` |
+| B6 | `cmd/modulegen/`、`templates/module/`、`docs/openapi.md`、`docs/benchmark.md`、`internal/app/{document,purgers}.go`、`internal/app/verifier_integration_test.go`、`tests/e2e/interop_test.go` |
 
 ### 14.4 保留
 
@@ -625,7 +626,7 @@ CI 不再访问 nestjs-template 与 fastapi-temp。
 | B3 认证核心 | identity 迁移、EdDSA 签发 + JWKS、邮件模板与 `mail` 队列、约定 §11.1 邮箱类接口与 `refreshToken` / `logout`、§11.2 中 `getMe` / `updateMe`（B5 之前没有可引用的文件，非 null 的 `avatarFileId` 一律 422 `exists`）/ `changePassword` / 会话三接口、§11.3 除 `deleteUser` 外全部、RBAC、`role.lastAdmin`（禁用 / 移除角色）、共享限流规则（除 `auth-sms`）、审计写入、seed、`createsuperuser`、`keys generate` | 集成：轮换并发、宽限期、历史重用、吊销时机、只计失败规则；契约：已实现的 §11 接口与对象字段；e2e 注册到登出 |
 | B4 短信、provider、注销 | `sendSmsCode`、`loginWithSms`、`bindPhone`、`auth-sms`；`listAuthProviders`、`loginWithProvider`（三个 provider）、`bindPhoneWithWechat`；`deleteMe` / `deleteUser`（含 `role.lastAdmin`）、`account.purge`、`user.deleted` 发布 | 单元（provider 客户端 httptest、支付宝验签、错误映射）；集成（短信限额与锁定、注销任务、软删后重新注册、事件发布）；e2e 注销 |
 | B5 文件、审计与任务 | `uploadFile`、`getFile`、`getFileContent`、`avatarFileId` 的 `exists` 校验；`listAuditLogs`；周期任务 | 集成（MinIO、类型识别、`purpose` 顺序、超限清理、签名地址）；e2e 上传 |
-| B6 共存与交付 | 验证角色装配与事件订阅、模块生成器、Makefile / compose / workflow / Dockerfile、§14.5 B6 文档、压测 | 契约 §11 全量；互通测试；`make ci`、`make test-e2e`、`make image` 本地通过；CI 全绿 |
+| B6 共存与交付 | 验证角色装配与事件订阅、模块生成器、Makefile / compose / workflow / Dockerfile、§14.5 B6 文档、压测 | 契约 §11 全量；互通测试；`make ci`、`make test-e2e`、`make image` 本地通过；CI 全绿（需推送后确认） |
 
 ---
 

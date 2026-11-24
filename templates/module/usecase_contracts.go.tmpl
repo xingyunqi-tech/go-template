@@ -1,0 +1,10 @@
+
+// {{.Plural}} manages the {{.plural}} of the calling user.
+type {{.Plural}} interface {
+	// List returns a page after cursor ("" for the first page) of at most limit {{.plural}}.
+	List(ctx context.Context, owner uuid.UUID, cursor string, limit int) (pagination.CursorPage[entity.{{.Name}}], error)
+	Create(ctx context.Context, owner uuid.UUID, title, content string) (*entity.{{.Name}}, error)
+	Get(ctx context.Context, owner, id uuid.UUID) (*entity.{{.Name}}, error)
+	Update(ctx context.Context, owner, id uuid.UUID, c *entity.{{.Name}}Changes) (*entity.{{.Name}}, error)
+	Delete(ctx context.Context, owner, id uuid.UUID) error
+}

@@ -245,7 +245,7 @@ type identityOperation struct {
 	status       string
 }
 
-// identityOperations are the §11 operations implemented so far.
+// identityOperations are the operations of platform conventions §11.
 func identityOperations() map[string]identityOperation {
 	return map[string]identityOperation{
 		"registerWithEmail":       {"POST", "/api/v1/auth/email/register", []string{"email", "password", "displayName"}, "201"},

@@ -153,12 +153,12 @@ func (o *operations) checkRegistered(mux chi.Routes) error {
 	return errors.Join(errs...)
 }
 
-// lookup finds the route of method and path: the matched pattern and path parameters, the
-// documented operation when it is one, and the allowed methods when only the method differs.
-func lookup(mux *chi.Mux, method, path string) (pattern string, params map[string]string, allowed []string) {
+// lookup finds the route of method and path: the matched pattern and path parameters, and the
+// allowed methods when only the method differs; served reports whether a route is offered.
+func lookup(mux *chi.Mux, method, path string, served func(method, pattern string) bool) (pattern string, params map[string]string, allowed []string) {
 	rctx := chi.NewRouteContext()
 
-	if pattern = mux.Find(rctx, method, path); pattern != "" {
+	if pattern = mux.Find(rctx, method, path); pattern != "" && served(method, pattern) {
 		params = make(map[string]string, len(rctx.URLParams.Keys))
 		for i, k := range rctx.URLParams.Keys {
 			params[k] = rctx.URLParams.Values[i]
@@ -170,7 +170,11 @@ func lookup(mux *chi.Mux, method, path string) (pattern string, params map[strin
 	for _, m := range []string{
 		http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete,
 	} {
-		if m != method && mux.Find(chi.NewRouteContext(), m, path) != "" {
+		if m == method {
+			continue
+		}
+
+		if p := mux.Find(chi.NewRouteContext(), m, path); p != "" && served(m, p) {
 			allowed = append(allowed, m)
 		}
 	}

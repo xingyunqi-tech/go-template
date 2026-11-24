@@ -22,6 +22,7 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/usecase/audit"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/health"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/note"
+	// modulegen:imports
 	"github.com/xingyunqi-tech/go-template/openapi"
 	"github.com/xingyunqi-tech/go-template/pkg/httpserver"
 	"github.com/xingyunqi-tech/go-template/pkg/ratelimit"
@@ -55,13 +56,7 @@ func NewHandler(ctx context.Context, cfg *config.Config, log *slog.Logger, infra
 	}
 
 	db := postgres.NewDB(infra.Pool, _acquireTimeout, log)
-
-	var redisPinger repo.Pinger
-	if infra.Redis != nil {
-		redisPinger = redis.NewPinger(infra.Redis)
-	}
-
-	healthService := health.New(postgres.NewHealth(db), redisPinger)
+	healthService := newHealth(db, infra)
 	limiter := ratelimit.New(infra.Redis)
 	revocations := redis.NewRevocations(infra.Redis)
 
@@ -75,18 +70,23 @@ func NewHandler(ctx context.Context, cfg *config.Config, log *slog.Logger, infra
 		return nil, err
 	}
 
+	document, validation, policies, err := servedDocuments(openapi.Document, httpapi.ValidationDocument, cfg.Auth.Role() == config.RoleVerifier)
+	if err != nil {
+		return nil, err
+	}
+
 	router, err := httpapi.NewRouter(ctx, &httpapi.Options{
 		Log:                 log,
 		Translator:          translator,
 		ServiceName:         cfg.Telemetry.ServiceName,
-		ValidationDocument:  httpapi.ValidationDocument,
-		Document:            openapi.Document,
+		ValidationDocument:  validation,
+		Document:            document,
 		DocsEnabled:         cfg.App.Docs(),
 		CORSOrigins:         cfg.CORSOrigins(),
 		AnyOrigin:           !cfg.App.IsProduction(),
 		BodyLimit:           int64(cfg.HTTP.BodyLimit),
 		TrustedProxies:      cfg.HTTP.TrustedProxies,
-		Policies:            httpapi.Policies(),
+		Policies:            policies,
 		Register:            v1.Register(server),
 		Verifier:            keys.Verifier,
 		Revocations:         revocations,
@@ -111,7 +111,18 @@ func NewHandler(ctx context.Context, cfg *config.Config, log *slog.Logger, infra
 	return &Handler{Handler: router, health: healthService}, nil
 }
 
-// newServer builds the handlers of the documented operations and the JWKS document.
+// newHealth checks PostgreSQL and, when it is configured, Redis.
+func newHealth(db *postgres.DB, infra *Infra) *health.Service {
+	var redisPinger repo.Pinger
+	if infra.Redis != nil {
+		redisPinger = redis.NewPinger(infra.Redis)
+	}
+
+	return health.New(postgres.NewHealth(db), redisPinger)
+}
+
+// newServer builds the handlers of the documented operations and the JWKS document; a verifier
+// serves no identity operation and publishes no JWKS.
 func newServer(d *identityDeps, audits *audit.Service) (*v1.Server, []byte, error) {
 	files, err := newFiles(d.cfg, d.db, d.log)
 	if err != nil {
@@ -119,6 +130,16 @@ func newServer(d *identityDeps, audits *audit.Service) (*v1.Server, []byte, erro
 	}
 
 	d.files = files
+
+	deps := &v1.Deps{ //nolint:exhaustruct // the identity use cases are set below for the issuer
+		Notes: note.New(postgres.NewNotes(d.db)),
+		// modulegen:modules
+		Files: files, Audits: audits, Log: d.log,
+	}
+
+	if d.cfg.Auth.Role() == config.RoleVerifier {
+		return v1.New(deps), nil, nil
+	}
 
 	identity, err := newIdentity(d)
 	if err != nil {
@@ -130,10 +151,10 @@ func newServer(d *identityDeps, audits *audit.Service) (*v1.Server, []byte, erro
 		return nil, nil, err
 	}
 
-	return v1.New(&v1.Deps{
-		Notes: note.New(postgres.NewNotes(d.db)), Auth: identity.Auth, Sessions: identity.Sessions, Users: identity.Users,
-		SMS: identity.SMS, Accounts: identity.Accounts, Files: d.files, Audits: audits, Log: d.log,
-	}), jwks, nil
+	deps.Auth, deps.Sessions, deps.Users = identity.Auth, identity.Sessions, identity.Users
+	deps.SMS, deps.Accounts = identity.SMS, identity.Accounts
+
+	return v1.New(deps), jwks, nil
 }
 
 // Serve runs the API server until ctx is canceled, then fails readiness and shuts down within

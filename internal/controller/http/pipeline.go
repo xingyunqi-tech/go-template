@@ -12,6 +12,9 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/entity"
 )
 
+// _apiPrefix starts the generated routes; one left out of the document is not served.
+const _apiPrefix = "/api/"
+
 // pipeline runs, in front of the generated handlers, everything a documented operation needs.
 type pipeline struct {
 	opts *Options
@@ -20,8 +23,16 @@ type pipeline struct {
 	errs *errorWriter
 }
 
+// served reports whether the route of method and pattern is offered: documented, or outside the
+// generated routes.
+func (p *pipeline) served(method, pattern string) bool {
+	_, documented := p.ops.byRoute[routeKey(method, pattern)]
+
+	return documented || !strings.HasPrefix(pattern, _apiPrefix)
+}
+
 func (p *pipeline) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	pattern, params, allowed := lookup(p.mux, r.Method, r.URL.Path)
+	pattern, params, allowed := lookup(p.mux, r.Method, r.URL.Path, p.served)
 
 	switch {
 	case pattern == "" && len(allowed) > 0:

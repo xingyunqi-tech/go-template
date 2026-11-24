@@ -211,3 +211,37 @@ func TestSweepReschedulesEveryUserPastTheGracePeriodPageByPage(t *testing.T) {
 
 	require.NoError(t, f.svc.Sweep(t.Context()))
 }
+
+func TestAVerifierPurgesOnlyItsOwnDataOnUserDeleted(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	queue, purger := mocks.NewMockAccountQueue(ctrl), mocks.NewMockPurger(ctrl)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	svc := account.New(&account.Deps{
+		Queue: queue, Purgers: []repo.Purger{purger}, Tx: inline{}, Log: slog.New(slog.DiscardHandler),
+		Now: func() time.Time { return now },
+	})
+	id := uuid.NewV7()
+
+	e, err := events.NewUserDeleted("issuer", id, now)
+	require.NoError(t, err)
+
+	queue.EXPECT().EnqueuePurge(gomock.Any(), id, now).Return(true, nil)
+	require.NoError(t, svc.OnUserDeleted(t.Context(), e))
+
+	for _, e := range []*events.Event{
+		{ID: "x", Type: events.TypeUserDeleted, Data: []byte(`"not an object"`)},
+		{ID: "y", Type: events.TypeUserDeleted, Data: []byte(`{}`)},
+		{ID: "z", Type: "user.created", Data: e.Data},
+	} {
+		require.NoError(t, svc.OnUserDeleted(t.Context(), e), e.ID)
+	}
+
+	queue.EXPECT().EnqueuePurge(gomock.Any(), id, now).Return(false, errors.New("db down"))
+	require.Error(t, svc.OnUserDeleted(t.Context(), e), "a failed enqueue is delivered again")
+
+	purger.EXPECT().Purge(gomock.Any(), id).Return(nil)
+	require.NoError(t, svc.Purge(t.Context(), id))
+	require.NoError(t, svc.Sweep(t.Context()))
+}

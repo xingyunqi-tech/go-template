@@ -144,6 +144,12 @@ vet: ## go vet + go build（含 integration / e2e / contract 标签）
 	$(GO) -C tools vet ./...
 	$(GO) build $(PKGS)
 
+.PHONY: module
+module: ## 以 note 为模板生成 CRUD 模块：make module NAME=<name> [PLURAL=<plural>] [PERMS=1]
+	@test -n "$(NAME)" || { echo "用法：make module NAME=<name> [PLURAL=<plural>] [PERMS=1]" >&2; exit 1; }
+	$(GO) run ./cmd/modulegen -name $(NAME) $(if $(PLURAL),-plural $(PLURAL)) $(if $(filter 1,$(PERMS)),-perms)
+	$(MAKE) fmt
+
 .PHONY: generate-check
 generate-check: generate ## 重新生成后检查生成代码与入库版本一致
 	@if [[ -n "$$(git status --porcelain -- $(GENERATED))" ]]; then \

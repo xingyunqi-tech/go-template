@@ -168,6 +168,11 @@ linters:
           - funlen
           - goconst
           - mnd
+      # make module copies the note module into the modules it generates, listed below the note files
+      - path: internal/(repo/postgres/notes|controller/http/v1/notes|usecase/note/note|repo/contracts|usecase/contracts)\.go
+        linters:
+          - dupl
+      # modulegen:dupl
       - path: (internal/config|internal/testutil|tests)/
         text: os\.(Getenv|LookupEnv)
         linters:

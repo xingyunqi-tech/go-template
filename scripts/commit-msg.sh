@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# commit-msg 钩子：conventional commits，类型集合与 nestjs-template commitlint 一致。
+# commit-msg 钩子：检查 conventional commits 格式与标题、正文长度。
 set -euo pipefail
 
 TYPES='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'

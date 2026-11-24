@@ -2,6 +2,7 @@ package events_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"testing"
@@ -42,4 +43,22 @@ func TestUserDeletedIsACloudEvent(t *testing.T) {
 	assert.Equal(t, "2026-01-02T02:04:05Z", got["time"])
 	assert.Equal(t, map[string]any{"userId": id.String()}, got["data"])
 	assert.NotEmpty(t, got["id"])
+}
+
+func TestLogSubscriberReceivesNothing(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	called := false
+	err := events.NewLog(slog.New(slog.NewJSONHandler(&buf, nil))).Subscribe(t.Context(), events.TypeUserDeleted,
+		func(context.Context, *events.Event) error {
+			called = true
+
+			return nil
+		})
+
+	require.NoError(t, err)
+	assert.False(t, called)
+	assert.Contains(t, buf.String(), "no event transport")
 }

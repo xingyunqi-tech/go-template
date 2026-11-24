@@ -1,0 +1,16 @@
+-- +goose Up
+CREATE TABLE {{.name}} (
+    id uuid NOT NULL DEFAULT uuidv7(),
+    owner_sub uuid NOT NULL,
+    title text NOT NULL,
+    content text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    deleted_at timestamptz,
+    CONSTRAINT {{.name}}_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX {{.name}}_owner_sub_created_at_idx ON {{.name}} (owner_sub, created_at DESC, id DESC) WHERE deleted_at IS NULL;
+
+-- +goose Down
+DROP TABLE {{.name}};

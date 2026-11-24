@@ -19,7 +19,8 @@ func TestAdminHoldsEveryPermissionAndUserNone(t *testing.T) {
 	}
 
 	assert.False(t, rbac.Granted([]string{"admin"}, "note:delete"))
-	assert.Equal(t, []string{"audit:read", "role:read", "role:write", "user:read", "user:write"}, entity.Permissions())
+	assert.Subset(t, entity.Permissions(), []string{"audit:read", "role:read", "role:write", "user:read", "user:write"})
+	assert.IsNonDecreasing(t, entity.Permissions())
 
 	roles := entity.Roles()
 	assert.Equal(t, "admin", roles[0].Code)

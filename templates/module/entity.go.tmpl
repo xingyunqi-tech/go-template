@@ -1,0 +1,31 @@
+package entity
+
+import (
+	"time"
+	"uuid"
+)
+
+// {{.Name}} is a text {{.name}} owned by one user.
+type {{.Name}} struct {
+	ID        uuid.UUID
+	OwnerSub  uuid.UUID
+	Title     string
+	Content   string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+{{- if .Perms}}
+
+// Permission codes of {{.plural}}; only admin holds them unless rbac.go grants them to a role.
+const (
+	Perm{{.Name}}Read  = "{{.name}}:read"
+	Perm{{.Name}}Write = "{{.name}}:write"
+)
+{{- end}}
+
+// {{.Name}}Changes is a partial update; nil fields keep their value.
+type {{.Name}}Changes struct {
+	Title   *string
+	Content *string
+}

@@ -146,16 +146,23 @@ func TestJWKSVerifiesTheIssuedTokens(t *testing.T) {
 	assert.Equal(t, "max-age=300", jwks.header.Get("Cache-Control"))
 
 	keys, _ := jwks.body["keys"].([]any)
-	require.Len(t, keys, 1)
+	require.Len(t, keys, 2, "the signing key and AUTH_VERIFY_KEYS")
 
-	pub, ok := signingKey().Public().(ed25519.PublicKey)
-	require.True(t, ok)
+	var kids []any
 
-	kid, err := jwtx.KeyID(pub)
-	require.NoError(t, err)
+	for _, k := range keys {
+		key, _ := k.(map[string]any)
+		kids = append(kids, key["kid"])
+	}
 
-	key, _ := keys[0].(map[string]any)
-	assert.Equal(t, kid, key["kid"])
+	for _, priv := range []ed25519.PrivateKey{signingKey(), oldKey()} {
+		pub, ok := priv.Public().(ed25519.PublicKey)
+		require.True(t, ok)
+
+		kid, err := jwtx.KeyID(pub)
+		require.NoError(t, err)
+		assert.Contains(t, kids, kid)
+	}
 }
 
 func TestDeleteMeSignsOutAndFreesTheEmail(t *testing.T) {

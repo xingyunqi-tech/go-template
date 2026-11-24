@@ -27,7 +27,9 @@ type RoleDef struct {
 // servicePermissions are the private permission codes of this service and the roles granting
 // them; admin holds every one of them.
 func servicePermissions() map[string][]string {
-	return map[string][]string{}
+	return map[string][]string{
+		// modulegen:permissions
+	}
 }
 
 // Permissions lists every permission code of this service, sorted.

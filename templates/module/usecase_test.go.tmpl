@@ -1,0 +1,129 @@
+package {{.name}}_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+	"uuid"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/xingyunqi-tech/go-template/internal/entity"
+	"github.com/xingyunqi-tech/go-template/internal/repo"
+	"github.com/xingyunqi-tech/go-template/internal/repo/mocks"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/{{.name}}"
+	"github.com/xingyunqi-tech/go-template/pkg/pagination"
+)
+
+func TestListPagesWithTheExtraRow(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	{{.plural}} := mocks.NewMock{{.Plural}}(ctrl)
+	owner := uuid.NewV7()
+	at := time.Date(2026, 11, 17, 8, 0, 0, 123456000, time.UTC)
+
+	rows := []entity.{{.Name}}{
+		{ID: uuid.NewV7(), OwnerSub: owner, Title: "a", CreatedAt: at.Add(time.Second)},
+		{ID: uuid.NewV7(), OwnerSub: owner, Title: "b", CreatedAt: at},
+		{ID: uuid.NewV7(), OwnerSub: owner, Title: "c", CreatedAt: at.Add(-time.Second)},
+	}
+
+	{{.plural}}.EXPECT().List(gomock.Any(), &repo.{{.Name}}Page{Owner: owner, Limit: 3}).Return(rows, nil)
+
+	page, err := {{.name}}.New({{.plural}}).List(t.Context(), owner, "", 2)
+	require.NoError(t, err)
+	assert.Len(t, page.Items, 2)
+	require.NotNil(t, page.NextCursor)
+
+	{{.plural}}.EXPECT().List(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, p *repo.{{.Name}}Page) ([]entity.{{.Name}}, error) {
+		assert.Equal(t, at, *p.AfterCreatedAt)
+		assert.Equal(t, rows[1].ID, *p.AfterID)
+
+		return rows[2:], nil
+	})
+
+	next, err := {{.name}}.New({{.plural}}).List(t.Context(), owner, *page.NextCursor, 2)
+	require.NoError(t, err)
+	assert.Len(t, next.Items, 1)
+	assert.Nil(t, next.NextCursor)
+}
+
+func TestListRejectsForeignCursors(t *testing.T) {
+	t.Parallel()
+
+	svc := {{.name}}.New(mocks.NewMock{{.Plural}}(gomock.NewController(t)))
+
+	for _, cursor := range []string{
+		"garbage", pagination.Cursor{Key: "yesterday", ID: uuid.NewV7().String()}.Encode(),
+		pagination.Cursor{Key: time.Now().Format(time.RFC3339Nano), ID: "nope"}.Encode(),
+	} {
+		_, err := svc.List(t.Context(), uuid.NewV7(), cursor, 20)
+
+		var v *entity.ValidationError
+		require.ErrorAs(t, err, &v, cursor)
+		assert.Equal(t, "query.cursor", v.Errors[0].Field)
+	}
+}
+
+func TestMissing{{.Plural}}AreNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	{{.plural}} := mocks.NewMock{{.Plural}}(ctrl)
+	owner, id := uuid.NewV7(), uuid.NewV7()
+	svc := {{.name}}.New({{.plural}})
+
+	{{.plural}}.EXPECT().Get(gomock.Any(), owner, id).Return(nil, false, nil)
+	{{.plural}}.EXPECT().Update(gomock.Any(), owner, id, gomock.Any()).Return(nil, false, nil)
+	{{.plural}}.EXPECT().Delete(gomock.Any(), owner, id).Return(false, nil)
+
+	_, err := svc.Get(t.Context(), owner, id)
+	require.ErrorIs(t, err, entity.New(entity.KeyNotFound))
+
+	title := "t"
+	_, err = svc.Update(t.Context(), owner, id, &entity.{{.Name}}Changes{Title: &title, Content: nil})
+	require.ErrorIs(t, err, entity.New(entity.KeyNotFound))
+
+	require.ErrorIs(t, svc.Delete(t.Context(), owner, id), entity.New(entity.KeyNotFound))
+
+	boom := errors.New("db down")
+	{{.plural}}.EXPECT().Delete(gomock.Any(), owner, id).Return(false, boom)
+	require.ErrorIs(t, svc.Delete(t.Context(), owner, id), boom)
+}
+
+func TestUpdateWithoutChangesIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	svc := {{.name}}.New(mocks.NewMock{{.Plural}}(gomock.NewController(t)))
+
+	_, err := svc.Update(t.Context(), uuid.NewV7(), uuid.NewV7(), &entity.{{.Name}}Changes{Title: nil, Content: nil})
+
+	var verr *entity.ValidationError
+	require.ErrorAs(t, err, &verr)
+	assert.Equal(t, []entity.FieldError{
+		{Field: "body", Rule: entity.RuleMinProperties, Params: map[string]any{"minProperties": 1}},
+	}, verr.Errors)
+}
+
+func TestCreateAssignsAVersion7ID(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	{{.plural}} := mocks.NewMock{{.Plural}}(ctrl)
+	owner := uuid.NewV7()
+
+	{{.plural}}.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, n *entity.{{.Name}}) (*entity.{{.Name}}, error) {
+		assert.Equal(t, owner, n.OwnerSub)
+		assert.Equal(t, byte(7), n.ID[6]>>4)
+
+		return n, nil
+	})
+
+	n, err := {{.name}}.New({{.plural}}).Create(t.Context(), owner, "t", "c")
+	require.NoError(t, err)
+	assert.Equal(t, "t", n.Title)
+}

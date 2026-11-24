@@ -71,3 +71,21 @@ func (l *Log) Publish(ctx context.Context, e *Event) error {
 
 	return nil
 }
+
+// Handler consumes one event; an error leaves the event to be delivered again.
+type Handler func(ctx context.Context, e *Event) error
+
+// Subscriber delivers the events of eventType to h until ctx is canceled, in the consumer group
+// OTEL_SERVICE_NAME.
+type Subscriber interface {
+	Subscribe(ctx context.Context, eventType string, h Handler) error
+}
+
+var _ Subscriber = (*Log)(nil)
+
+// Subscribe implements Subscriber without a transport: it receives nothing.
+func (l *Log) Subscribe(ctx context.Context, eventType string, _ Handler) error {
+	l.log.WarnContext(ctx, "no event transport configured, events are not consumed", "type", eventType)
+
+	return nil
+}
