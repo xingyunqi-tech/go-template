@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"time"
 
 	"uuid"
 )
@@ -50,4 +51,77 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 		arg.Data,
 	)
 	return err
+}
+
+const deleteAuditLogsBefore = `-- name: DeleteAuditLogsBefore :execrows
+DELETE FROM audit_log
+WHERE id IN (SELECT old.id FROM audit_log old WHERE old.created_at < $1 LIMIT $2)
+`
+
+type DeleteAuditLogsBeforeParams struct {
+	Before   time.Time
+	RowLimit int32
+}
+
+func (q *Queries) DeleteAuditLogsBefore(ctx context.Context, arg DeleteAuditLogsBeforeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAuditLogsBefore, arg.Before, arg.RowLimit)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listAuditLogs = `-- name: ListAuditLogs :many
+SELECT id, actor_sub, action, resource_type, resource_id, request_id, ip, data, created_at
+FROM audit_log
+WHERE ($1::uuid IS NULL OR actor_sub = $1::uuid)
+  AND ($2::text IS NULL OR action = $2::text)
+  AND ($3::timestamptz IS NULL
+       OR (created_at, id) < ($3::timestamptz, $4::uuid))
+ORDER BY created_at DESC, id DESC
+LIMIT $5
+`
+
+type ListAuditLogsParams struct {
+	ActorSub       *uuid.UUID
+	Action         *string
+	AfterCreatedAt *time.Time
+	AfterID        *uuid.UUID
+	RowLimit       int32
+}
+
+func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]*AuditLog, error) {
+	rows, err := q.db.Query(ctx, listAuditLogs,
+		arg.ActorSub,
+		arg.Action,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*AuditLog
+	for rows.Next() {
+		var i AuditLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.ActorSub,
+			&i.Action,
+			&i.ResourceType,
+			&i.ResourceID,
+			&i.RequestID,
+			&i.Ip,
+			&i.Data,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

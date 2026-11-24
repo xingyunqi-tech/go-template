@@ -28,6 +28,7 @@ type Deps struct {
 	Identities repo.Identities
 	Revocation *session.Revocation
 	Queue      repo.AccountQueue
+	Unpurged   repo.Maintenance
 	Purgers    []repo.Purger
 	Publisher  events.Publisher
 	Tx         TxRunner
@@ -90,7 +91,9 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
 		return err //nolint:wrapcheck // entity or repo errors
 	}
 
-	return s.Queue.EnqueuePurge(ctx, id, s.Now().Add(s.Grace)) //nolint:wrapcheck // repo errors are wrapped
+	_, err = s.Queue.EnqueuePurge(ctx, id, s.Now().Add(s.Grace))
+
+	return err //nolint:wrapcheck // repo errors are wrapped
 }
 
 // Purge runs an account.purge job: the purgers and the removal of the user share one
@@ -128,6 +131,54 @@ func (s *Service) Purge(ctx context.Context, id uuid.UUID) error {
 
 	if err := s.Publisher.Publish(ctx, e); err != nil {
 		return fmt.Errorf("account: publish: %w", err)
+	}
+
+	return nil
+}
+
+const (
+	// _sweepMargin leaves a scheduled purge time to run before the sweep schedules it again.
+	_sweepMargin = time.Hour
+	_sweepBatch  = 500
+)
+
+// Sweep schedules the purge, now, of every user deleted longer than the grace period ago that is
+// still stored, page by page; a purge already waiting for a user is kept.
+func (s *Service) Sweep(ctx context.Context) error {
+	now := s.Now()
+	before := now.Add(-s.Grace - _sweepMargin)
+
+	var (
+		after       *repo.UnpurgedUser
+		rescheduled int
+	)
+
+	for {
+		page, err := s.Unpurged.UnpurgedUsers(ctx, before, after, _sweepBatch)
+		if err != nil {
+			return err //nolint:wrapcheck // repo errors are wrapped
+		}
+
+		for i := range page {
+			added, err := s.Queue.EnqueuePurge(ctx, page[i].ID, now)
+			if err != nil {
+				return err //nolint:wrapcheck // repo errors are wrapped
+			}
+
+			if added {
+				rescheduled++
+			}
+		}
+
+		if len(page) < _sweepBatch {
+			break
+		}
+
+		after = &page[len(page)-1]
+	}
+
+	if rescheduled > 0 {
+		s.Log.WarnContext(ctx, "account purge rescheduled", "users", rescheduled)
 	}
 
 	return nil

@@ -34,9 +34,9 @@ func (s *Server) ListUsers(ctx context.Context, req gen.ListUsersRequestObject) 
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	items := make([]gen.User, 0, len(page.Items))
-	for i := range page.Items {
-		items = append(items, userOf(&page.Items[i]))
+	items, err := s.userViews(ctx, page.Items)
+	if err != nil {
+		return nil, err
 	}
 
 	return gen.ListUsers200JSONResponse{Code: response.Code, Message: response.Message, Data: gen.UserPage{
@@ -53,7 +53,12 @@ func (s *Server) CreateUser(ctx context.Context, req gen.CreateUserRequestObject
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.CreateUser201JSONResponse(userEnvelope(u)), nil
+	env, err := s.userEnvelope(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.CreateUser201JSONResponse(env), nil
 }
 
 // GetUser handles GET /api/v1/users/{id}.
@@ -63,7 +68,12 @@ func (s *Server) GetUser(ctx context.Context, req gen.GetUserRequestObject) (gen
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.GetUser200JSONResponse(userEnvelope(u)), nil
+	env, err := s.userEnvelope(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.GetUser200JSONResponse(env), nil
 }
 
 // UpdateUser handles PATCH /api/v1/users/{id}.
@@ -73,7 +83,12 @@ func (s *Server) UpdateUser(ctx context.Context, req gen.UpdateUserRequestObject
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.UpdateUser200JSONResponse(userEnvelope(u)), nil
+	env, err := s.userEnvelope(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.UpdateUser200JSONResponse(env), nil
 }
 
 // SetUserRoles handles PUT /api/v1/users/{id}/roles.
@@ -83,7 +98,12 @@ func (s *Server) SetUserRoles(ctx context.Context, req gen.SetUserRolesRequestOb
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.SetUserRoles200JSONResponse(userEnvelope(u)), nil
+	env, err := s.userEnvelope(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.SetUserRoles200JSONResponse(env), nil
 }
 
 // ListRoles handles GET /api/v1/roles.

@@ -35,8 +35,14 @@ type WechatPhone interface {
 	Phone(ctx context.Context, code string) (string, error)
 }
 
+// Avatars tells the avatar files of a user.
+type Avatars interface {
+	IsAvatar(ctx context.Context, owner, id uuid.UUID) (bool, error)
+}
+
 // Deps are what the Service uses; a nil WechatPhone disables bindPhoneWithWechat.
 type Deps struct {
+	Avatars     Avatars
 	Users       repo.Users
 	Codes       CodeVerifier
 	WechatPhone WechatPhone
@@ -97,13 +103,22 @@ func (s *Service) Me(ctx context.Context, caller *usecase.Caller) (*entity.User,
 	return &rec.User, nil
 }
 
-// UpdateMe implements usecase.Users; an avatar file id names no file until files are uploaded.
-func (s *Service) UpdateMe(ctx context.Context, caller *usecase.Caller, displayName *string, avatarFileID *uuid.UUID) (*entity.User, error) {
-	if avatarFileID != nil {
-		return nil, entity.Invalid("avatarFileId", entity.RuleExists, nil)
+// UpdateMe implements usecase.Users: an avatar must be an avatar file the caller uploaded.
+func (s *Service) UpdateMe(ctx context.Context, caller *usecase.Caller, c *usecase.MeChanges) (*entity.User, error) {
+	if c.SetAvatar && c.AvatarFileID != nil {
+		ok, err := s.Avatars.IsAvatar(ctx, caller.UserID, *c.AvatarFileID)
+		if err != nil {
+			return nil, err //nolint:wrapcheck // repo errors are wrapped
+		}
+
+		if !ok {
+			return nil, entity.Invalid("avatarFileId", entity.RuleExists, nil)
+		}
 	}
 
-	return s.update(ctx, caller.UserID, &repo.UserChanges{DisplayName: displayName, Status: nil})
+	return s.update(ctx, caller.UserID, &repo.UserChanges{
+		DisplayName: c.DisplayName, Status: nil, SetAvatar: c.SetAvatar, AvatarFileID: c.AvatarFileID,
+	})
 }
 
 func (s *Service) update(ctx context.Context, id uuid.UUID, c *repo.UserChanges) (*entity.User, error) {
@@ -316,7 +331,7 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, displayName, status 
 		}
 	}
 
-	u, err := s.update(ctx, id, &repo.UserChanges{DisplayName: displayName, Status: status})
+	u, err := s.update(ctx, id, &repo.UserChanges{DisplayName: displayName, Status: status, SetAvatar: false, AvatarFileID: nil})
 	if err != nil {
 		return nil, err
 	}

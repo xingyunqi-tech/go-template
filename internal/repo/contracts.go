@@ -4,6 +4,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"io"
 	"time"
 	"uuid"
 
@@ -34,24 +35,43 @@ type Locks interface {
 	Release(ctx context.Context, key, token string)
 }
 
-// Sink receives one uploaded file under a random key.
+// Sink receives the bytes of one uploaded file.
 type Sink interface {
-	Key() string
 	Write(p []byte) (int, error)
-	// Commit stores the received bytes; Discard removes whatever was stored.
-	Commit(ctx context.Context) error
+	// Commit stores the received bytes as contentType; Discard removes whatever was received.
+	Commit(ctx context.Context, contentType string) error
 	Discard(ctx context.Context)
 }
 
-// FileStorage keeps file contents on local disk or in an S3 bucket; path is the file row path.
+// Storage drivers.
+const (
+	StorageLocal = "local"
+	StorageS3    = "s3"
+)
+
+// ErrObjectNotFound reports a missing stored object.
+var ErrObjectNotFound = errors.New("repo: object not found")
+
+// FileStorage keeps file contents under object keys on local disk or in an S3 bucket.
 type FileStorage interface {
-	Local() bool
-	NewSink(key, contentType string) (Sink, error)
-	Delete(ctx context.Context, path string) error
-	// LocalFile is the disk path of a local file.
-	LocalFile(path string) string
-	PresignGet(ctx context.Context, key string) (string, error)
-	PresignPut(ctx context.Context, key string, length int64) (string, error)
+	// Name is StorageLocal or StorageS3.
+	Name() string
+	NewSink(key string) (Sink, error)
+	Open(ctx context.Context, key string) (io.ReadCloser, error)
+	// Delete removes key; a missing key is no error.
+	Delete(ctx context.Context, key string) error
+	// PresignGet signs a download of key for ttl; attachment asks the client to save it as name.
+	PresignGet(ctx context.Context, key, name string, attachment bool, ttl time.Duration) (string, error)
+}
+
+// Files stores the file rows; reads skip deleted files.
+type Files interface {
+	Create(ctx context.Context, f *entity.File) error
+	Get(ctx context.Context, id uuid.UUID) (f *entity.File, found bool, err error)
+	ListByID(ctx context.Context, ids []uuid.UUID) ([]entity.File, error)
+	// ListOwner includes deleted files.
+	ListOwner(ctx context.Context, owner uuid.UUID) ([]entity.File, error)
+	DeleteOwner(ctx context.Context, owner uuid.UUID) error
 }
 
 // AuditLog is an audit_log row.
@@ -65,9 +85,44 @@ type AuditLog struct {
 	Data         map[string]any
 }
 
+// AuditEntry is a stored audit log.
+type AuditEntry struct {
+	AuditLog
+
+	ID        uuid.UUID
+	CreatedAt time.Time
+}
+
+// AuditPage selects audit logs after a position, newest first.
+type AuditPage struct {
+	ActorSub *uuid.UUID
+	Action   *string
+	// AfterCreatedAt and AfterID are the position of the last entry of the previous page.
+	AfterCreatedAt *time.Time
+	AfterID        *uuid.UUID
+	Limit          int
+}
+
 // Audits stores audit logs, in the request transaction when there is one.
 type Audits interface {
 	Create(ctx context.Context, l *AuditLog) error
+	List(ctx context.Context, p *AuditPage) ([]AuditEntry, error)
+	DeleteBefore(ctx context.Context, before time.Time) (int64, error)
+}
+
+// Maintenance removes expired identity rows and finds deleted users left unpurged.
+type Maintenance interface {
+	DeleteExpiredSessions(ctx context.Context, now time.Time) (int64, error)
+	DeleteSpentTokens(ctx context.Context, now time.Time) (int64, error)
+	// UnpurgedUsers lists users soft-deleted before before, oldest first, after the position of
+	// the last user of the previous page (nil for the first page).
+	UnpurgedUsers(ctx context.Context, before time.Time, after *UnpurgedUser, limit int) ([]UnpurgedUser, error)
+}
+
+// UnpurgedUser is a soft-deleted user still stored.
+type UnpurgedUser struct {
+	ID        uuid.UUID
+	DeletedAt time.Time
 }
 
 // ErrIdempotencyClaimLost reports a key whose claim expired or passed to another request.
@@ -145,10 +200,13 @@ type UserFilter struct {
 	Offset int
 }
 
-// UserChanges is a partial update of a user; nil fields keep their value.
+// UserChanges is a partial update of a user; nil fields keep their value, SetAvatar sets
+// AvatarFileID, nil clearing it.
 type UserChanges struct {
-	DisplayName *string
-	Status      *string
+	DisplayName  *string
+	Status       *string
+	SetAvatar    bool
+	AvatarFileID *uuid.UUID
 }
 
 // Users stores the accounts; reads skip soft-deleted users. Create reports a taken email or
@@ -332,7 +390,8 @@ type SMSSender interface {
 
 // AccountQueue schedules the purge of a deleted account in the request transaction.
 type AccountQueue interface {
-	EnqueuePurge(ctx context.Context, userID uuid.UUID, at time.Time) error
+	// EnqueuePurge reports whether it added a job; a purge already waiting for userID is kept.
+	EnqueuePurge(ctx context.Context, userID uuid.UUID, at time.Time) (bool, error)
 }
 
 // Purger removes the data a service keeps for a user.

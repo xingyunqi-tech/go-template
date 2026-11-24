@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -45,12 +46,22 @@ func run(src, out, validation, configPath string) error {
 		return err
 	}
 
-	bundled, err := Marshal(doc)
+	codegenInput, err := Marshal(doc)
 	if err != nil {
 		return err
 	}
 
-	inlined, err := Inline(doc)
+	published, ok := stripGoExtensions(doc).(map[string]any)
+	if !ok {
+		return errDocument
+	}
+
+	bundled, err := Marshal(published)
+	if err != nil {
+		return err
+	}
+
+	inlined, err := Inline(published)
 	if err != nil {
 		return err
 	}
@@ -66,7 +77,34 @@ func run(src, out, validation, configPath string) error {
 		}
 	}
 
-	return generate(bundled, configPath)
+	return generate(codegenInput, configPath)
+}
+
+var errDocument = errors.New("the bundle is not an object")
+
+// stripGoExtensions copies v without the x-go-* keys, which only steer oapi-codegen.
+func stripGoExtensions(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(x))
+
+		for k, val := range x {
+			if !strings.HasPrefix(k, "x-go-") {
+				out[k] = stripGoExtensions(val)
+			}
+		}
+
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, item := range x {
+			out[i] = stripGoExtensions(item)
+		}
+
+		return out
+	default:
+		return v
+	}
 }
 
 func generate(bundled []byte, configPath string) error {

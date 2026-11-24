@@ -22,6 +22,8 @@ type Server struct {
 	users    usecase.Users
 	sms      usecase.SMS
 	accounts usecase.Accounts
+	files    usecase.Files
+	audits   usecase.Audits
 	log      *slog.Logger
 }
 
@@ -33,12 +35,16 @@ type Deps struct {
 	Users    usecase.Users
 	SMS      usecase.SMS
 	Accounts usecase.Accounts
+	Files    usecase.Files
+	Audits   usecase.Audits
 	Log      *slog.Logger
 }
 
 // New returns a Server.
 func New(d *Deps) *Server {
-	return &Server{notes: d.Notes, auth: d.Auth, sessions: d.Sessions, users: d.Users, sms: d.SMS, accounts: d.Accounts, log: d.Log}
+	return &Server{
+		notes: d.Notes, auth: d.Auth, sessions: d.Sessions, users: d.Users, sms: d.SMS, accounts: d.Accounts, files: d.Files, audits: d.Audits, log: d.Log,
+	}
 }
 
 // Register mounts the generated strict handlers of s; parameter binding errors are 400s.

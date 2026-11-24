@@ -44,7 +44,7 @@ var _ repo.MailQueue = (*MailQueue)(nil)
 // Enqueue implements repo.MailQueue: in the request transaction, so the job exists only when the
 // transaction commits.
 func (q *MailQueue) Enqueue(ctx context.Context, job *repo.MailJob) error {
-	err := insert(ctx, q.client, MailArgs{Mail: job.Kind, UserID: job.UserID, Locale: job.Locale}, nil)
+	_, err := insert(ctx, q.client, MailArgs{Mail: job.Kind, UserID: job.UserID, Locale: job.Locale}, nil)
 	if err != nil {
 		return fmt.Errorf("postgres: enqueue mail: %w", err)
 	}

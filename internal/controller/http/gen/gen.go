@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"uuid"
 
@@ -16,7 +18,38 @@ import (
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/xingyunqi-tech/go-template/pkg/jsontime"
+	"github.com/xingyunqi-tech/go-template/pkg/optional"
 )
+
+// Defines values for AuditLogPageEnvelopeCode.
+const (
+	AuditLogPageEnvelopeCodeN0 AuditLogPageEnvelopeCode = 0
+)
+
+// Valid indicates whether the value is a known member of the AuditLogPageEnvelopeCode enum.
+func (e AuditLogPageEnvelopeCode) Valid() bool {
+	switch e {
+	case AuditLogPageEnvelopeCodeN0:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuditLogPageEnvelopeMessage.
+const (
+	AuditLogPageEnvelopeMessageOk AuditLogPageEnvelopeMessage = "ok"
+)
+
+// Valid indicates whether the value is a known member of the AuditLogPageEnvelopeMessage enum.
+func (e AuditLogPageEnvelopeMessage) Valid() bool {
+	switch e {
+	case AuditLogPageEnvelopeMessageOk:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for AuthProviderListEnvelopeCode.
 const (
@@ -42,6 +75,36 @@ const (
 func (e AuthProviderListEnvelopeMessage) Valid() bool {
 	switch e {
 	case AuthProviderListEnvelopeMessageOk:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FileEnvelopeCode.
+const (
+	FileEnvelopeCodeN0 FileEnvelopeCode = 0
+)
+
+// Valid indicates whether the value is a known member of the FileEnvelopeCode enum.
+func (e FileEnvelopeCode) Valid() bool {
+	switch e {
+	case FileEnvelopeCodeN0:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FileEnvelopeMessage.
+const (
+	FileEnvelopeMessageOk FileEnvelopeMessage = "ok"
+)
+
+// Valid indicates whether the value is a known member of the FileEnvelopeMessage enum.
+func (e FileEnvelopeMessage) Valid() bool {
+	switch e {
+	case FileEnvelopeMessageOk:
 		return true
 	default:
 		return false
@@ -309,6 +372,24 @@ func (e UpdateUserInputStatus) Valid() bool {
 	}
 }
 
+// Defines values for UploadFileInputPurpose.
+const (
+	Attachment UploadFileInputPurpose = "attachment"
+	Avatar     UploadFileInputPurpose = "avatar"
+)
+
+// Valid indicates whether the value is a known member of the UploadFileInputPurpose enum.
+func (e UploadFileInputPurpose) Valid() bool {
+	switch e {
+	case Attachment:
+		return true
+	case Avatar:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserStatus.
 const (
 	UserStatusActive   UserStatus = "active"
@@ -405,6 +486,38 @@ func (e ListUsersParamsStatus) Valid() bool {
 	}
 }
 
+// AuditLog defines model for AuditLog.
+type AuditLog struct {
+	Action       string                  `json:"action"`
+	ActorSub     *uuid.UUID              `json:"actorSub"`
+	CreatedAt    jsontime.Time           `json:"createdAt"`
+	Data         *map[string]interface{} `json:"data"`
+	Id           uuid.UUID               `json:"id"`
+	Ip           string                  `json:"ip"`
+	RequestId    string                  `json:"requestId"`
+	ResourceId   string                  `json:"resourceId"`
+	ResourceType string                  `json:"resourceType"`
+}
+
+// AuditLogPage defines model for AuditLogPage.
+type AuditLogPage struct {
+	Items      []AuditLog `json:"items"`
+	NextCursor *string    `json:"nextCursor"`
+}
+
+// AuditLogPageEnvelope defines model for AuditLogPageEnvelope.
+type AuditLogPageEnvelope struct {
+	Code    AuditLogPageEnvelopeCode    `json:"code"`
+	Data    AuditLogPage                `json:"data"`
+	Message AuditLogPageEnvelopeMessage `json:"message"`
+}
+
+// AuditLogPageEnvelopeCode defines model for AuditLogPageEnvelope.Code.
+type AuditLogPageEnvelopeCode int
+
+// AuditLogPageEnvelopeMessage defines model for AuditLogPageEnvelope.Message.
+type AuditLogPageEnvelopeMessage string
+
 // AuthProvider defines model for AuthProvider.
 type AuthProvider struct {
 	Id string `json:"id"`
@@ -474,6 +587,32 @@ type ErrorResponse struct {
 	Message   string `json:"message"`
 	RequestId string `json:"requestId"`
 }
+
+// File defines model for File.
+type File struct {
+	ContentType string        `json:"contentType"`
+	CreatedAt   jsontime.Time `json:"createdAt"`
+	Id          uuid.UUID     `json:"id"`
+	Name        string        `json:"name"`
+	Purpose     string        `json:"purpose"`
+	Size        int64         `json:"size"`
+
+	// Url A signed URL that expires; do not cache it for long
+	Url string `json:"url"`
+}
+
+// FileEnvelope defines model for FileEnvelope.
+type FileEnvelope struct {
+	Code    FileEnvelopeCode    `json:"code"`
+	Data    File                `json:"data"`
+	Message FileEnvelopeMessage `json:"message"`
+}
+
+// FileEnvelopeCode defines model for FileEnvelope.Code.
+type FileEnvelopeCode int
+
+// FileEnvelopeMessage defines model for FileEnvelope.Message.
+type FileEnvelopeMessage string
 
 // LoginInput defines model for LoginInput.
 type LoginInput struct {
@@ -685,8 +824,9 @@ type TokenInput struct {
 
 // UpdateMeInput defines model for UpdateMeInput.
 type UpdateMeInput struct {
-	AvatarFileId *uuid.UUID   `json:"avatarFileId,omitempty"`
-	DisplayName  *DisplayName `json:"displayName,omitempty"`
+	// AvatarFileId An avatar file of the caller; null removes the avatar
+	AvatarFileId optional.Field[uuid.UUID] `json:"avatarFileId,omitempty"`
+	DisplayName  *DisplayName              `json:"displayName,omitempty"`
 }
 
 // UpdateNoteInput defines model for UpdateNoteInput.
@@ -703,6 +843,15 @@ type UpdateUserInput struct {
 
 // UpdateUserInputStatus defines model for UpdateUserInput.Status.
 type UpdateUserInputStatus string
+
+// UploadFileInput defines model for UploadFileInput.
+type UploadFileInput struct {
+	File    openapi_types.File     `json:"file"`
+	Purpose UploadFileInputPurpose `json:"purpose"`
+}
+
+// UploadFileInputPurpose defines model for UploadFileInput.Purpose.
+type UploadFileInputPurpose string
 
 // User defines model for User.
 type User struct {
@@ -787,6 +936,9 @@ type WechatPhoneInput struct {
 // Cursor defines model for Cursor.
 type Cursor = string
 
+// FileID defines model for FileID.
+type FileID = uuid.UUID
+
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
 
@@ -859,6 +1011,20 @@ type UnsupportedMediaType = ErrorResponse
 // ValidationFailed A 422 error; data lists the failed fields when errorKey is common.validationFailed
 type ValidationFailed = ValidationErrorResponse
 
+// ListAuditLogsParams defines parameters for ListAuditLogs.
+type ListAuditLogsParams struct {
+	Cursor   *Cursor    `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit    *Limit     `form:"limit,omitempty" json:"limit,omitempty"`
+	ActorSub *uuid.UUID `form:"actorSub,omitempty" json:"actorSub,omitempty"`
+	Action   *string    `form:"action,omitempty" json:"action,omitempty"`
+}
+
+// GetFileContentParams defines parameters for GetFileContent.
+type GetFileContentParams struct {
+	Expires   *string `form:"expires,omitempty" json:"expires,omitempty"`
+	Signature *string `form:"signature,omitempty" json:"signature,omitempty"`
+}
+
 // ListNotesParams defines parameters for ListNotes.
 type ListNotesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -914,6 +1080,9 @@ type LoginWithSmsJSONRequestBody = SmsLoginInput
 // SendSmsCodeJSONRequestBody defines body for SendSmsCode for application/json ContentType.
 type SendSmsCodeJSONRequestBody = SendSmsCodeInput
 
+// UploadFileMultipartRequestBody defines body for UploadFile for multipart/form-data ContentType.
+type UploadFileMultipartRequestBody = UploadFileInput
+
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeInput
 
@@ -943,6 +1112,9 @@ type SetUserRolesJSONRequestBody = SetUserRolesInput
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// ListAuditLogs List the audit logs, newest first
+	// (GET /api/v1/audit-logs)
+	ListAuditLogs(w http.ResponseWriter, r *http.Request, params ListAuditLogsParams)
 	// LoginWithEmail Sign in with email and password
 	// (POST /api/v1/auth/email/login)
 	LoginWithEmail(w http.ResponseWriter, r *http.Request)
@@ -979,6 +1151,15 @@ type ServerInterface interface {
 	// SendSmsCode Send an SMS verification code
 	// (POST /api/v1/auth/sms/send)
 	SendSmsCode(w http.ResponseWriter, r *http.Request)
+	// UploadFile Upload a file
+	// (POST /api/v1/files)
+	UploadFile(w http.ResponseWriter, r *http.Request)
+	// GetFile Get a file of the caller
+	// (GET /api/v1/files/{id})
+	GetFile(w http.ResponseWriter, r *http.Request, id FileID)
+	// GetFileContent Download a file through its signed URL
+	// (GET /api/v1/files/{id}/content)
+	GetFileContent(w http.ResponseWriter, r *http.Request, id FileID, params GetFileContentParams)
 	// DeleteMe Delete the current user
 	// (DELETE /api/v1/me)
 	DeleteMe(w http.ResponseWriter, r *http.Request)
@@ -1051,6 +1232,12 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
+// ListAuditLogs List the audit logs, newest first
+// (GET /api/v1/audit-logs)
+func (_ Unimplemented) ListAuditLogs(w http.ResponseWriter, r *http.Request, params ListAuditLogsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // LoginWithEmail Sign in with email and password
 // (POST /api/v1/auth/email/login)
 func (_ Unimplemented) LoginWithEmail(w http.ResponseWriter, r *http.Request) {
@@ -1120,6 +1307,24 @@ func (_ Unimplemented) LoginWithSms(w http.ResponseWriter, r *http.Request) {
 // SendSmsCode Send an SMS verification code
 // (POST /api/v1/auth/sms/send)
 func (_ Unimplemented) SendSmsCode(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UploadFile Upload a file
+// (POST /api/v1/files)
+func (_ Unimplemented) UploadFile(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetFile Get a file of the caller
+// (GET /api/v1/files/{id})
+func (_ Unimplemented) GetFile(w http.ResponseWriter, r *http.Request, id FileID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetFileContent Download a file through its signed URL
+// (GET /api/v1/files/{id}/content)
+func (_ Unimplemented) GetFileContent(w http.ResponseWriter, r *http.Request, id FileID, params GetFileContentParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1263,6 +1468,78 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListAuditLogs operation middleware
+func (siw *ServerInterfaceWrapper) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAuditLogsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "actorSub" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "actorSub", r.URL.Query(), &params.ActorSub, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "actorSub"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actorSub", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "action" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "action", r.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "action"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAuditLogs(w, r, params)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // LoginWithEmail operation middleware
 func (siw *ServerInterfaceWrapper) LoginWithEmail(w http.ResponseWriter, r *http.Request) {
@@ -1435,6 +1712,101 @@ func (siw *ServerInterfaceWrapper) SendSmsCode(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SendSmsCode(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadFile operation middleware
+func (siw *ServerInterfaceWrapper) UploadFile(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadFile(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFile operation middleware
+func (siw *ServerInterfaceWrapper) GetFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id FileID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFile(w, r, id)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFileContent operation middleware
+func (siw *ServerInterfaceWrapper) GetFileContent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id FileID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFileContentParams
+
+	// ------------- Optional query parameter "expires" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "expires", r.URL.Query(), &params.Expires, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "expires"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "expires", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "signature" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "signature", r.URL.Query(), &params.Signature, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "signature"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "signature", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFileContent(w, r, id, params)
 	}))
 
 	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
@@ -2105,6 +2477,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/audit-logs", wrapper.ListAuditLogs)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/email/login", wrapper.LoginWithEmail)
 	})
 	r.Group(func(r chi.Router) {
@@ -2139,6 +2514,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/sms/send", wrapper.SendSmsCode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/files", wrapper.UploadFile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/files/{id}", wrapper.GetFile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/files/{id}/content", wrapper.GetFileContent)
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/api/v1/me", wrapper.DeleteMe)
@@ -2233,6 +2617,28 @@ type UnauthorizedJSONResponse ErrorResponse
 type UnsupportedMediaTypeJSONResponse ErrorResponse
 
 type ValidationFailedJSONResponse ValidationErrorResponse
+
+type ListAuditLogsRequestObject struct {
+	Params ListAuditLogsParams
+}
+
+type ListAuditLogsResponseObject interface {
+	VisitListAuditLogsResponse(w http.ResponseWriter) error
+}
+
+type ListAuditLogs200JSONResponse AuditLogPageEnvelope
+
+func (response ListAuditLogs200JSONResponse) VisitListAuditLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type LoginWithEmailRequestObject struct {
 	Body *LoginWithEmailJSONRequestBody
@@ -2493,6 +2899,139 @@ func (response SendSmsCode202JSONResponse) VisitSendSmsCodeResponse(w http.Respo
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(202)
 	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadFileRequestObject struct {
+	Body *multipart.Reader
+}
+
+type UploadFileResponseObject interface {
+	VisitUploadFileResponse(w http.ResponseWriter) error
+}
+
+type UploadFile201JSONResponse FileEnvelope
+
+func (response UploadFile201JSONResponse) VisitUploadFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFileRequestObject struct {
+	Id FileID `json:"id"`
+}
+
+type GetFileResponseObject interface {
+	VisitGetFileResponse(w http.ResponseWriter) error
+}
+
+type GetFile200JSONResponse FileEnvelope
+
+func (response GetFile200JSONResponse) VisitGetFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFileContentRequestObject struct {
+	Id     FileID `json:"id"`
+	Params GetFileContentParams
+}
+
+type GetFileContentResponseObject interface {
+	VisitGetFileContentResponse(w http.ResponseWriter) error
+}
+
+type GetFileContent200ApplicationpdfResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetFileContent200ApplicationpdfResponse) VisitGetFileContentResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "application/pdf")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetFileContent200ImagejpegResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetFileContent200ImagejpegResponse) VisitGetFileContentResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetFileContent200ImagepngResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetFileContent200ImagepngResponse) VisitGetFileContentResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/png")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetFileContent200ImagewebpResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetFileContent200ImagewebpResponse) VisitGetFileContentResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/webp")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
 	return err
 }
 
@@ -2980,6 +3519,9 @@ func (response SetUserRoles200JSONResponse) VisitSetUserRolesResponse(w http.Res
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// ListAuditLogs List the audit logs, newest first
+	// (GET /api/v1/audit-logs)
+	ListAuditLogs(ctx context.Context, request ListAuditLogsRequestObject) (ListAuditLogsResponseObject, error)
 	// LoginWithEmail Sign in with email and password
 	// (POST /api/v1/auth/email/login)
 	LoginWithEmail(ctx context.Context, request LoginWithEmailRequestObject) (LoginWithEmailResponseObject, error)
@@ -3016,6 +3558,15 @@ type StrictServerInterface interface {
 	// SendSmsCode Send an SMS verification code
 	// (POST /api/v1/auth/sms/send)
 	SendSmsCode(ctx context.Context, request SendSmsCodeRequestObject) (SendSmsCodeResponseObject, error)
+	// UploadFile Upload a file
+	// (POST /api/v1/files)
+	UploadFile(ctx context.Context, request UploadFileRequestObject) (UploadFileResponseObject, error)
+	// GetFile Get a file of the caller
+	// (GET /api/v1/files/{id})
+	GetFile(ctx context.Context, request GetFileRequestObject) (GetFileResponseObject, error)
+	// GetFileContent Download a file through its signed URL
+	// (GET /api/v1/files/{id}/content)
+	GetFileContent(ctx context.Context, request GetFileContentRequestObject) (GetFileContentResponseObject, error)
 	// DeleteMe Delete the current user
 	// (DELETE /api/v1/me)
 	DeleteMe(ctx context.Context, request DeleteMeRequestObject) (DeleteMeResponseObject, error)
@@ -3121,6 +3672,32 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// ListAuditLogs operation middleware
+func (sh *strictHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request, params ListAuditLogsParams) {
+	var request ListAuditLogsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAuditLogs(ctx, request.(ListAuditLogsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAuditLogs")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAuditLogsResponseObject); ok {
+		if err := validResponse.VisitListAuditLogsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // LoginWithEmail operation middleware
@@ -3469,6 +4046,90 @@ func (sh *strictHandler) SendSmsCode(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SendSmsCodeResponseObject); ok {
 		if err := validResponse.VisitSendSmsCodeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadFile operation middleware
+func (sh *strictHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
+	var request UploadFileRequestObject
+
+	if reader, err := r.MultipartReader(); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode multipart body: %w", err))
+		return
+	} else {
+		request.Body = reader
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadFile(ctx, request.(UploadFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadFileResponseObject); ok {
+		if err := validResponse.VisitUploadFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetFile operation middleware
+func (sh *strictHandler) GetFile(w http.ResponseWriter, r *http.Request, id FileID) {
+	var request GetFileRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFile(ctx, request.(GetFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetFileResponseObject); ok {
+		if err := validResponse.VisitGetFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetFileContent operation middleware
+func (sh *strictHandler) GetFileContent(w http.ResponseWriter, r *http.Request, id FileID, params GetFileContentParams) {
+	var request GetFileContentRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFileContent(ctx, request.(GetFileContentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFileContent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetFileContentResponseObject); ok {
+		if err := validResponse.VisitGetFileContentResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

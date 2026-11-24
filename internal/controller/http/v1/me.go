@@ -11,8 +11,13 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/usecase"
 )
 
-func userEnvelope(u *entity.User) gen.UserEnvelope {
-	return gen.UserEnvelope{Code: response.Code, Message: response.Message, Data: userOf(u)}
+func (s *Server) userEnvelope(ctx context.Context, u *entity.User) (gen.UserEnvelope, error) {
+	views, err := s.userViews(ctx, []entity.User{*u})
+	if err != nil {
+		return gen.UserEnvelope{}, err
+	}
+
+	return gen.UserEnvelope{Code: response.Code, Message: response.Message, Data: views[0]}, nil
 }
 
 // GetMe handles GET /api/v1/me.
@@ -22,17 +27,29 @@ func (s *Server) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMe
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.GetMe200JSONResponse(userEnvelope(u)), nil
+	env, err := s.userEnvelope(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.GetMe200JSONResponse(env), nil
 }
 
 // UpdateMe handles PATCH /api/v1/me.
 func (s *Server) UpdateMe(ctx context.Context, req gen.UpdateMeRequestObject) (gen.UpdateMeResponseObject, error) {
-	u, err := s.users.UpdateMe(ctx, caller(ctx), req.Body.DisplayName, req.Body.AvatarFileId)
+	u, err := s.users.UpdateMe(ctx, caller(ctx), &usecase.MeChanges{
+		DisplayName: req.Body.DisplayName, SetAvatar: req.Body.AvatarFileId.Set, AvatarFileID: req.Body.AvatarFileId.Value,
+	})
 	if err != nil {
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.UpdateMe200JSONResponse(userEnvelope(u)), nil
+	env, err := s.userEnvelope(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.UpdateMe200JSONResponse(env), nil
 }
 
 // ChangePassword handles PUT /api/v1/me/password.
@@ -101,7 +118,12 @@ func (s *Server) BindPhone(ctx context.Context, req gen.BindPhoneRequestObject) 
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.BindPhone200JSONResponse(userEnvelope(u)), nil
+	env, err := s.userEnvelope(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.BindPhone200JSONResponse(env), nil
 }
 
 // BindPhoneWithWechat handles PUT /api/v1/me/phone/wechat.
@@ -111,5 +133,10 @@ func (s *Server) BindPhoneWithWechat(ctx context.Context, req gen.BindPhoneWithW
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.BindPhoneWithWechat200JSONResponse(userEnvelope(u)), nil
+	env, err := s.userEnvelope(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.BindPhoneWithWechat200JSONResponse(env), nil
 }

@@ -101,6 +101,11 @@ components:
         avatarFileId:
           type: [string, 'null']
           format: uuid
+          description: An avatar file of the caller; null removes the avatar
+          x-go-type: optional.Field[uuid.UUID]
+          x-go-type-import:
+            path: github.com/xingyunqi-tech/go-template/pkg/optional
+          x-go-type-skip-optional-pointer: true
     ChangePasswordInput:
       type: object
       required: [newPassword]

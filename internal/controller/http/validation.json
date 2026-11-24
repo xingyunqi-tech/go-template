@@ -9,6 +9,15 @@
           "type": "string"
         }
       },
+      "FileID": {
+        "in": "path",
+        "name": "id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
       "IdempotencyKey": {
         "in": "header",
         "name": "Idempotency-Key",
@@ -622,6 +631,219 @@
       }
     },
     "schemas": {
+      "AuditLog": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actorSub": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "resourceId": {
+            "type": "string"
+          },
+          "resourceType": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "actorSub",
+          "action",
+          "resourceType",
+          "resourceId",
+          "requestId",
+          "ip",
+          "data",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "AuditLogPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "actorSub": {
+                  "format": "uuid",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "data": {
+                  "additionalProperties": true,
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "ip": {
+                  "type": "string"
+                },
+                "requestId": {
+                  "type": "string"
+                },
+                "resourceId": {
+                  "type": "string"
+                },
+                "resourceType": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "actorSub",
+                "action",
+                "resourceType",
+                "resourceId",
+                "requestId",
+                "ip",
+                "data",
+                "createdAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "AuditLogPageEnvelope": {
+        "properties": {
+          "code": {
+            "const": 0,
+            "type": "integer"
+          },
+          "data": {
+            "properties": {
+              "items": {
+                "items": {
+                  "properties": {
+                    "action": {
+                      "type": "string"
+                    },
+                    "actorSub": {
+                      "format": "uuid",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "data": {
+                      "additionalProperties": true,
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "ip": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "resourceId": {
+                      "type": "string"
+                    },
+                    "resourceType": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "actorSub",
+                    "action",
+                    "resourceType",
+                    "resourceId",
+                    "requestId",
+                    "ip",
+                    "data",
+                    "createdAt"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "nextCursor": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "items",
+              "nextCursor"
+            ],
+            "type": "object"
+          },
+          "message": {
+            "const": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
+        "type": "object"
+      },
       "AuthProvider": {
         "properties": {
           "id": {
@@ -784,6 +1006,102 @@
           "errorKey",
           "data",
           "requestId"
+        ],
+        "type": "object"
+      },
+      "File": {
+        "properties": {
+          "contentType": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "url": {
+            "description": "A signed URL that expires; do not cache it for long",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "size",
+          "contentType",
+          "purpose",
+          "url",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "FileEnvelope": {
+        "properties": {
+          "code": {
+            "const": 0,
+            "type": "integer"
+          },
+          "data": {
+            "properties": {
+              "contentType": {
+                "type": "string"
+              },
+              "createdAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "purpose": {
+                "type": "string"
+              },
+              "size": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "url": {
+                "description": "A signed URL that expires; do not cache it for long",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "size",
+              "contentType",
+              "purpose",
+              "url",
+              "createdAt"
+            ],
+            "type": "object"
+          },
+          "message": {
+            "const": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "data"
         ],
         "type": "object"
       },
@@ -1589,6 +1907,7 @@
         "minProperties": 1,
         "properties": {
           "avatarFileId": {
+            "description": "An avatar file of the caller; null removes the avatar",
             "format": "uuid",
             "type": [
               "string",
@@ -1632,6 +1951,26 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "UploadFileInput": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "type": "string"
+          },
+          "purpose": {
+            "enum": [
+              "avatar",
+              "attachment"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "purpose"
+        ],
         "type": "object"
       },
       "User": {
@@ -2120,6 +2459,376 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/audit-logs": {
+      "get": {
+        "operationId": "listAuditLogs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actorSub",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": 0,
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "properties": {
+                              "action": {
+                                "type": "string"
+                              },
+                              "actorSub": {
+                                "format": "uuid",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "data": {
+                                "additionalProperties": true,
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "ip": {
+                                "type": "string"
+                              },
+                              "requestId": {
+                                "type": "string"
+                              },
+                              "resourceId": {
+                                "type": "string"
+                              },
+                              "resourceType": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "actorSub",
+                              "action",
+                              "resourceType",
+                              "resourceId",
+                              "requestId",
+                              "ip",
+                              "data",
+                              "createdAt"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "nextCursor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "nextCursor"
+                      ],
+                      "type": "object"
+                    },
+                    "message": {
+                      "const": "ok",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of audit logs"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked access token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing permission"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A 422 error; data lists the failed fields when errorKey is common.validationFailed",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "errors": {
+                          "items": {
+                            "properties": {
+                              "field": {
+                                "description": "JSON path of the field; query.<name> or path.<name> for parameters",
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "params": {
+                                "additionalProperties": true,
+                                "type": "object"
+                              },
+                              "rule": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "rule",
+                              "message"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "errors"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "errorKey": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List the audit logs, newest first",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
     "/api/v1/auth/email/login": {
       "post": {
         "operationId": "loginWithEmail",
@@ -6371,6 +7080,966 @@
         ]
       }
     },
+    "/api/v1/files": {
+      "post": {
+        "description": "The type is detected from the content. avatar takes JPEG, PNG or WebP up to 5 MiB; attachment also takes PDF, up to 20 MiB.",
+        "operationId": "uploadFile",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "avatar",
+                      "attachment"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "purpose"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": 0,
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "contentType": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "purpose": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "format": "int64",
+                          "type": "integer"
+                        },
+                        "url": {
+                          "description": "A signed URL that expires; do not cache it for long",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "size",
+                        "contentType",
+                        "purpose",
+                        "url",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    "message": {
+                      "const": "ok",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Upload a file"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked access token"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body over BODY_LIMIT"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unsupported Content-Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A 422 error; data lists the failed fields when errorKey is common.validationFailed",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "errors": {
+                          "items": {
+                            "properties": {
+                              "field": {
+                                "description": "JSON path of the field; query.<name> or path.<name> for parameters",
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "params": {
+                                "additionalProperties": true,
+                                "type": "object"
+                              },
+                              "rule": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "rule",
+                              "message"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "errors"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "errorKey": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Upload a file",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/{id}": {
+      "get": {
+        "operationId": "getFile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": 0,
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "contentType": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "purpose": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "format": "int64",
+                          "type": "integer"
+                        },
+                        "url": {
+                          "description": "A signed URL that expires; do not cache it for long",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "size",
+                        "contentType",
+                        "purpose",
+                        "url",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    "message": {
+                      "const": "ok",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Get a file of the caller"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A 422 error; data lists the failed fields when errorKey is common.validationFailed",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "errors": {
+                          "items": {
+                            "properties": {
+                              "field": {
+                                "description": "JSON path of the field; query.<name> or path.<name> for parameters",
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "params": {
+                                "additionalProperties": true,
+                                "type": "object"
+                              },
+                              "rule": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "rule",
+                              "message"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "errors"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "errorKey": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get a file of the caller",
+        "tags": [
+          "files"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/api/v1/files/{id}/content": {
+      "get": {
+        "description": "The url of a File stored by this service; a missing, expired or wrong signature answers 404.",
+        "operationId": "getFileContent",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "expires",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "signature",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file content"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A 422 error; data lists the failed fields when errorKey is common.validationFailed",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "errors": {
+                          "items": {
+                            "properties": {
+                              "field": {
+                                "description": "JSON path of the field; query.<name> or path.<name> for parameters",
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "params": {
+                                "additionalProperties": true,
+                                "type": "object"
+                              },
+                              "rule": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "rule",
+                              "message"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "errors"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "errorKey": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "summary": "Download a file through its signed URL",
+        "tags": [
+          "files"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      ]
+    },
     "/api/v1/me": {
       "delete": {
         "description": "Requires a recent sign-in. Signs every session out; the data is removed later.",
@@ -6868,6 +8537,7 @@
                 "minProperties": 1,
                 "properties": {
                   "avatarFileId": {
+                    "description": "An avatar file of the caller; null removes the avatar",
                     "format": "uuid",
                     "type": [
                       "string",

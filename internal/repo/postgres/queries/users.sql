@@ -24,6 +24,7 @@ WHERE email = @email AND deleted_at IS NULL;
 UPDATE app_user
 SET display_name = coalesce(sqlc.narg('display_name'), display_name),
     status = coalesce(sqlc.narg('status'), status),
+    avatar_file_id = CASE WHEN @set_avatar::bool THEN sqlc.narg('avatar_file_id')::uuid ELSE avatar_file_id END,
     updated_at = now()
 WHERE id = @id AND deleted_at IS NULL
 RETURNING *;

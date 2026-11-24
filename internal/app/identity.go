@@ -22,6 +22,7 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/usecase"
 	accountuc "github.com/xingyunqi-tech/go-template/internal/usecase/account"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/file"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/session"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/sms"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/user"
@@ -49,6 +50,7 @@ type identityDeps struct {
 	translator *i18n.Translator
 	limiter    *ratelimit.Limiter
 	revoker    session.Revoker
+	files      *file.Service
 }
 
 func newMailer(cfg *config.Config, log *slog.Logger) (repo.Mailer, error) {
@@ -171,13 +173,14 @@ func newIdentity(d *identityDeps) (*Identity, error) {
 		Auth:     authService,
 		Sessions: session.New(sessions, revocation),
 		Users: user.New(&user.Deps{
-			Users: users, Codes: smsService, WechatPhone: wechatPhone, Revocation: revocation, Hasher: hasher, Limits: limits,
+			Avatars: d.files, Users: users, Codes: smsService, WechatPhone: wechatPhone, Revocation: revocation, Hasher: hasher, Limits: limits,
 			Now: nil, Outside: postgres.WithoutTx,
 		}),
 		SMS: smsService,
 		Accounts: accountuc.New(&accountuc.Deps{
 			Users: users, Identities: identities, Revocation: revocation, Queue: postgres.NewAccountQueue(inserter),
-			Purgers:   []repo.Purger{postgres.NewNotes(d.db), postgres.NewAudits(d.db)},
+			Unpurged:  postgres.NewMaintenance(d.db),
+			Purgers:   []repo.Purger{d.files, postgres.NewNotes(d.db), postgres.NewAudits(d.db)},
 			Publisher: events.NewLog(d.log), Tx: d.db, Log: d.log, Grace: d.cfg.Account.DeletionGrace,
 			Source: d.cfg.Telemetry.ServiceName, Now: nil,
 		}),

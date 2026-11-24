@@ -36,6 +36,20 @@ type AuditLog struct {
 	CreatedAt    time.Time
 }
 
+type File struct {
+	ID          uuid.UUID
+	OwnerSub    uuid.UUID
+	Purpose     string
+	Name        string
+	ContentType string
+	Size        int64
+	Sha256      []byte
+	Storage     string
+	ObjectKey   string
+	CreatedAt   time.Time
+	DeletedAt   *time.Time
+}
+
 type Note struct {
 	ID        uuid.UUID
 	OwnerSub  uuid.UUID

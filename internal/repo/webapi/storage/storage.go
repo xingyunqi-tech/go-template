@@ -1,5 +1,4 @@
-// Package storage keeps uploaded files in ./files (multer diskStorage) or in an S3 bucket
-// (multer-s3), and signs S3 URLs for an hour.
+// Package storage keeps file contents on local disk or in an S3-compatible bucket.
 package storage
 
 import (
@@ -7,25 +6,37 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 
 	"github.com/xingyunqi-tech/go-template/internal/repo"
 )
 
 const (
-	_signedURLExpires = time.Hour
-	_dirMode          = 0o755
-	_fileMode         = 0o644
+	_dirMode    = 0o750
+	_fileMode   = 0o640
+	_partSuffix = ".part"
 )
 
-var errNotS3 = errors.New("storage: the local driver has no signed URLs")
+var (
+	errKey       = errors.New("storage: object key must be a plain file name")
+	errNoPresign = errors.New("storage: the local driver has no presigned URLs")
+)
+
+func checkKey(key string) error {
+	if key == "" || key != filepath.Base(key) || key == "." || key == ".." {
+		return errKey
+	}
+
+	return nil
+}
 
 // Local stores files under root.
 type Local struct {
@@ -39,88 +50,89 @@ func NewLocal(root string) *Local {
 
 var _ repo.FileStorage = (*Local)(nil)
 
-// Local implements repo.FileStorage.
-func (*Local) Local() bool { return true }
+// Name implements repo.FileStorage.
+func (*Local) Name() string { return repo.StorageLocal }
 
-// LocalFile is root/<base name of path>.
-func (l *Local) LocalFile(p string) string {
-	return filepath.Join(l.root, path.Base(p))
+// NewSink writes to <key>.part and renames it to key on Commit.
+func (l *Local) NewSink(key string) (repo.Sink, error) {
+	if err := checkKey(key); err != nil {
+		return nil, err
+	}
+
+	if err := os.MkdirAll(l.root, _dirMode); err != nil {
+		return nil, fmt.Errorf("storage: mkdir: %w", err)
+	}
+
+	part := filepath.Join(l.root, key+_partSuffix)
+
+	f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY|os.O_EXCL, _fileMode)
+	if err != nil {
+		return nil, fmt.Errorf("storage: create: %w", err)
+	}
+
+	return &localSink{file: f, part: part, path: filepath.Join(l.root, key)}, nil
 }
 
-// NewSink implements repo.FileStorage.
-func (l *Local) NewSink(key, _ string) (repo.Sink, error) {
-	return &localSink{key: key, path: filepath.Join(l.root, key), dir: l.root, file: nil}, nil
+// Open implements repo.FileStorage.
+func (l *Local) Open(_ context.Context, key string) (io.ReadCloser, error) {
+	if err := checkKey(key); err != nil {
+		return nil, err
+	}
+
+	f, err := os.Open(filepath.Join(l.root, key))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, repo.ErrObjectNotFound
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("storage: open: %w", err)
+	}
+
+	return f, nil
 }
 
-// Delete removes the file, ignoring a missing one.
-func (l *Local) Delete(_ context.Context, p string) error {
-	if err := os.Remove(l.LocalFile(p)); err != nil && !errors.Is(err, os.ErrNotExist) {
+// Delete implements repo.FileStorage.
+func (l *Local) Delete(_ context.Context, key string) error {
+	if err := checkKey(key); err != nil {
+		return err
+	}
+
+	if err := os.Remove(filepath.Join(l.root, key)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("storage: delete: %w", err)
 	}
 
 	return nil
 }
 
-// PresignGet implements repo.FileStorage.
-func (*Local) PresignGet(context.Context, string) (string, error) { return "", errNotS3 }
-
-// PresignPut implements repo.FileStorage.
-func (*Local) PresignPut(context.Context, string, int64) (string, error) { return "", errNotS3 }
-
-type localSink struct {
-	key, path, dir string
-	file           *os.File
+// PresignGet implements repo.FileStorage; local files are served by getFileContent.
+func (*Local) PresignGet(context.Context, string, string, bool, time.Duration) (string, error) {
+	return "", errNoPresign
 }
 
-func (s *localSink) Key() string { return s.key }
-
-func (s *localSink) open() (*os.File, error) {
-	if s.file != nil {
-		return s.file, nil
-	}
-
-	if err := os.MkdirAll(s.dir, _dirMode); err != nil {
-		return nil, fmt.Errorf("storage: mkdir: %w", err)
-	}
-
-	f, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, _fileMode)
-	if err != nil {
-		return nil, fmt.Errorf("storage: create: %w", err)
-	}
-
-	s.file = f
-
-	return f, nil
+type localSink struct {
+	file       *os.File
+	part, path string
 }
 
 func (s *localSink) Write(p []byte) (int, error) {
-	f, err := s.open()
-	if err != nil {
-		return 0, err
-	}
-
-	return f.Write(p) //nolint:wrapcheck // os error
+	return s.file.Write(p) //nolint:wrapcheck // os error
 }
 
-func (s *localSink) Commit(context.Context) error {
-	f, err := s.open()
-	if err != nil {
-		return err
+func (s *localSink) Commit(context.Context, string) error {
+	if err := s.file.Close(); err != nil {
+		return fmt.Errorf("storage: close: %w", err)
 	}
 
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("storage: close: %w", err)
+	if err := os.Rename(s.part, s.path); err != nil {
+		return fmt.Errorf("storage: rename: %w", err)
 	}
 
 	return nil
 }
 
 func (s *localSink) Discard(context.Context) {
-	if s.file != nil {
-		_ = s.file.Close()
-	}
-
-	_ = os.Remove(s.path)
+	_ = s.file.Close()
+	_ = os.Remove(s.part)
 }
 
 // S3Config is the bucket configuration; Endpoint selects an S3-compatible service.
@@ -145,7 +157,7 @@ func NewS3(cfg *S3Config) *S3 {
 	client := s3.New(s3.Options{ //nolint:exhaustruct // SDK defaults
 		Region:       cfg.Region,
 		Credentials:  credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
-		UsePathStyle: cfg.Endpoint != "" && cfg.ForcePathStyle,
+		UsePathStyle: cfg.ForcePathStyle,
 		BaseEndpoint: endpoint(cfg.Endpoint),
 	})
 
@@ -162,23 +174,39 @@ func endpoint(e string) *string {
 
 var _ repo.FileStorage = (*S3)(nil)
 
-// Local implements repo.FileStorage.
-func (*S3) Local() bool { return false }
+// Name implements repo.FileStorage.
+func (*S3) Name() string { return repo.StorageS3 }
 
-// LocalFile implements repo.FileStorage.
-func (*S3) LocalFile(string) string { return "" }
+// NewSink buffers the upload in a temporary file and puts the object on Commit.
+func (s *S3) NewSink(key string) (repo.Sink, error) {
+	if err := checkKey(key); err != nil {
+		return nil, err
+	}
 
-// NewSink buffers the upload in a temporary file and puts it on Commit.
-func (s *S3) NewSink(key, contentType string) (repo.Sink, error) {
 	tmp, err := os.CreateTemp("", "upload-*")
 	if err != nil {
 		return nil, fmt.Errorf("storage: temp file: %w", err)
 	}
 
-	return &s3Sink{s3: s, key: key, contentType: contentType, tmp: tmp, committed: false}, nil
+	return &s3Sink{s3: s, key: key, tmp: tmp}, nil
 }
 
-// Delete removes the object.
+// Open implements repo.FileStorage.
+func (s *S3) Open(ctx context.Context, key string) (io.ReadCloser, error) {
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)}) //nolint:exhaustruct // optional fields
+	if err != nil {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchKey" {
+			return nil, repo.ErrObjectNotFound
+		}
+
+		return nil, fmt.Errorf("storage: get object: %w", err)
+	}
+
+	return out.Body, nil
+}
+
+// Delete implements repo.FileStorage; S3 reports no error for a missing key.
 func (s *S3) Delete(ctx context.Context, key string) error {
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)}) //nolint:exhaustruct // optional fields
 	if err != nil {
@@ -188,10 +216,14 @@ func (s *S3) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-// PresignGet signs a GET of key for an hour.
-func (s *S3) PresignGet(ctx context.Context, key string) (string, error) {
-	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)}, //nolint:exhaustruct // optional fields
-		s3.WithPresignExpires(_signedURLExpires))
+// PresignGet implements repo.FileStorage.
+func (s *S3) PresignGet(ctx context.Context, key, name string, attachment bool, ttl time.Duration) (string, error) {
+	in := &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)} //nolint:exhaustruct // optional fields
+	if attachment {
+		in.ResponseContentDisposition = aws.String(mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+	}
+
+	req, err := s.presign.PresignGetObject(ctx, in, s3.WithPresignExpires(ttl))
 	if err != nil {
 		return "", fmt.Errorf("storage: presign get: %w", err)
 	}
@@ -199,27 +231,12 @@ func (s *S3) PresignGet(ctx context.Context, key string) (string, error) {
 	return req.URL, nil
 }
 
-// PresignPut signs a PUT of key with its content length for an hour.
-func (s *S3) PresignPut(ctx context.Context, key string, length int64) (string, error) {
-	req, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{ //nolint:exhaustruct // optional fields
-		Bucket: aws.String(s.bucket), Key: aws.String(key), ContentLength: aws.Int64(length),
-	}, s3.WithPresignExpires(_signedURLExpires))
-	if err != nil {
-		return "", fmt.Errorf("storage: presign put: %w", err)
-	}
-
-	return req.URL, nil
-}
-
 type s3Sink struct {
-	s3          *S3
-	key         string
-	contentType string
-	tmp         *os.File
-	committed   bool
+	s3        *S3
+	key       string
+	tmp       *os.File
+	committed bool
 }
-
-func (s *s3Sink) Key() string { return s.key }
 
 func (s *s3Sink) Write(p []byte) (int, error) {
 	return s.tmp.Write(p) //nolint:wrapcheck // os error
@@ -230,7 +247,7 @@ func (s *s3Sink) cleanup() {
 	_ = os.Remove(s.tmp.Name())
 }
 
-func (s *s3Sink) Commit(ctx context.Context) error {
+func (s *s3Sink) Commit(ctx context.Context, contentType string) error {
 	defer s.cleanup()
 
 	size, err := s.tmp.Seek(0, io.SeekCurrent)
@@ -244,7 +261,7 @@ func (s *s3Sink) Commit(ctx context.Context) error {
 
 	_, err = s.s3.client.PutObject(ctx, &s3.PutObjectInput{ //nolint:exhaustruct // optional fields
 		Bucket: aws.String(s.s3.bucket), Key: aws.String(s.key), Body: s.tmp,
-		ContentType: aws.String(s.contentType), ContentLength: aws.Int64(size),
+		ContentType: aws.String(contentType), ContentLength: aws.Int64(size),
 	})
 	if err != nil {
 		return fmt.Errorf("storage: put object: %w", err)

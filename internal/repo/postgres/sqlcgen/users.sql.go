@@ -436,19 +436,28 @@ const updateUser = `-- name: UpdateUser :one
 UPDATE app_user
 SET display_name = coalesce($1, display_name),
     status = coalesce($2, status),
+    avatar_file_id = CASE WHEN $3::bool THEN $4::uuid ELSE avatar_file_id END,
     updated_at = now()
-WHERE id = $3 AND deleted_at IS NULL
+WHERE id = $5 AND deleted_at IS NULL
 RETURNING id, email, phone, password_hash, display_name, avatar_file_id, status, email_verified_at, created_at, updated_at, deleted_at
 `
 
 type UpdateUserParams struct {
-	DisplayName *string
-	Status      *string
-	ID          uuid.UUID
+	DisplayName  *string
+	Status       *string
+	SetAvatar    bool
+	AvatarFileID *uuid.UUID
+	ID           uuid.UUID
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (*AppUser, error) {
-	row := q.db.QueryRow(ctx, updateUser, arg.DisplayName, arg.Status, arg.ID)
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.DisplayName,
+		arg.Status,
+		arg.SetAvatar,
+		arg.AvatarFileID,
+		arg.ID,
+	)
 	var i AppUser
 	err := row.Scan(
 		&i.ID,

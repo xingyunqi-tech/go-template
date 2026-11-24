@@ -65,9 +65,12 @@ func NewHandler(ctx context.Context, cfg *config.Config, log *slog.Logger, infra
 	limiter := ratelimit.New(infra.Redis)
 	revocations := redis.NewRevocations(infra.Redis)
 
+	auditService := audit.New(postgres.NewAudits(db))
+
 	server, jwks, err := newServer(&identityDeps{
 		cfg: cfg, log: log, db: db, infra: infra, keys: keys, translator: translator, limiter: limiter, revoker: revocations,
-	})
+		files: nil,
+	}, auditService)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +96,7 @@ func NewHandler(ctx context.Context, cfg *config.Config, log *slog.Logger, infra
 		Idempotency:         redis.NewIdempotency(infra.Redis),
 		IdempotencyClaimTTL: max(cfg.App.ShutdownTimeout, httpserver.WriteTimeout) + _claimMargin,
 		Transactor:          transactor{db: db},
-		Auditor:             audit.New(postgres.NewAudits(db)),
+		Auditor:             auditService,
 		Readiness:           healthService,
 		JWKS:                jwks,
 		Metrics:             metrics,
@@ -109,7 +112,14 @@ func NewHandler(ctx context.Context, cfg *config.Config, log *slog.Logger, infra
 }
 
 // newServer builds the handlers of the documented operations and the JWKS document.
-func newServer(d *identityDeps) (*v1.Server, []byte, error) {
+func newServer(d *identityDeps, audits *audit.Service) (*v1.Server, []byte, error) {
+	files, err := newFiles(d.cfg, d.db, d.log)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	d.files = files
+
 	identity, err := newIdentity(d)
 	if err != nil {
 		return nil, nil, err
@@ -122,7 +132,7 @@ func newServer(d *identityDeps) (*v1.Server, []byte, error) {
 
 	return v1.New(&v1.Deps{
 		Notes: note.New(postgres.NewNotes(d.db)), Auth: identity.Auth, Sessions: identity.Sessions, Users: identity.Users,
-		SMS: identity.SMS, Accounts: identity.Accounts, Log: d.log,
+		SMS: identity.SMS, Accounts: identity.Accounts, Files: d.files, Audits: audits, Log: d.log,
 	}), jwks, nil
 }
 

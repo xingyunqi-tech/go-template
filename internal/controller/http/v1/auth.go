@@ -6,12 +6,20 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/gen"
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/reqctx"
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/response"
+	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/i18n"
 	"github.com/xingyunqi-tech/go-template/internal/usecase"
 )
 
-func loginEnvelope(r *usecase.LoginResult) gen.LoginResponseEnvelope {
-	return gen.LoginResponseEnvelope{Code: response.Code, Message: response.Message, Data: loginOf(r)}
+func (s *Server) loginEnvelope(ctx context.Context, r *usecase.LoginResult) (gen.LoginResponseEnvelope, error) {
+	views, err := s.userViews(ctx, []entity.User{*r.User})
+	if err != nil {
+		return gen.LoginResponseEnvelope{}, err
+	}
+
+	return gen.LoginResponseEnvelope{Code: response.Code, Message: response.Message, Data: gen.LoginResponse{
+		AccessToken: r.AccessToken, RefreshToken: r.RefreshToken, ExpiresIn: int(r.ExpiresIn), TokenType: _bearer, User: views[0],
+	}}, nil
 }
 
 // RegisterWithEmail handles POST /api/v1/auth/email/register.
@@ -26,7 +34,12 @@ func (s *Server) RegisterWithEmail(ctx context.Context, req gen.RegisterWithEmai
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.RegisterWithEmail201JSONResponse(loginEnvelope(r)), nil
+	env, err := s.loginEnvelope(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.RegisterWithEmail201JSONResponse(env), nil
 }
 
 // LoginWithEmail handles POST /api/v1/auth/email/login.
@@ -36,7 +49,12 @@ func (s *Server) LoginWithEmail(ctx context.Context, req gen.LoginWithEmailReque
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.LoginWithEmail200JSONResponse(loginEnvelope(r)), nil
+	env, err := s.loginEnvelope(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.LoginWithEmail200JSONResponse(env), nil
 }
 
 // VerifyEmail handles POST /api/v1/auth/email/verify.
@@ -85,7 +103,12 @@ func (s *Server) RefreshToken(ctx context.Context, req gen.RefreshTokenRequestOb
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.RefreshToken200JSONResponse(loginEnvelope(r)), nil
+	env, err := s.loginEnvelope(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.RefreshToken200JSONResponse(env), nil
 }
 
 // Logout handles POST /api/v1/auth/logout.
@@ -119,7 +142,12 @@ func (s *Server) LoginWithSms(ctx context.Context, req gen.LoginWithSmsRequestOb
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.LoginWithSms200JSONResponse(loginEnvelope(r)), nil
+	env, err := s.loginEnvelope(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.LoginWithSms200JSONResponse(env), nil
 }
 
 // ListAuthProviders handles GET /api/v1/auth/providers.
@@ -141,5 +169,10 @@ func (s *Server) LoginWithProvider(ctx context.Context, req gen.LoginWithProvide
 		return nil, err //nolint:wrapcheck // use case errors are entity errors
 	}
 
-	return gen.LoginWithProvider200JSONResponse(loginEnvelope(r)), nil
+	env, err := s.loginEnvelope(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.LoginWithProvider200JSONResponse(env), nil
 }

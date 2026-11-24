@@ -11,6 +11,7 @@ package mocks
 
 import (
 	context "context"
+	io "io"
 	reflect "reflect"
 	time "time"
 	uuid "uuid"
@@ -405,17 +406,17 @@ func (m *MockSink) EXPECT() *MockSinkMockRecorder {
 }
 
 // Commit mocks base method.
-func (m *MockSink) Commit(ctx context.Context) error {
+func (m *MockSink) Commit(ctx context.Context, contentType string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Commit", ctx)
+	ret := m.ctrl.Call(m, "Commit", ctx, contentType)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Commit indicates an expected call of Commit.
-func (mr *MockSinkMockRecorder) Commit(ctx any) *MockSinkCommitCall {
+func (mr *MockSinkMockRecorder) Commit(ctx, contentType any) *MockSinkCommitCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockSink)(nil).Commit), ctx)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockSink)(nil).Commit), ctx, contentType)
 	return &MockSinkCommitCall{Call: call}
 }
 
@@ -431,13 +432,13 @@ func (c *MockSinkCommitCall) Return(arg0 error) *MockSinkCommitCall {
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockSinkCommitCall) Do(f func(context.Context) error) *MockSinkCommitCall {
+func (c *MockSinkCommitCall) Do(f func(context.Context, string) error) *MockSinkCommitCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSinkCommitCall) DoAndReturn(f func(context.Context) error) *MockSinkCommitCall {
+func (c *MockSinkCommitCall) DoAndReturn(f func(context.Context, string) error) *MockSinkCommitCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -474,44 +475,6 @@ func (c *MockSinkDiscardCall) Do(f func(context.Context)) *MockSinkDiscardCall {
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockSinkDiscardCall) DoAndReturn(f func(context.Context)) *MockSinkDiscardCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
-// Key mocks base method.
-func (m *MockSink) Key() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Key")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// Key indicates an expected call of Key.
-func (mr *MockSinkMockRecorder) Key() *MockSinkKeyCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Key", reflect.TypeOf((*MockSink)(nil).Key))
-	return &MockSinkKeyCall{Call: call}
-}
-
-// MockSinkKeyCall wrap *gomock.Call
-type MockSinkKeyCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockSinkKeyCall) Return(arg0 string) *MockSinkKeyCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockSinkKeyCall) Do(f func() string) *MockSinkKeyCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockSinkKeyCall) DoAndReturn(f func() string) *MockSinkKeyCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -580,17 +543,17 @@ func (m *MockFileStorage) EXPECT() *MockFileStorageMockRecorder {
 }
 
 // Delete mocks base method.
-func (m *MockFileStorage) Delete(ctx context.Context, path string) error {
+func (m *MockFileStorage) Delete(ctx context.Context, key string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", ctx, path)
+	ret := m.ctrl.Call(m, "Delete", ctx, key)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *MockFileStorageMockRecorder) Delete(ctx, path any) *MockFileStorageDeleteCall {
+func (mr *MockFileStorageMockRecorder) Delete(ctx, key any) *MockFileStorageDeleteCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockFileStorage)(nil).Delete), ctx, path)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockFileStorage)(nil).Delete), ctx, key)
 	return &MockFileStorageDeleteCall{Call: call}
 }
 
@@ -617,95 +580,57 @@ func (c *MockFileStorageDeleteCall) DoAndReturn(f func(context.Context, string) 
 	return c
 }
 
-// Local mocks base method.
-func (m *MockFileStorage) Local() bool {
+// Name mocks base method.
+func (m *MockFileStorage) Name() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Local")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// Local indicates an expected call of Local.
-func (mr *MockFileStorageMockRecorder) Local() *MockFileStorageLocalCall {
-	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Local", reflect.TypeOf((*MockFileStorage)(nil).Local))
-	return &MockFileStorageLocalCall{Call: call}
-}
-
-// MockFileStorageLocalCall wrap *gomock.Call
-type MockFileStorageLocalCall struct {
-	*gomock.Call
-}
-
-// Return rewrite *gomock.Call.Return
-func (c *MockFileStorageLocalCall) Return(arg0 bool) *MockFileStorageLocalCall {
-	c.Call = c.Call.Return(arg0)
-	return c
-}
-
-// Do rewrite *gomock.Call.Do
-func (c *MockFileStorageLocalCall) Do(f func() bool) *MockFileStorageLocalCall {
-	c.Call = c.Call.Do(f)
-	return c
-}
-
-// DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockFileStorageLocalCall) DoAndReturn(f func() bool) *MockFileStorageLocalCall {
-	c.Call = c.Call.DoAndReturn(f)
-	return c
-}
-
-// LocalFile mocks base method.
-func (m *MockFileStorage) LocalFile(path string) string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LocalFile", path)
+	ret := m.ctrl.Call(m, "Name")
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// LocalFile indicates an expected call of LocalFile.
-func (mr *MockFileStorageMockRecorder) LocalFile(path any) *MockFileStorageLocalFileCall {
+// Name indicates an expected call of Name.
+func (mr *MockFileStorageMockRecorder) Name() *MockFileStorageNameCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocalFile", reflect.TypeOf((*MockFileStorage)(nil).LocalFile), path)
-	return &MockFileStorageLocalFileCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockFileStorage)(nil).Name))
+	return &MockFileStorageNameCall{Call: call}
 }
 
-// MockFileStorageLocalFileCall wrap *gomock.Call
-type MockFileStorageLocalFileCall struct {
+// MockFileStorageNameCall wrap *gomock.Call
+type MockFileStorageNameCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockFileStorageLocalFileCall) Return(arg0 string) *MockFileStorageLocalFileCall {
+func (c *MockFileStorageNameCall) Return(arg0 string) *MockFileStorageNameCall {
 	c.Call = c.Call.Return(arg0)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockFileStorageLocalFileCall) Do(f func(string) string) *MockFileStorageLocalFileCall {
+func (c *MockFileStorageNameCall) Do(f func() string) *MockFileStorageNameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockFileStorageLocalFileCall) DoAndReturn(f func(string) string) *MockFileStorageLocalFileCall {
+func (c *MockFileStorageNameCall) DoAndReturn(f func() string) *MockFileStorageNameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // NewSink mocks base method.
-func (m *MockFileStorage) NewSink(key, contentType string) (repo.Sink, error) {
+func (m *MockFileStorage) NewSink(key string) (repo.Sink, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewSink", key, contentType)
+	ret := m.ctrl.Call(m, "NewSink", key)
 	ret0, _ := ret[0].(repo.Sink)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // NewSink indicates an expected call of NewSink.
-func (mr *MockFileStorageMockRecorder) NewSink(key, contentType any) *MockFileStorageNewSinkCall {
+func (mr *MockFileStorageMockRecorder) NewSink(key any) *MockFileStorageNewSinkCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewSink", reflect.TypeOf((*MockFileStorage)(nil).NewSink), key, contentType)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewSink", reflect.TypeOf((*MockFileStorage)(nil).NewSink), key)
 	return &MockFileStorageNewSinkCall{Call: call}
 }
 
@@ -721,30 +646,69 @@ func (c *MockFileStorageNewSinkCall) Return(arg0 repo.Sink, arg1 error) *MockFil
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockFileStorageNewSinkCall) Do(f func(string, string) (repo.Sink, error)) *MockFileStorageNewSinkCall {
+func (c *MockFileStorageNewSinkCall) Do(f func(string) (repo.Sink, error)) *MockFileStorageNewSinkCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockFileStorageNewSinkCall) DoAndReturn(f func(string, string) (repo.Sink, error)) *MockFileStorageNewSinkCall {
+func (c *MockFileStorageNewSinkCall) DoAndReturn(f func(string) (repo.Sink, error)) *MockFileStorageNewSinkCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// Open mocks base method.
+func (m *MockFileStorage) Open(ctx context.Context, key string) (io.ReadCloser, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Open", ctx, key)
+	ret0, _ := ret[0].(io.ReadCloser)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Open indicates an expected call of Open.
+func (mr *MockFileStorageMockRecorder) Open(ctx, key any) *MockFileStorageOpenCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockFileStorage)(nil).Open), ctx, key)
+	return &MockFileStorageOpenCall{Call: call}
+}
+
+// MockFileStorageOpenCall wrap *gomock.Call
+type MockFileStorageOpenCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockFileStorageOpenCall) Return(arg0 io.ReadCloser, arg1 error) *MockFileStorageOpenCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockFileStorageOpenCall) Do(f func(context.Context, string) (io.ReadCloser, error)) *MockFileStorageOpenCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockFileStorageOpenCall) DoAndReturn(f func(context.Context, string) (io.ReadCloser, error)) *MockFileStorageOpenCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
 // PresignGet mocks base method.
-func (m *MockFileStorage) PresignGet(ctx context.Context, key string) (string, error) {
+func (m *MockFileStorage) PresignGet(ctx context.Context, key, name string, attachment bool, ttl time.Duration) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PresignGet", ctx, key)
+	ret := m.ctrl.Call(m, "PresignGet", ctx, key, name, attachment, ttl)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PresignGet indicates an expected call of PresignGet.
-func (mr *MockFileStorageMockRecorder) PresignGet(ctx, key any) *MockFileStoragePresignGetCall {
+func (mr *MockFileStorageMockRecorder) PresignGet(ctx, key, name, attachment, ttl any) *MockFileStoragePresignGetCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PresignGet", reflect.TypeOf((*MockFileStorage)(nil).PresignGet), ctx, key)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PresignGet", reflect.TypeOf((*MockFileStorage)(nil).PresignGet), ctx, key, name, attachment, ttl)
 	return &MockFileStoragePresignGetCall{Call: call}
 }
 
@@ -760,52 +724,231 @@ func (c *MockFileStoragePresignGetCall) Return(arg0 string, arg1 error) *MockFil
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockFileStoragePresignGetCall) Do(f func(context.Context, string) (string, error)) *MockFileStoragePresignGetCall {
+func (c *MockFileStoragePresignGetCall) Do(f func(context.Context, string, string, bool, time.Duration) (string, error)) *MockFileStoragePresignGetCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockFileStoragePresignGetCall) DoAndReturn(f func(context.Context, string) (string, error)) *MockFileStoragePresignGetCall {
+func (c *MockFileStoragePresignGetCall) DoAndReturn(f func(context.Context, string, string, bool, time.Duration) (string, error)) *MockFileStoragePresignGetCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
 
-// PresignPut mocks base method.
-func (m *MockFileStorage) PresignPut(ctx context.Context, key string, length int64) (string, error) {
+// MockFiles is a mock of Files interface.
+type MockFiles struct {
+	ctrl     *gomock.Controller
+	recorder *MockFilesMockRecorder
+	isgomock struct{}
+}
+
+// MockFilesMockRecorder is the mock recorder for MockFiles.
+type MockFilesMockRecorder struct {
+	mock *MockFiles
+}
+
+// NewMockFiles creates a new mock instance.
+func NewMockFiles(ctrl *gomock.Controller) *MockFiles {
+	mock := &MockFiles{ctrl: ctrl}
+	mock.recorder = &MockFilesMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockFiles) EXPECT() *MockFilesMockRecorder {
+	return m.recorder
+}
+
+// Create mocks base method.
+func (m *MockFiles) Create(ctx context.Context, f *entity.File) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PresignPut", ctx, key, length)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "Create", ctx, f)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// PresignPut indicates an expected call of PresignPut.
-func (mr *MockFileStorageMockRecorder) PresignPut(ctx, key, length any) *MockFileStoragePresignPutCall {
+// Create indicates an expected call of Create.
+func (mr *MockFilesMockRecorder) Create(ctx, f any) *MockFilesCreateCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PresignPut", reflect.TypeOf((*MockFileStorage)(nil).PresignPut), ctx, key, length)
-	return &MockFileStoragePresignPutCall{Call: call}
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockFiles)(nil).Create), ctx, f)
+	return &MockFilesCreateCall{Call: call}
 }
 
-// MockFileStoragePresignPutCall wrap *gomock.Call
-type MockFileStoragePresignPutCall struct {
+// MockFilesCreateCall wrap *gomock.Call
+type MockFilesCreateCall struct {
 	*gomock.Call
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockFileStoragePresignPutCall) Return(arg0 string, arg1 error) *MockFileStoragePresignPutCall {
+func (c *MockFilesCreateCall) Return(arg0 error) *MockFilesCreateCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockFilesCreateCall) Do(f func(context.Context, *entity.File) error) *MockFilesCreateCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockFilesCreateCall) DoAndReturn(f func(context.Context, *entity.File) error) *MockFilesCreateCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// DeleteOwner mocks base method.
+func (m *MockFiles) DeleteOwner(ctx context.Context, owner uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteOwner", ctx, owner)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteOwner indicates an expected call of DeleteOwner.
+func (mr *MockFilesMockRecorder) DeleteOwner(ctx, owner any) *MockFilesDeleteOwnerCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteOwner", reflect.TypeOf((*MockFiles)(nil).DeleteOwner), ctx, owner)
+	return &MockFilesDeleteOwnerCall{Call: call}
+}
+
+// MockFilesDeleteOwnerCall wrap *gomock.Call
+type MockFilesDeleteOwnerCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockFilesDeleteOwnerCall) Return(arg0 error) *MockFilesDeleteOwnerCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockFilesDeleteOwnerCall) Do(f func(context.Context, uuid.UUID) error) *MockFilesDeleteOwnerCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockFilesDeleteOwnerCall) DoAndReturn(f func(context.Context, uuid.UUID) error) *MockFilesDeleteOwnerCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// Get mocks base method.
+func (m *MockFiles) Get(ctx context.Context, id uuid.UUID) (*entity.File, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", ctx, id)
+	ret0, _ := ret[0].(*entity.File)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockFilesMockRecorder) Get(ctx, id any) *MockFilesGetCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockFiles)(nil).Get), ctx, id)
+	return &MockFilesGetCall{Call: call}
+}
+
+// MockFilesGetCall wrap *gomock.Call
+type MockFilesGetCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockFilesGetCall) Return(f *entity.File, found bool, err error) *MockFilesGetCall {
+	c.Call = c.Call.Return(f, found, err)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockFilesGetCall) Do(f func(context.Context, uuid.UUID) (*entity.File, bool, error)) *MockFilesGetCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockFilesGetCall) DoAndReturn(f func(context.Context, uuid.UUID) (*entity.File, bool, error)) *MockFilesGetCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// ListByID mocks base method.
+func (m *MockFiles) ListByID(ctx context.Context, ids []uuid.UUID) ([]entity.File, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListByID", ctx, ids)
+	ret0, _ := ret[0].([]entity.File)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListByID indicates an expected call of ListByID.
+func (mr *MockFilesMockRecorder) ListByID(ctx, ids any) *MockFilesListByIDCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByID", reflect.TypeOf((*MockFiles)(nil).ListByID), ctx, ids)
+	return &MockFilesListByIDCall{Call: call}
+}
+
+// MockFilesListByIDCall wrap *gomock.Call
+type MockFilesListByIDCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockFilesListByIDCall) Return(arg0 []entity.File, arg1 error) *MockFilesListByIDCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockFileStoragePresignPutCall) Do(f func(context.Context, string, int64) (string, error)) *MockFileStoragePresignPutCall {
+func (c *MockFilesListByIDCall) Do(f func(context.Context, []uuid.UUID) ([]entity.File, error)) *MockFilesListByIDCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockFileStoragePresignPutCall) DoAndReturn(f func(context.Context, string, int64) (string, error)) *MockFileStoragePresignPutCall {
+func (c *MockFilesListByIDCall) DoAndReturn(f func(context.Context, []uuid.UUID) ([]entity.File, error)) *MockFilesListByIDCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// ListOwner mocks base method.
+func (m *MockFiles) ListOwner(ctx context.Context, owner uuid.UUID) ([]entity.File, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOwner", ctx, owner)
+	ret0, _ := ret[0].([]entity.File)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOwner indicates an expected call of ListOwner.
+func (mr *MockFilesMockRecorder) ListOwner(ctx, owner any) *MockFilesListOwnerCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOwner", reflect.TypeOf((*MockFiles)(nil).ListOwner), ctx, owner)
+	return &MockFilesListOwnerCall{Call: call}
+}
+
+// MockFilesListOwnerCall wrap *gomock.Call
+type MockFilesListOwnerCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockFilesListOwnerCall) Return(arg0 []entity.File, arg1 error) *MockFilesListOwnerCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockFilesListOwnerCall) Do(f func(context.Context, uuid.UUID) ([]entity.File, error)) *MockFilesListOwnerCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockFilesListOwnerCall) DoAndReturn(f func(context.Context, uuid.UUID) ([]entity.File, error)) *MockFilesListOwnerCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -868,6 +1011,225 @@ func (c *MockAuditsCreateCall) Do(f func(context.Context, *repo.AuditLog) error)
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockAuditsCreateCall) DoAndReturn(f func(context.Context, *repo.AuditLog) error) *MockAuditsCreateCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// DeleteBefore mocks base method.
+func (m *MockAudits) DeleteBefore(ctx context.Context, before time.Time) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteBefore", ctx, before)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteBefore indicates an expected call of DeleteBefore.
+func (mr *MockAuditsMockRecorder) DeleteBefore(ctx, before any) *MockAuditsDeleteBeforeCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBefore", reflect.TypeOf((*MockAudits)(nil).DeleteBefore), ctx, before)
+	return &MockAuditsDeleteBeforeCall{Call: call}
+}
+
+// MockAuditsDeleteBeforeCall wrap *gomock.Call
+type MockAuditsDeleteBeforeCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockAuditsDeleteBeforeCall) Return(arg0 int64, arg1 error) *MockAuditsDeleteBeforeCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockAuditsDeleteBeforeCall) Do(f func(context.Context, time.Time) (int64, error)) *MockAuditsDeleteBeforeCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockAuditsDeleteBeforeCall) DoAndReturn(f func(context.Context, time.Time) (int64, error)) *MockAuditsDeleteBeforeCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// List mocks base method.
+func (m *MockAudits) List(ctx context.Context, p *repo.AuditPage) ([]repo.AuditEntry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "List", ctx, p)
+	ret0, _ := ret[0].([]repo.AuditEntry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// List indicates an expected call of List.
+func (mr *MockAuditsMockRecorder) List(ctx, p any) *MockAuditsListCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockAudits)(nil).List), ctx, p)
+	return &MockAuditsListCall{Call: call}
+}
+
+// MockAuditsListCall wrap *gomock.Call
+type MockAuditsListCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockAuditsListCall) Return(arg0 []repo.AuditEntry, arg1 error) *MockAuditsListCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockAuditsListCall) Do(f func(context.Context, *repo.AuditPage) ([]repo.AuditEntry, error)) *MockAuditsListCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockAuditsListCall) DoAndReturn(f func(context.Context, *repo.AuditPage) ([]repo.AuditEntry, error)) *MockAuditsListCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// MockMaintenance is a mock of Maintenance interface.
+type MockMaintenance struct {
+	ctrl     *gomock.Controller
+	recorder *MockMaintenanceMockRecorder
+	isgomock struct{}
+}
+
+// MockMaintenanceMockRecorder is the mock recorder for MockMaintenance.
+type MockMaintenanceMockRecorder struct {
+	mock *MockMaintenance
+}
+
+// NewMockMaintenance creates a new mock instance.
+func NewMockMaintenance(ctrl *gomock.Controller) *MockMaintenance {
+	mock := &MockMaintenance{ctrl: ctrl}
+	mock.recorder = &MockMaintenanceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockMaintenance) EXPECT() *MockMaintenanceMockRecorder {
+	return m.recorder
+}
+
+// DeleteExpiredSessions mocks base method.
+func (m *MockMaintenance) DeleteExpiredSessions(ctx context.Context, now time.Time) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteExpiredSessions", ctx, now)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteExpiredSessions indicates an expected call of DeleteExpiredSessions.
+func (mr *MockMaintenanceMockRecorder) DeleteExpiredSessions(ctx, now any) *MockMaintenanceDeleteExpiredSessionsCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteExpiredSessions", reflect.TypeOf((*MockMaintenance)(nil).DeleteExpiredSessions), ctx, now)
+	return &MockMaintenanceDeleteExpiredSessionsCall{Call: call}
+}
+
+// MockMaintenanceDeleteExpiredSessionsCall wrap *gomock.Call
+type MockMaintenanceDeleteExpiredSessionsCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockMaintenanceDeleteExpiredSessionsCall) Return(arg0 int64, arg1 error) *MockMaintenanceDeleteExpiredSessionsCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockMaintenanceDeleteExpiredSessionsCall) Do(f func(context.Context, time.Time) (int64, error)) *MockMaintenanceDeleteExpiredSessionsCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockMaintenanceDeleteExpiredSessionsCall) DoAndReturn(f func(context.Context, time.Time) (int64, error)) *MockMaintenanceDeleteExpiredSessionsCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// DeleteSpentTokens mocks base method.
+func (m *MockMaintenance) DeleteSpentTokens(ctx context.Context, now time.Time) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteSpentTokens", ctx, now)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteSpentTokens indicates an expected call of DeleteSpentTokens.
+func (mr *MockMaintenanceMockRecorder) DeleteSpentTokens(ctx, now any) *MockMaintenanceDeleteSpentTokensCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSpentTokens", reflect.TypeOf((*MockMaintenance)(nil).DeleteSpentTokens), ctx, now)
+	return &MockMaintenanceDeleteSpentTokensCall{Call: call}
+}
+
+// MockMaintenanceDeleteSpentTokensCall wrap *gomock.Call
+type MockMaintenanceDeleteSpentTokensCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockMaintenanceDeleteSpentTokensCall) Return(arg0 int64, arg1 error) *MockMaintenanceDeleteSpentTokensCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockMaintenanceDeleteSpentTokensCall) Do(f func(context.Context, time.Time) (int64, error)) *MockMaintenanceDeleteSpentTokensCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockMaintenanceDeleteSpentTokensCall) DoAndReturn(f func(context.Context, time.Time) (int64, error)) *MockMaintenanceDeleteSpentTokensCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// UnpurgedUsers mocks base method.
+func (m *MockMaintenance) UnpurgedUsers(ctx context.Context, before time.Time, after *repo.UnpurgedUser, limit int) ([]repo.UnpurgedUser, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpurgedUsers", ctx, before, after, limit)
+	ret0, _ := ret[0].([]repo.UnpurgedUser)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnpurgedUsers indicates an expected call of UnpurgedUsers.
+func (mr *MockMaintenanceMockRecorder) UnpurgedUsers(ctx, before, after, limit any) *MockMaintenanceUnpurgedUsersCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpurgedUsers", reflect.TypeOf((*MockMaintenance)(nil).UnpurgedUsers), ctx, before, after, limit)
+	return &MockMaintenanceUnpurgedUsersCall{Call: call}
+}
+
+// MockMaintenanceUnpurgedUsersCall wrap *gomock.Call
+type MockMaintenanceUnpurgedUsersCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockMaintenanceUnpurgedUsersCall) Return(arg0 []repo.UnpurgedUser, arg1 error) *MockMaintenanceUnpurgedUsersCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockMaintenanceUnpurgedUsersCall) Do(f func(context.Context, time.Time, *repo.UnpurgedUser, int) ([]repo.UnpurgedUser, error)) *MockMaintenanceUnpurgedUsersCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockMaintenanceUnpurgedUsersCall) DoAndReturn(f func(context.Context, time.Time, *repo.UnpurgedUser, int) ([]repo.UnpurgedUser, error)) *MockMaintenanceUnpurgedUsersCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
@@ -3072,11 +3434,12 @@ func (m *MockAccountQueue) EXPECT() *MockAccountQueueMockRecorder {
 }
 
 // EnqueuePurge mocks base method.
-func (m *MockAccountQueue) EnqueuePurge(ctx context.Context, userID uuid.UUID, at time.Time) error {
+func (m *MockAccountQueue) EnqueuePurge(ctx context.Context, userID uuid.UUID, at time.Time) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EnqueuePurge", ctx, userID, at)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // EnqueuePurge indicates an expected call of EnqueuePurge.
@@ -3092,19 +3455,19 @@ type MockAccountQueueEnqueuePurgeCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockAccountQueueEnqueuePurgeCall) Return(arg0 error) *MockAccountQueueEnqueuePurgeCall {
-	c.Call = c.Call.Return(arg0)
+func (c *MockAccountQueueEnqueuePurgeCall) Return(arg0 bool, arg1 error) *MockAccountQueueEnqueuePurgeCall {
+	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockAccountQueueEnqueuePurgeCall) Do(f func(context.Context, uuid.UUID, time.Time) error) *MockAccountQueueEnqueuePurgeCall {
+func (c *MockAccountQueueEnqueuePurgeCall) Do(f func(context.Context, uuid.UUID, time.Time) (bool, error)) *MockAccountQueueEnqueuePurgeCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockAccountQueueEnqueuePurgeCall) DoAndReturn(f func(context.Context, uuid.UUID, time.Time) error) *MockAccountQueueEnqueuePurgeCall {
+func (c *MockAccountQueueEnqueuePurgeCall) DoAndReturn(f func(context.Context, uuid.UUID, time.Time) (bool, error)) *MockAccountQueueEnqueuePurgeCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

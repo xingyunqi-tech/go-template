@@ -1,12 +1,19 @@
-// Package audit writes audit log entries with sensitive fields redacted.
+// Package audit writes audit log entries with sensitive fields redacted, lists them and prunes
+// those past AUDIT_RETENTION.
 package audit
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
+	"time"
+	"uuid"
 
+	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/repo"
+	"github.com/xingyunqi-tech/go-template/internal/usecase"
+	"github.com/xingyunqi-tech/go-template/pkg/pagination"
 )
 
 const (
@@ -86,4 +93,67 @@ func (s *Service) Log(ctx context.Context, l *repo.AuditLog) error {
 	entry.Data = Sanitize(l.Data)
 
 	return s.audits.Create(ctx, &entry) //nolint:wrapcheck // repo errors are wrapped
+}
+
+var _ usecase.Audits = (*Service)(nil)
+
+// _cursorLayout keeps the microseconds PostgreSQL stores.
+const _cursorLayout = time.RFC3339Nano
+
+// List implements usecase.Audits: newest first.
+func (s *Service) List(ctx context.Context, q *usecase.AuditQuery) (pagination.CursorPage[usecase.AuditEntry], error) {
+	page := &repo.AuditPage{ActorSub: q.ActorSub, Action: q.Action, AfterCreatedAt: nil, AfterID: nil, Limit: q.Limit + 1}
+
+	if q.Cursor != "" {
+		after, id, err := decodeCursor(q.Cursor)
+		if err != nil {
+			return pagination.CursorPage[usecase.AuditEntry]{}, err
+		}
+
+		page.AfterCreatedAt, page.AfterID = &after, &id
+	}
+
+	rows, err := s.audits.List(ctx, page)
+	if err != nil {
+		return pagination.CursorPage[usecase.AuditEntry]{}, err //nolint:wrapcheck // repo errors are wrapped
+	}
+
+	entries := make([]usecase.AuditEntry, 0, len(rows))
+	for i := range rows {
+		r := &rows[i]
+		entries = append(entries, usecase.AuditEntry{
+			ID: r.ID, ActorSub: r.ActorSub, Action: r.Action, ResourceType: r.ResourceType, ResourceID: r.ResourceID,
+			RequestID: r.RequestID, IP: r.IP, Data: r.Data, CreatedAt: r.CreatedAt,
+		})
+	}
+
+	return pagination.NewCursorPage(entries, q.Limit, func(e usecase.AuditEntry) pagination.Cursor {
+		return pagination.Cursor{Key: e.CreatedAt.UTC().Format(_cursorLayout), ID: e.ID.String()}
+	}), nil
+}
+
+func decodeCursor(cursor string) (time.Time, uuid.UUID, error) {
+	invalid := entity.Invalid("query.cursor", entity.RuleFormat, map[string]any{"format": "cursor"})
+
+	c, err := pagination.DecodeCursor(cursor)
+	if err != nil {
+		return time.Time{}, uuid.Nil(), invalid
+	}
+
+	after, err := time.Parse(_cursorLayout, c.Key)
+	if err != nil {
+		return time.Time{}, uuid.Nil(), errors.Join(invalid, err)
+	}
+
+	id, err := uuid.Parse(c.ID)
+	if err != nil {
+		return time.Time{}, uuid.Nil(), errors.Join(invalid, err)
+	}
+
+	return after, id, nil
+}
+
+// Prune deletes the audit logs created before before.
+func (s *Service) Prune(ctx context.Context, before time.Time) (int64, error) {
+	return s.audits.DeleteBefore(ctx, before) //nolint:wrapcheck // repo errors are wrapped
 }

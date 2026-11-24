@@ -277,6 +277,9 @@ func identityOperations() map[string]identityOperation {
 		"setUserRoles":            {"PUT", "/api/v1/users/{id}/roles", []string{"roles"}, "200"},
 		"listRoles":               {"GET", "/api/v1/roles", nil, "200"},
 		"listPermissions":         {"GET", "/api/v1/permissions", nil, "200"},
+		"uploadFile":              {"POST", "/api/v1/files", []string{"file", "purpose"}, "201"},
+		"getFile":                 {"GET", "/api/v1/files/{id}", nil, "200"},
+		"getFileContent":          {"GET", "/api/v1/files/{id}/content", nil, "200"},
 	}
 }
 
@@ -323,16 +326,32 @@ func TestIdentityOperationsFollowTheConventions(t *testing.T) {
 			}
 		}
 
-		if want.request == nil {
-			assert.Nil(t, op.RequestBody, "%s takes no body", id)
+		checkRequestBody(t, id, op, want.request)
+	}
+}
 
-			continue
-		}
+// checkRequestBody compares the fields of the JSON or multipart body of op with want; nil wants
+// no body.
+func checkRequestBody(t *testing.T, id string, op *openapi3.Operation, want []string) {
+	t.Helper()
 
-		if assert.NotNil(t, op.RequestBody, "%s needs a body", id) {
-			schema := op.RequestBody.Value.Content.Get("application/json").Schema
-			assert.Equal(t, sorted(want.request), propertyNames(schema), id)
-		}
+	if want == nil {
+		assert.Nil(t, op.RequestBody, "%s takes no body", id)
+
+		return
+	}
+
+	if !assert.NotNil(t, op.RequestBody, "%s needs a body", id) {
+		return
+	}
+
+	media := op.RequestBody.Value.Content.Get("application/json")
+	if media == nil {
+		media = op.RequestBody.Value.Content.Get("multipart/form-data")
+	}
+
+	if assert.NotNil(t, media, "%s takes JSON or a multipart form", id) {
+		assert.Equal(t, sorted(want), propertyNames(media.Schema), id)
 	}
 }
 
@@ -348,6 +367,7 @@ func TestIdentityObjectsHaveTheConventionFields(t *testing.T) {
 		"Permission":    {"code"},
 		"LoginResponse": {"accessToken", "refreshToken", "expiresIn", "tokenType", "user"},
 		"AuthProvider":  {"id"},
+		"File":          {"id", "name", "size", "contentType", "purpose", "url", "createdAt"},
 	} {
 		if assert.Contains(t, schemas, name) {
 			assert.Equal(t, sorted(fields), propertyNames(schemas[name]), name)
@@ -367,4 +387,19 @@ func TestSmsScenesAndProvidersFollowTheConventions(t *testing.T) {
 	provider := doc.Paths.Find("/api/v1/auth/providers/{provider}/login").Parameters[0].Value.Schema.Value
 	assert.True(t, provider.Type.Is("string"))
 	assert.Empty(t, provider.Enum, "provider is a plain string")
+}
+
+func TestFileContentIsServedUnenveloped(t *testing.T) {
+	t.Parallel()
+
+	op := loadDocument(t).Paths.Find("/api/v1/files/{id}/content").Get
+
+	assert.Empty(t, op.Security, "getFileContent is authorized by its signature")
+
+	content := op.Responses.Value("200").Value.Content
+	for _, media := range []string{"image/jpeg", "image/png", "image/webp", "application/pdf"} {
+		assert.NotNil(t, content.Get(media), media)
+	}
+
+	assert.Nil(t, content.Get("application/json"))
 }

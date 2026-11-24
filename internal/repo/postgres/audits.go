@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 	"uuid"
 
 	"github.com/xingyunqi-tech/go-template/internal/repo"
@@ -53,4 +54,75 @@ func (a *Audits) Purge(ctx context.Context, actor uuid.UUID) error {
 	}
 
 	return nil
+}
+
+// List implements repo.Audits.
+func (a *Audits) List(ctx context.Context, p *repo.AuditPage) ([]repo.AuditEntry, error) {
+	var out []repo.AuditEntry
+
+	err := a.db.queries(ctx, func(q *sqlcgen.Queries) error {
+		rows, err := q.ListAuditLogs(ctx, sqlcgen.ListAuditLogsParams{
+			ActorSub: p.ActorSub, Action: p.Action, AfterCreatedAt: p.AfterCreatedAt, AfterID: p.AfterID,
+			RowLimit: int32(min(p.Limit, _maxRows)), //nolint:gosec // bounded
+		})
+		if err != nil {
+			return err //nolint:wrapcheck // wrapped below
+		}
+
+		out = make([]repo.AuditEntry, 0, len(rows))
+
+		for _, row := range rows {
+			e := repo.AuditEntry{
+				AuditLog: repo.AuditLog{
+					ActorSub: row.ActorSub, Action: row.Action, ResourceType: row.ResourceType, ResourceID: row.ResourceID,
+					RequestID: row.RequestID, IP: row.Ip, Data: nil,
+				},
+				ID: row.ID, CreatedAt: row.CreatedAt,
+			}
+
+			if row.Data != nil {
+				if err := json.Unmarshal(row.Data, &e.Data); err != nil {
+					return fmt.Errorf("decode audit data: %w", err)
+				}
+			}
+
+			out = append(out, e)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list audit logs: %w", err)
+	}
+
+	return out, nil
+}
+
+// _pruneBatch is how many audit logs one DELETE removes.
+const _pruneBatch = 10_000
+
+// DeleteBefore implements repo.Audits in batches of _pruneBatch, each its own statement.
+func (a *Audits) DeleteBefore(ctx context.Context, before time.Time) (int64, error) {
+	var total int64
+
+	for {
+		var n int64
+
+		err := a.db.queries(ctx, func(q *sqlcgen.Queries) error {
+			var err error
+
+			n, err = q.DeleteAuditLogsBefore(ctx, sqlcgen.DeleteAuditLogsBeforeParams{Before: before, RowLimit: _pruneBatch})
+
+			return err //nolint:wrapcheck // wrapped below
+		})
+		if err != nil {
+			return total, fmt.Errorf("postgres: prune audit logs: %w", err)
+		}
+
+		total += n
+
+		if n < _pruneBatch {
+			return total, nil
+		}
+	}
 }

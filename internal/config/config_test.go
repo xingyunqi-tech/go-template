@@ -59,7 +59,7 @@ func TestProductionRequirements(t *testing.T) {
 	_, err = config.Load()
 	require.ErrorIs(t, err, config.ErrInvalid)
 
-	for _, name := range []string{"DATABASE_URL", "REDIS_URL", "CORS_ORIGINS", "AUTH_SIGNING_KEY, AUTH_JWKS_URL", "METRICS_TOKEN, METRICS_PORT", "RATE_LIMIT_ENABLED"} {
+	for _, name := range []string{"DATABASE_URL", "REDIS_URL", "CORS_ORIGINS", "AUTH_SIGNING_KEY, AUTH_JWKS_URL", "METRICS_TOKEN, METRICS_PORT", "RATE_LIMIT_ENABLED", "FILE_URL_SECRET"} {
 		assert.Contains(t, err.Error(), name)
 	}
 
@@ -69,6 +69,7 @@ func TestProductionRequirements(t *testing.T) {
 	t.Setenv("AUTH_JWKS_URL", "https://auth.example.com/.well-known/jwks.json")
 	t.Setenv("METRICS_PORT", "9100")
 	t.Setenv("RATE_LIMIT_ENABLED", "true")
+	t.Setenv("FILE_URL_SECRET", "test-url-secret-0123456789abcdef")
 
 	cfg, err := config.Load()
 	require.NoError(t, err)
@@ -141,6 +142,9 @@ func TestInvalidValuesAreReported(t *testing.T) {
 		"SEED_ADMIN_PASSWORD":    "short",
 		"SMS_PROVIDER":           "twilio",
 		"ACCOUNT_DELETION_GRACE": "-1h",
+		"STORAGE_DRIVER":         "ftp",
+		"FILE_URL_SECRET":        "short",
+		"AUDIT_RETENTION":        "0s",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("OTEL_SERVICE_NAME", "svc")
@@ -210,4 +214,21 @@ func TestSecretIsRedacted(t *testing.T) {
 	assert.Equal(t, "***", s.String())
 	assert.Equal(t, "***", s.LogValue().String())
 	assert.Equal(t, "hunter2", s.Value())
+}
+
+func TestS3NeedsABucketAndRegion(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "svc")
+	t.Setenv("STORAGE_DRIVER", "s3")
+
+	_, err := config.Load()
+	require.ErrorIs(t, err, config.ErrInvalid)
+	assert.Contains(t, err.Error(), "S3_BUCKET, S3_REGION")
+
+	t.Setenv("S3_BUCKET", "files")
+	t.Setenv("S3_REGION", "us-east-1")
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	assert.Equal(t, time.Hour, cfg.Storage.URLTTL)
+	assert.Equal(t, 4320*time.Hour, cfg.Audit.Retention)
 }

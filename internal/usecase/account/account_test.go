@@ -46,6 +46,7 @@ type fixture struct {
 	identities *mocks.MockIdentities
 	sessions   *mocks.MockSessions
 	queue      *mocks.MockAccountQueue
+	unpurged   *mocks.MockMaintenance
 	purger     *mocks.MockPurger
 	published  *publisher
 	now        time.Time
@@ -57,13 +58,13 @@ func newFixture(t *testing.T) *fixture {
 	ctrl := gomock.NewController(t)
 	f := &fixture{
 		users: mocks.NewMockUsers(ctrl), identities: mocks.NewMockIdentities(ctrl), sessions: mocks.NewMockSessions(ctrl),
-		queue: mocks.NewMockAccountQueue(ctrl), purger: mocks.NewMockPurger(ctrl), published: &publisher{},
+		queue: mocks.NewMockAccountQueue(ctrl), unpurged: mocks.NewMockMaintenance(ctrl), purger: mocks.NewMockPurger(ctrl), published: &publisher{},
 		now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 
 	f.svc = account.New(&account.Deps{
 		Users: f.users, Identities: f.identities, Revocation: session.NewRevocation(f.sessions, noRevoker{}, time.Minute),
-		Queue: f.queue, Purgers: []repo.Purger{f.purger}, Publisher: f.published, Tx: inline{},
+		Queue: f.queue, Unpurged: f.unpurged, Purgers: []repo.Purger{f.purger}, Publisher: f.published, Tx: inline{},
 		Log: slog.New(slog.DiscardHandler), Grace: 7 * 24 * time.Hour, Source: "svc", Now: func() time.Time { return f.now },
 	})
 
@@ -85,7 +86,7 @@ func TestDeleteSoftDeletesSignsOutAndSchedulesThePurge(t *testing.T) {
 		f.users.EXPECT().SoftDelete(gomock.Any(), id).Return(true, nil),
 		f.identities.EXPECT().DeleteAll(gomock.Any(), id).Return(nil),
 		f.sessions.EXPECT().RevokeAll(gomock.Any(), id, nil).Return(nil, nil),
-		f.queue.EXPECT().EnqueuePurge(gomock.Any(), id, f.now.Add(7*24*time.Hour)).Return(nil),
+		f.queue.EXPECT().EnqueuePurge(gomock.Any(), id, f.now.Add(7*24*time.Hour)).Return(true, nil),
 	)
 
 	require.NoError(t, f.svc.DeleteMe(t.Context(), &usecase.Caller{UserID: id, SessionID: uuid.NewV7(), AuthTime: f.now}))
@@ -186,4 +187,27 @@ func TestPublishFailureFailsThePurge(t *testing.T) {
 	f.users.EXPECT().Purge(gomock.Any(), id).Return(nil)
 
 	require.ErrorIs(t, f.svc.Purge(t.Context(), id), f.published.err)
+}
+
+func TestSweepReschedulesEveryUserPastTheGracePeriodPageByPage(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	before := f.now.Add(-7*24*time.Hour - time.Hour)
+
+	page := make([]repo.UnpurgedUser, 500)
+	for i := range page {
+		page[i] = repo.UnpurgedUser{ID: uuid.NewV7(), DeletedAt: before.Add(-time.Duration(500-i) * time.Minute)}
+	}
+
+	last := uuid.NewV7()
+
+	gomock.InOrder(
+		f.unpurged.EXPECT().UnpurgedUsers(gomock.Any(), before, nil, 500).Return(page, nil),
+		f.unpurged.EXPECT().UnpurgedUsers(gomock.Any(), before, &page[499], 500).Return([]repo.UnpurgedUser{{ID: last, DeletedAt: before}}, nil),
+	)
+	f.queue.EXPECT().EnqueuePurge(gomock.Any(), gomock.Any(), f.now).Return(false, nil).Times(500)
+	f.queue.EXPECT().EnqueuePurge(gomock.Any(), last, f.now).Return(true, nil)
+
+	require.NoError(t, f.svc.Sweep(t.Context()))
 }

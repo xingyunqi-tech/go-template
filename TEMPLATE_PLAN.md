@@ -355,7 +355,7 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 | `session` | user_id、refresh_hash、auth_time、expires_at、revoked_at、user_agent、ip、last_active_at | identity |
 | `session_refresh_history` | refresh_hash（主键）、session_id、rotated_at | identity |
 | `user_token` | user_id、purpose（`email_verify` / `password_reset`）、token_hash、expires_at、used_at、invalidated_at | identity |
-| `file` | owner_sub、purpose、name、content_type、size、sha256、storage、object_key、deleted_at | core（B5 加入） |
+| `file` | owner_sub、purpose、name、content_type、size、sha256、storage、object_key、deleted_at | core（B5 的 `00003`） |
 | `audit_log` | actor_sub、action、resource_type、resource_id、request_id、ip、data（jsonb） | core（`00001`） |
 | `note` | owner_sub、title、content、deleted_at | core（`00002`） |
 | River 表 | `rivermigrate` 管理 | — |
@@ -395,12 +395,12 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 | 限流 | `pkg/ratelimit`：GCRA Lua 脚本内用 `TIME` 取 now，键与值按约定 §7；脚本两种模式：`consume`（判定并写入）与 `peek`（只判定不写入，用于只计失败的规则在校验前检查是否已超限）；`Reset(key)` 用于成功后清除。共享规则按约定 §11.6；私有规则 `{OTEL_SERVICE_NAME}-ip`（IP，300 次 / 分钟，突发 100，所有 `/api/v1`）与 `{OTEL_SERVICE_NAME}-user`（用户，120 次 / 分钟，突发 60，已登录请求），键为 `rl:{规则名}:{主体}`；Redis 出错时共享规则 503、私有规则放行；`RATE_LIMIT_ENABLED=false` 只用于测试 |
 | 幂等键 | spec 中声明 `Idempotency-Key` 参数的 operation 启用；键 `{service}:idem:{u:sub 或 ip:IP}:{method}:{实际请求路径}:{key}` 存请求体 SHA-256 与处理状态；进行中的占位带请求自己的 owner 标识，TTL 为 `max(SHUTDOWN_TIMEOUT, HTTP 写超时) + 30s`（经验上限：写超时不取消处理器，处理器运行更久时占位会过期，同键重试会再次执行；处理器截止时间随 B6 的请求超时与 `statement_timeout` 一起确定），保存与删除只对 owner 仍持有的占位生效；首次结果为 2xx / 4xx 时保存状态码与响应体 24 小时（保存失败时占位留到过期），5xx 删除该键；进行中 409 `common.idempotencyInProgress`，请求体不同 422 `common.idempotencyKeyMismatch` |
 | 队列 | River：`mail`、`account`、`default`；默认 5 次尝试、指数退避；事务内 `InsertTx` |
-| 定时任务 | River 周期任务（leader 选举）：清理过期会话及其 refresh 历史、过期 `user_token`、`AUDIT_RETENTION` 之前的审计日志、账号注销补偿扫描 |
-| 账号注销 | `deleteMe` / `deleteUser`：同事务做最后管理员检查（§6.5）、软删用户、删除第三方身份、吊销全部会话、入队 `account.purge`（`account` 队列，延时 `ACCOUNT_DELETION_GRACE`，River 唯一任务按 user_id 去重）；任务对仍未软删的用户不做处理，否则在一个事务内依次调用登记的 `Purger`（B4：笔记删除、审计日志的 `actor_sub` 与 `ip` 清空；B5 加文件）并物理删除用户（会话、令牌、角色级联），提交后经 `events.Publisher` 发布 `user.deleted`（CloudEvents 1.0 JSON，`source` 为 `OTEL_SERVICE_NAME`）；发布失败由 River 重试，重试时清理可重复执行；补偿扫描重新入队超期未清理的用户（B5 随周期任务） |
+| 定时任务 | River 周期任务（leader 选举，每小时，`RunOnStart`）：`maintenance`（`usecase/maintenance`：签发角色删除过期会话及其 refresh 历史、过期 / 已用 / 已失效的 `user_token`；所有角色删除 `AUDIT_RETENTION` 之前的审计日志，每条 DELETE 至多 10000 行、循环到删完），`account.sweep`（签发角色：软删超过 `ACCOUNT_DELETION_GRACE` + 1 小时仍未清理的用户按 `(deleted_at, id)` 分页、每页 500 个全部重新入队 `account.purge`，已有任务的跳过，日志只计新入队数） |
+| 账号注销 | `deleteMe` / `deleteUser`：同事务做最后管理员检查（§6.5）、软删用户、删除第三方身份、吊销全部会话、入队 `account.purge`（`account` 队列，延时 `ACCOUNT_DELETION_GRACE`，River 唯一任务按 user_id 去重）；任务对仍未软删的用户不做处理，否则在一个事务内依次调用登记的 `Purger`（文件对象与行、笔记删除、审计日志的 `actor_sub` 与 `ip` 清空）并物理删除用户（会话、令牌、角色级联），提交后经 `events.Publisher` 发布 `user.deleted`（CloudEvents 1.0 JSON，`source` 为 `OTEL_SERVICE_NAME`）；发布失败由 River 重试，重试时清理可重复执行；补偿扫描见「定时任务」 |
 | 事件 | `events.Publisher`（B4）/ `events.Subscriber`（B6）端口；传输方式、键与主题名由 monorepo 配置（`EVENTS_*`，模板不预设变量），消费者组取 `OTEL_SERVICE_NAME`；模板默认实现只写日志；验证角色收到 `user.deleted` 后入队 `account.purge`，只运行本服务的 `Purger` |
 | 审计 | policy `Audit: "<action>"` 的接口在成功后写 `audit_log`；`GET /api/v1/audit-logs`（`listAuditLogs`，`audit:read`，游标分页） |
 | 邮件 | 模板 `templates/mail/{verify_email,reset_password}.{html,txt}.tmpl`，文案走 i18n 的 `mail.*`；`SMTP_URL` 为 `smtp://`（要求 STARTTLS；`?tls=none` 才允许明文，用于本地 Mailpit 与测试）或 `smtps://`（隐式 TLS），用户信息即认证；未配置时只写日志（掩码收件人与主题，不含正文链接），签发角色生产必填 |
-| 文件 | 约定 §11.5 的三个接口；用途在代码中登记：`avatar`（约定默认）与 `attachment`（图片 + pdf，20 MiB）。上传 policy 的请求体上限为各用途上限最大值 + 64 KiB，不受 `BODY_LIMIT` 约束，`MaxBytesReader` 超限映射为 413 `file.tooLarge`；`ValidateRequest` 设 `ExcludeRequestBody`。multipart 流式读取：`purpose` 在 `file` 之前时先校验用途并按该用途上限写入；`file` 在前时按最大上限写入临时对象，读到 `purpose` 后再校验大小与类型，不符则删除。类型取前 512 字节 `http.DetectContentType`，边写边计算 sha256 与大小。`File.url`：local 驱动为 `getFileContent` 签名地址（`expires`、`signature`，HMAC-SHA256，密钥 `FILE_URL_SECRET`），s3 驱动为预签名 GET，有效期 `FILE_URL_TTL`；`getFileContent` 带 `X-Content-Type-Options: nosniff`，非图片带 `Content-Disposition: attachment`，签名无效或过期 404 |
+| 文件 | 约定 §11.5 的三个接口；用途在代码中登记（`entity/file.go`）：`avatar`（约定默认）与 `attachment`（图片 + pdf，20 MiB）。上传 policy（`Upload: true`）的请求体上限为各用途上限最大值 + 64 KiB，不受 `BODY_LIMIT` 约束，读取超限映射为 413 `file.tooLarge`；`ValidateRequest` 设 `ExcludeRequestBody`，并对去掉请求体的请求副本校验（openapi3filter 的安全检查会整块读入请求体）。multipart 流式读取：`purpose` 在 `file` 之前时先校验用途并按该用途上限写入；`file` 在前时按最大上限写入临时对象，读到 `purpose` 后再校验大小与类型，不符则删除。类型取前 512 字节 `http.DetectContentType`，边写边计算 sha256 与大小；同一请求多于一个 `file` 为 422 `maxItems`，缺字段 422 `required`；文件名取 base name，非法 UTF-8 替换为 U+FFFD、去掉控制字符，至多 255 字符；写存储失败为 500，读请求体失败为 400。`File.url`：local 驱动为相对路径 `/api/v1/files/{id}/content?expires=&signature=`（HMAC-SHA256 签 `id.expires`，密钥 `FILE_URL_SECRET`，非生产未设置时进程启动随机生成），s3 驱动为预签名 GET（非图片带 `response-content-disposition: attachment`），有效期 `FILE_URL_TTL`；`expires`、`signature` 在 spec 中为可选、不限长的字符串，缺失或无效一律 404；`storage` 与当前 `STORAGE_DRIVER` 不同的文件不生成地址（`User.avatarUrl` 为 null，`File.url` 为空串）；下载在发出 200 之后复制失败时不再写错误信封；local 驱动要求 api 与 worker 共享 `STORAGE_LOCAL_ROOT`（ci 栈用卷 `uploaded-files`）；`getFileContent` 带 `X-Content-Type-Options: nosniff`，非图片带 `Content-Disposition: attachment`，签名无效或过期 404 |
 | 停机 | SIGTERM → ready 503 → `http.Server.Shutdown(SHUTDOWN_TIMEOUT)` → River `Stop` → 关闭连接池 / Redis → flush OTel、Sentry |
 | 进程 | 同一镜像：`serve`、`worker`、`migrate` |
 
@@ -431,8 +431,8 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 | `METRICS_PORT` / `WORKER_METRICS_PORT` | 空 / `9464` | `prometheus` 模式下 `/metrics` 的独立端口 |
 | `SHUTDOWN_TIMEOUT` | `20s` | |
 | `SMTP_URL` / `MAIL_FROM` | 空 | 签发角色生产必填 |
-| `STORAGE_DRIVER` / `STORAGE_LOCAL_ROOT` / `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` / `S3_FORCE_PATH_STYLE` | `local` / `./data/files` | |
-| `FILE_URL_SECRET` / `FILE_URL_TTL` | 空 / `1h` | local 驱动签名地址；生产必填 |
+| `STORAGE_DRIVER` / `STORAGE_LOCAL_ROOT` / `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` / `S3_FORCE_PATH_STYLE` | `local` / `./data/files` | `s3` 时 `S3_BUCKET`、`S3_REGION` 必填 |
+| `FILE_URL_SECRET` / `FILE_URL_TTL` | 空 / `1h` | local 驱动签名地址，至少 32 字符；生产 `local` 驱动必填 |
 | `SMS_PROVIDER` / `ALIYUN_SMS_ACCESS_KEY_ID` / `ALIYUN_SMS_ACCESS_KEY_SECRET` / `ALIYUN_SMS_SIGN_NAME` / `ALIYUN_SMS_TEMPLATE_CODE` / `ALIYUN_SMS_ENDPOINT` | `log` / … / `https://dysmsapi.aliyuncs.com` | 取值 `log` / `aliyun`；`aliyun` 时四项账号变量必填；签发角色生产必须为 `aliyun`（短信登录是约定 §11.1 必备接口） |
 | `WECHAT_MINIAPP_APP_ID` / `WECHAT_MINIAPP_APP_SECRET` / `WECHAT_APP_APP_ID` / `WECHAT_APP_APP_SECRET` / `WECHAT_API_BASE` | 空 / `https://api.weixin.qq.com` | §6.4 |
 | `ALIPAY_APP_ID` / `ALIPAY_PRIVATE_KEY` / `ALIPAY_PUBLIC_KEY` / `ALIPAY_GATEWAY` | 空 / `https://openapi.alipay.com/gateway.do` | §6.4；`ALIPAY_PUBLIC_KEY` 为新增变量；v1 的 `ALIPAY_SIGN_TYPE`、`ALIPAY_CHARSET`、`ALIPAY_SANDBOX` 删除（只用 RSA2、UTF-8，沙箱改 `ALIPAY_GATEWAY`） |
@@ -574,8 +574,10 @@ CI 不再访问 nestjs-template 与 fastapi-temp。
 | B4 | `migrations/identity/00001_identity.sql` | 删除 `app_user_contact_check`（provider 建的账号没有邮箱与手机号；模板未上线，直接改初始迁移） |
 | B4 | `internal/repo/postgres/{users,notes,audits,mailqueue}.go` 与 queries、`internal/usecase/{contracts.go,user,auth}`、`internal/controller/http/{policy.go,v1}`、`internal/config`、`internal/worker`、`internal/app/{identity,worker}.go` | 手机号查询与绑定、软删 / 物理删除、笔记与审计的 `Purger`；River 事务内入队抽成共用函数；§11.1–§11.3 的 B4 接口与 policy（`sendSmsCode` 为 optional + `auth-sms`，`deleteMe` 为 `Reauth`，审计 `user.delete`、`user.phone.bind`）；§10 的短信、provider、注销变量与生产要求；`account` 队列 |
 | B4 | `docker/docker-compose.ci.yaml`、`.env.example` | ci 栈为生产模式，加 `SMS_PROVIDER=aliyun` 与占位账号（e2e 不发短信）；`.env.example` 加 §10 B4 变量 |
-| B5 | `internal/repo/webapi/storage/` | 流式写入、签名地址、`DetectContentType` |
-| B5 | `internal/usecase/audit/`、`internal/worker/` | 查询接口与保留期清理；队列与周期任务（§8） |
+| B5 | `internal/repo/webapi/storage/` | `repo.FileStorage` 改为按对象键：`NewSink` / `Open` / `Delete` / `PresignGet`，Sink 在 `Commit` 时才定类型；local 写 `.part` 后改名 |
+| B5 | `internal/controller/http/{policy,validate}.go`、`v1/{me,users,auth,views}.go`、`internal/usecase/user`、`tools/openapigen` | policy `Upload`；`avatarFileId` 的 `exists` 校验与 null 清除（`pkg/optional`，spec 用 `x-go-type`，bundler 输出的文档去掉 `x-go-*`）；`User.avatarUrl` 由文件用例批量生成 |
+| B5 | `docker/docker-compose.ci.yaml`、`.env.example` | ci 栈 api 与 worker 共享卷 `uploaded-files`（`STORAGE_LOCAL_ROOT=/home/nonroot/files`）与 `FILE_URL_SECRET`；`.env.example` 加文件与审计变量 |
+| B5 | `internal/usecase/audit/`、`internal/worker/`、`internal/usecase/account` | 查询接口（`listAuditLogs`：游标分页，`actorSub`、`action` 筛选）与保留期清理；周期任务（§8）；`account.Sweep` |
 | B6 | `deploy/manage.sh`、`Dockerfile`、`docker/*.yaml`、`docker/.env.ecs.example`、`.env.example`、`.github/workflows/check.yml`、`scripts/commit-msg.sh` | §11、§13；`docker-compose.ecs.yaml` / `.env.ecs.example` 的生产签发服务需要 `SMS_PROVIDER=aliyun` 与 `ALIYUN_SMS_*`（B4 起启动校验） |
 | B6 | `scripts/bench/` | 本服务自身压测 |
 | B6 | `pkg/logger`、`pkg/ratelimit` | `MaskEmail` 按字符而非字节截取本地部分；进程内限流器满 10000 键后的淘汰改为不全表扫描 |
@@ -587,7 +589,7 @@ CI 不再访问 nestjs-template 与 fastapi-temp。
 | B2 | `internal/usecase/contracts.go`、`internal/usecase/note/`、`migrations/core/`、`internal/controller/http/v1/notes.go`、`internal/controller/http/validation.json`（生成）、`pkg/phone`、`testutil.IssueAccessToken`、`internal/entity/note.go`、`internal/entity/nest_error.go`（B4 客户端沿用的旧错误类型，随 B4 删除）、`internal/repo/postgres/notes.go`、`internal/repo/redis/{revocations,idempotency}.go`、`pkg/clientip`、`pkg/telemetry`、`internal/controller/http/testdata/spec.yaml`（路由测试用 spec） |
 | B3 | `migrations/identity/00001_identity.sql`（`app_user`、`user_role`、`session`、`session_refresh_history`、`user_token`）、`internal/entity/{user,rbac}.go`、`internal/usecase/{auth,user,session}/`、`internal/usecase/limits.go`、`internal/controller/http/v1/{auth,me,users,views}.go`（`listRoles` / `listPermissions` 在 `users.go`，JWKS 由 `ops.go` 提供）、`internal/repo/postgres/{users,sessions,tokens,mailqueue}.go` 与 queries、`internal/repo/redis/grace.go`、`internal/app/{identity,accounts}.go`、`pkg/password`、`internal/repo/webapi/mail/`、`templates/templates.go`、`templates/mail/*.tmpl`、`internal/i18n/locales` 中邮件文案、`internal/testutil/smtp.go`（go-smtp 进程内服务器）、`tests/e2e/auth_test.go` |
 | B4 | `internal/usecase/{sms,account}/`、`internal/usecase/auth/provider.go`、`internal/usecase/phone.go`、`internal/events/`、`internal/entity/identity.go`、`migrations/identity/00002_user_identity.sql`、`internal/repo/postgres/{identities,accountqueue}.go` 与 `queries/identities.sql`、`internal/repo/redis/sms.go`、`internal/testutil/logbuffer.go`、`internal/app/{sms,provider,account}_integration_test.go` |
-| B5 | `internal/usecase/file/`、`internal/controller/http/v1/{files,audit}.go` |
+| B5 | `internal/usecase/file/`、`internal/usecase/maintenance/`、`internal/controller/http/v1/{files,audit}.go`、`internal/entity/file.go`、`migrations/core/00003_file.sql`、`internal/repo/postgres/{files,maintenance}.go` 与 `queries/{files,maintenance}.sql`、`pkg/optional`、`internal/app/files.go`、`openapi/src/{paths,schemas}/{files,audit}.yaml`、`tests/e2e/files_test.go` |
 | B6 | `cmd/modulegen/`、`templates/module/`、`docs/openapi.md`、`docs/benchmark.md` |
 
 ### 14.4 保留

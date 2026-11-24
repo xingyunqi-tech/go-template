@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"uuid"
 
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/gen"
 	"github.com/xingyunqi-tech/go-template/internal/controller/http/reqctx"
@@ -13,7 +14,7 @@ import (
 
 const _bearer = "Bearer"
 
-func userOf(u *entity.User) gen.User {
+func userOf(u *entity.User, avatarURL *string) gen.User {
 	roles := u.Roles
 	if roles == nil {
 		roles = []string{}
@@ -21,16 +22,46 @@ func userOf(u *entity.User) gen.User {
 
 	return gen.User{
 		Id: u.ID, Email: u.Email, EmailVerified: u.EmailVerified, Phone: u.Phone, DisplayName: u.DisplayName,
-		AvatarUrl: nil, Status: gen.UserStatus(u.Status), Roles: roles, HasPassword: u.HasPassword,
+		AvatarUrl: avatarURL, Status: gen.UserStatus(u.Status), Roles: roles, HasPassword: u.HasPassword,
 		CreatedAt: jsontime.New(u.CreatedAt), UpdatedAt: jsontime.New(u.UpdatedAt),
 	}
 }
 
-func loginOf(r *usecase.LoginResult) gen.LoginResponse {
-	return gen.LoginResponse{
-		AccessToken: r.AccessToken, RefreshToken: r.RefreshToken, ExpiresIn: int(r.ExpiresIn), TokenType: _bearer,
-		User: userOf(r.User),
+// userViews renders users with the signed URLs of their avatars; a deleted avatar file has no URL.
+func (s *Server) userViews(ctx context.Context, users []entity.User) ([]gen.User, error) {
+	var ids []uuid.UUID
+
+	for i := range users {
+		if users[i].AvatarFileID != nil {
+			ids = append(ids, *users[i].AvatarFileID)
+		}
 	}
+
+	urls := map[uuid.UUID]string{}
+
+	if len(ids) > 0 && s.files != nil {
+		var err error
+
+		if urls, err = s.files.URLs(ctx, ids); err != nil {
+			return nil, err //nolint:wrapcheck // use case errors
+		}
+	}
+
+	out := make([]gen.User, 0, len(users))
+
+	for i := range users {
+		var url *string
+
+		if id := users[i].AvatarFileID; id != nil {
+			if u, ok := urls[*id]; ok {
+				url = &u
+			}
+		}
+
+		out = append(out, userOf(&users[i], url))
+	}
+
+	return out, nil
 }
 
 func sessionOf(v *usecase.SessionView) gen.Session {

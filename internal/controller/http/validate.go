@@ -79,6 +79,10 @@ func (p *pipeline) readBody(r *http.Request, op *operation) (*http.Request, erro
 		limit = op.policy.BodyLimit
 	}
 
+	if op.policy.Upload {
+		return streamBody(r, op, limit)
+	}
+
 	body, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
 	if err != nil {
 		return r, entity.Wrap(entity.KeyBadRequest, err)
@@ -102,6 +106,43 @@ func (p *pipeline) readBody(r *http.Request, op *operation) (*http.Request, erro
 	return r, nil
 }
 
+// streamBody hands an upload body over unread, failing reads past limit.
+func streamBody(r *http.Request, op *operation, limit int64) (*http.Request, error) {
+	if err := checkMediaType(r, op, nil); err != nil {
+		return r, err
+	}
+
+	r.Body = &uploadBody{ReadCloser: r.Body, left: limit}
+
+	return r, nil
+}
+
+// uploadBody fails with file.tooLarge once more than left bytes are read.
+type uploadBody struct {
+	io.ReadCloser
+
+	left int64
+}
+
+func (b *uploadBody) Read(p []byte) (int, error) {
+	if b.left < 0 {
+		return 0, entity.New(entity.KeyFileTooLarge)
+	}
+
+	if int64(len(p)) > b.left+1 {
+		p = p[:b.left+1]
+	}
+
+	n, err := b.ReadCloser.Read(p)
+	b.left -= int64(n)
+
+	if b.left < 0 {
+		return n, entity.New(entity.KeyFileTooLarge)
+	}
+
+	return n, err //nolint:wrapcheck // body errors
+}
+
 // checkMediaType accepts a Content-Type of the operation and, for JSON, a well-formed body.
 func checkMediaType(r *http.Request, op *operation, body []byte) error {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
@@ -116,15 +157,23 @@ func checkMediaType(r *http.Request, op *operation, body []byte) error {
 	return nil
 }
 
-// validate checks the path, query and body of r against the operation schema.
+// validate checks the path, query and body of r against the operation schema; an upload is
+// checked without its body.
 func (p *pipeline) validate(r *http.Request, op *operation, params map[string]string) error {
+	checked := r
+	if op.policy.Upload {
+		checked = r.Clone(r.Context())
+		checked.Body = http.NoBody
+	}
+
 	input := &openapi3filter.RequestValidationInput{ //nolint:exhaustruct // defaults
-		Request:    r,
+		Request:    checked,
 		PathParams: params,
 		Route:      op.route,
 		Options: &openapi3filter.Options{ //nolint:exhaustruct // defaults
 			MultiError:         true,
 			AuthenticationFunc: openapi3filter.NoopAuthenticationFunc,
+			ExcludeRequestBody: op.policy.Upload,
 		},
 	}
 

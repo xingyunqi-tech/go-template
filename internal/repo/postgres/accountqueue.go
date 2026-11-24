@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 
 	"github.com/xingyunqi-tech/go-template/internal/repo"
 )
@@ -41,31 +42,28 @@ func NewAccountQueue(client *river.Client[pgx.Tx]) *AccountQueue {
 var _ repo.AccountQueue = (*AccountQueue)(nil)
 
 // EnqueuePurge implements repo.AccountQueue.
-func (q *AccountQueue) EnqueuePurge(ctx context.Context, userID uuid.UUID, at time.Time) error {
+func (q *AccountQueue) EnqueuePurge(ctx context.Context, userID uuid.UUID, at time.Time) (bool, error) {
 	opts := &river.InsertOpts{ScheduledAt: at} //nolint:exhaustruct // the rest comes from PurgeArgs
 
-	if err := insert(ctx, q.client, PurgeArgs{UserID: userID}, opts); err != nil {
-		return fmt.Errorf("postgres: enqueue purge: %w", err)
+	res, err := insert(ctx, q.client, PurgeArgs{UserID: userID}, opts)
+	if err != nil {
+		return false, fmt.Errorf("postgres: enqueue purge: %w", err)
 	}
 
-	return nil
+	return !res.UniqueSkippedAsDuplicate, nil
 }
 
 // insert adds a job in the request transaction, so it exists only when the transaction commits.
-func insert(ctx context.Context, client *river.Client[pgx.Tx], args river.JobArgs, opts *river.InsertOpts) error {
+func insert(ctx context.Context, client *river.Client[pgx.Tx], args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error) {
 	s := stateOf(ctx)
 	if s == nil {
-		_, err := client.Insert(ctx, args, opts)
-
-		return err //nolint:wrapcheck // wrapped by the caller
+		return client.Insert(ctx, args, opts) //nolint:wrapcheck // wrapped by the caller
 	}
 
 	tx, err := s.open(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	_, err = client.InsertTx(ctx, tx, args, opts)
-
-	return err //nolint:wrapcheck // wrapped by the caller
+	return client.InsertTx(ctx, tx, args, opts) //nolint:wrapcheck // wrapped by the caller
 }

@@ -1,0 +1,42 @@
+components:
+  schemas:
+    File:
+      type: object
+      required: [id, name, size, contentType, purpose, url, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        size:
+          type: integer
+          format: int64
+        contentType:
+          type: string
+        purpose:
+          type: string
+        url:
+          type: string
+          description: A signed URL that expires; do not cache it for long
+        createdAt:
+          type: string
+          format: date-time
+    UploadFileInput:
+      type: object
+      required: [file, purpose]
+      properties:
+        file:
+          type: string
+          format: binary
+        purpose:
+          type: string
+          enum: [avatar, attachment]
+  parameters:
+    FileID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid

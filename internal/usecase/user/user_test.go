@@ -110,10 +110,35 @@ func TestInputsTheUseCaseRejects(t *testing.T) {
 
 	_, err = svc.List(t.Context(), &usecase.UserQuery{Sort: "email,-email", Page: 1, PageSize: 10})
 	assert.Equal(t, "query.sort", fieldErrors(t, err)[0].Field)
+}
 
+type avatars struct{ ok bool }
+
+func (a avatars) IsAvatar(context.Context, uuid.UUID, uuid.UUID) (bool, error) { return a.ok, nil }
+
+func TestUpdateMeNeedsAnAvatarFileOfTheCaller(t *testing.T) {
+	t.Parallel()
+
+	users := mocks.NewMockUsers(gomock.NewController(t))
+	caller := &usecase.Caller{UserID: uuid.NewV7()}
 	avatar := uuid.NewV7()
-	_, err = svc.UpdateMe(t.Context(), &usecase.Caller{UserID: uuid.NewV7()}, nil, &avatar)
+
+	svc := user.New(&user.Deps{Users: users, Avatars: avatars{ok: false}})
+
+	_, err := svc.UpdateMe(t.Context(), caller, &usecase.MeChanges{SetAvatar: true, AvatarFileID: &avatar})
 	assert.Equal(t, entity.RuleExists, fieldErrors(t, err)[0].Rule)
+
+	svc = user.New(&user.Deps{Users: users, Avatars: avatars{ok: true}})
+
+	users.EXPECT().Update(gomock.Any(), caller.UserID, &repo.UserChanges{SetAvatar: true, AvatarFileID: &avatar}).Return(&entity.User{ID: caller.UserID}, true, nil)
+
+	_, err = svc.UpdateMe(t.Context(), caller, &usecase.MeChanges{SetAvatar: true, AvatarFileID: &avatar})
+	require.NoError(t, err)
+
+	users.EXPECT().Update(gomock.Any(), caller.UserID, &repo.UserChanges{SetAvatar: true, AvatarFileID: nil}).Return(&entity.User{ID: caller.UserID}, true, nil)
+
+	_, err = svc.UpdateMe(t.Context(), caller, &usecase.MeChanges{SetAvatar: true, AvatarFileID: nil})
+	require.NoError(t, err)
 }
 
 type codes struct{ err error }

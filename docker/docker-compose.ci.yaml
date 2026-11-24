@@ -1,4 +1,4 @@
-# CI / e2e：生产镜像以 APP_ENV=production 起完整服务栈；AUTH_SIGNING_KEY 为 e2e 用例共用的固定测试密钥，邮件发往 Mailpit，短信账号为占位值（e2e 不发短信）
+# CI / e2e：生产镜像以 APP_ENV=production 起完整服务栈；AUTH_SIGNING_KEY 为 e2e 用例共用的固定测试密钥，邮件发往 Mailpit，短信账号为占位值（e2e 不发短信），local 驱动的文件目录由 api 与 worker 共享（卷 uploaded-files）
 #
 # 用法：make test-e2e
 
@@ -20,6 +20,9 @@ x-ci-env: &ci-env
   ALIYUN_SMS_SIGN_NAME: ci
   ALIYUN_SMS_TEMPLATE_CODE: ci
   ALIYUN_SMS_ENDPOINT: http://127.0.0.1:9
+  STORAGE_DRIVER: local
+  STORAGE_LOCAL_ROOT: /home/nonroot/files
+  FILE_URL_SECRET: ci_file_url_secret_0123456789abcdef
   AUTH_ISSUER: go-template-e2e
   AUTH_AUDIENCE: go-template-e2e
   AUTH_SIGNING_KEY: |
@@ -66,14 +69,21 @@ services:
     ports: !override
       - '127.0.0.1:${APP_PORT:-3000}:3000'
     environment: *ci-env
+    volumes:
+      - uploaded-files:/home/nonroot
     depends_on:
       seed:
         condition: service_completed_successfully
 
   worker:
     environment: *ci-env
+    volumes:
+      - uploaded-files:/home/nonroot
     depends_on:
       seed:
         condition: service_completed_successfully
       mailpit:
         condition: service_healthy
+
+volumes:
+  uploaded-files:

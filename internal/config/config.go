@@ -37,6 +37,7 @@ const (
 	_redacted        = "***"
 	_developmentDSN  = "postgresql://root:secret@localhost:5432/api?sslmode=disable" //nolint:gosec // local development database of make infra
 	_minMetricsToken = 16
+	_minURLSecret    = 32
 	_minPassword     = 8
 	_maxPassword     = 128
 )
@@ -82,6 +83,8 @@ type Config struct {
 	Wechat    Wechat
 	Alipay    Alipay
 	Account   Account
+	Storage   Storage
+	Audit     Audit
 	Seed      Seed
 }
 
@@ -215,6 +218,31 @@ func (a *Alipay) Enabled() bool {
 // Account configures account deletion.
 type Account struct {
 	DeletionGrace time.Duration `env:"ACCOUNT_DELETION_GRACE" envDefault:"168h" validate:"gte=0"`
+}
+
+// Storage drivers accepted by STORAGE_DRIVER.
+const (
+	StorageLocal = "local"
+	StorageS3    = "s3"
+)
+
+// Storage configures where uploaded files live and how long their URLs are valid.
+type Storage struct {
+	Driver          string        `env:"STORAGE_DRIVER"       envDefault:"local"        validate:"oneof=local s3"`
+	LocalRoot       string        `env:"STORAGE_LOCAL_ROOT"   envDefault:"./data/files" validate:"required"`
+	Endpoint        string        `env:"S3_ENDPOINT"                                    validate:"omitempty,url"`
+	Region          string        `env:"S3_REGION"`
+	Bucket          string        `env:"S3_BUCKET"`
+	AccessKeyID     string        `env:"S3_ACCESS_KEY_ID"`
+	SecretAccessKey Secret        `env:"S3_SECRET_ACCESS_KEY"`
+	ForcePathStyle  bool          `env:"S3_FORCE_PATH_STYLE"`
+	URLSecret       Secret        `env:"FILE_URL_SECRET"`
+	URLTTL          time.Duration `env:"FILE_URL_TTL"         envDefault:"1h"           validate:"gt=0"`
+}
+
+// Audit configures how long audit logs are kept.
+type Audit struct {
+	Retention time.Duration `env:"AUDIT_RETENTION" envDefault:"4320h" validate:"gt=0"`
 }
 
 // Seed holds the administrator the production seed creates when no active admin exists.
@@ -364,6 +392,10 @@ func (c *Config) productionProblems() []string {
 		problems = append(problems, "RATE_LIMIT_ENABLED: must be true in production")
 	}
 
+	if c.Storage.Driver == StorageLocal && c.Storage.URLSecret == "" {
+		problems = append(problems, "FILE_URL_SECRET: required in production when STORAGE_DRIVER=local")
+	}
+
 	problems = append(problems, c.authProblems()...)
 
 	if c.Telemetry.Prometheus() && c.Metrics.Token == "" && c.Metrics.Port == 0 {
@@ -424,6 +456,20 @@ func (c *Config) integrationProblems() []string {
 
 	if c.SMS.Provider == SMSAliyun && (c.SMS.AccessKeyID == "" || c.SMS.AccessKeySecret == "" || c.SMS.SignName == "" || c.SMS.TemplateCode == "") {
 		problems = append(problems, "ALIYUN_SMS_ACCESS_KEY_ID, ALIYUN_SMS_ACCESS_KEY_SECRET, ALIYUN_SMS_SIGN_NAME, ALIYUN_SMS_TEMPLATE_CODE: required when SMS_PROVIDER=aliyun")
+	}
+
+	return append(problems, c.storageProblems()...)
+}
+
+func (c *Config) storageProblems() []string {
+	var problems []string
+
+	if c.Storage.Driver == StorageS3 && (c.Storage.Bucket == "" || c.Storage.Region == "") {
+		problems = append(problems, "S3_BUCKET, S3_REGION: required when STORAGE_DRIVER=s3")
+	}
+
+	if secret := c.Storage.URLSecret.Value(); secret != "" && len(secret) < _minURLSecret {
+		problems = append(problems, fmt.Sprintf("FILE_URL_SECRET: must be at least %d characters", _minURLSecret))
 	}
 
 	return problems

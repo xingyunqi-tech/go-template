@@ -1,0 +1,103 @@
+paths:
+  /api/v1/files:
+    post:
+      operationId: uploadFile
+      tags:
+      - files
+      summary: Upload a file
+      description: The type is detected from the content. avatar takes JPEG, PNG or WebP up to 5 MiB; attachment also
+        takes PDF, up to 20 MiB.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UploadFileInput'
+      responses:
+        '201':
+          description: Upload a file
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/files/{id}:
+    parameters:
+    - $ref: '#/components/parameters/FileID'
+    get:
+      operationId: getFile
+      tags:
+      - files
+      summary: Get a file of the caller
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Get a file of the caller
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/files/{id}/content:
+    parameters:
+    - $ref: '#/components/parameters/FileID'
+    get:
+      operationId: getFileContent
+      tags:
+      - files
+      summary: Download a file through its signed URL
+      description: The url of a File stored by this service; a missing, expired or wrong signature answers 404.
+      parameters:
+      - name: expires
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: signature
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: The file content
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'

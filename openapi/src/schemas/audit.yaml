@@ -1,0 +1,38 @@
+components:
+  schemas:
+    AuditLog:
+      type: object
+      required: [id, actorSub, action, resourceType, resourceId, requestId, ip, data, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorSub:
+          type: [string, 'null']
+          format: uuid
+        action:
+          type: string
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+        requestId:
+          type: string
+        ip:
+          type: string
+        data:
+          type: [object, 'null']
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+    AuditLogPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+        nextCursor:
+          type: [string, 'null']

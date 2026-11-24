@@ -172,7 +172,9 @@ func (r *Users) GetByEmail(ctx context.Context, email string) (*repo.UserRecord,
 // Update implements repo.Users.
 func (r *Users) Update(ctx context.Context, id uuid.UUID, c *repo.UserChanges) (*entity.User, bool, error) {
 	rec, found, err := r.one(ctx, "update", func(q *sqlcgen.Queries) (*sqlcgen.AppUser, error) {
-		return q.UpdateUser(ctx, sqlcgen.UpdateUserParams{ID: id, DisplayName: c.DisplayName, Status: c.Status})
+		return q.UpdateUser(ctx, sqlcgen.UpdateUserParams{
+			ID: id, DisplayName: c.DisplayName, Status: c.Status, SetAvatar: c.SetAvatar, AvatarFileID: c.AvatarFileID,
+		})
 	})
 	if !found || err != nil {
 		return nil, found, err

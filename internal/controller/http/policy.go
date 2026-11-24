@@ -81,9 +81,16 @@ type Policy struct {
 	Audit *Audit
 	// BodyLimit overrides BODY_LIMIT; 0 keeps it.
 	BodyLimit int64
+	// Upload streams the body to the handler unread and unvalidated; past BodyLimit reading
+	// fails with file.tooLarge.
+	Upload bool
 }
 
-const _userResource = "user"
+const (
+	_userResource = "user"
+	// _uploadOverhead covers the multipart framing and the purpose field around the file.
+	_uploadOverhead = 64 << 10
+)
 
 // Policies returns the policy of every documented operation, keyed by operationId. The
 // account, session and failures-only rules of platform conventions §11.6 are counted by the
@@ -121,6 +128,11 @@ func Policies() map[string]Policy {
 		"setUserRoles":    {Auth: AuthJWT, Perms: All(entity.PermRoleWrite), Tx: true, Audit: &Audit{Action: "user.roles.set", Resource: _userResource}},
 		"listRoles":       {Auth: AuthJWT, Perms: All(entity.PermRoleRead)},
 		"listPermissions": {Auth: AuthJWT, Perms: All(entity.PermRoleRead)},
+
+		"uploadFile":     {Auth: AuthJWT, Upload: true, BodyLimit: entity.MaxFileSize() + _uploadOverhead},
+		"getFile":        {Auth: AuthJWT},
+		"getFileContent": {Auth: AuthPublic},
+		"listAuditLogs":  {Auth: AuthJWT, Perms: All(entity.PermAuditRead)},
 
 		"listNotes":  {Auth: AuthJWT},
 		"createNote": {Auth: AuthJWT, Tx: true, Audit: &Audit{Action: "note.create", Resource: "note"}},

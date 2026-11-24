@@ -3,6 +3,8 @@ package usecase
 
 import (
 	"context"
+	"io"
+	"mime/multipart"
 	"time"
 	"uuid"
 
@@ -92,6 +94,14 @@ type Sessions interface {
 	RevokeOthers(ctx context.Context, caller *Caller) error
 }
 
+// MeChanges is an updateMe request: nil DisplayName keeps it; SetAvatar sets AvatarFileID, nil
+// removing the avatar.
+type MeChanges struct {
+	DisplayName  *string
+	SetAvatar    bool
+	AvatarFileID *uuid.UUID
+}
+
 // PasswordChange is a changePassword request; Current is nil when it was omitted.
 type PasswordChange struct {
 	Current *string
@@ -119,7 +129,7 @@ type UserQuery struct {
 // Users serves the current user and the user administration.
 type Users interface {
 	Me(ctx context.Context, caller *Caller) (*entity.User, error)
-	UpdateMe(ctx context.Context, caller *Caller, displayName *string, avatarFileID *uuid.UUID) (*entity.User, error)
+	UpdateMe(ctx context.Context, caller *Caller, c *MeChanges) (*entity.User, error)
 	ChangePassword(ctx context.Context, caller *Caller, c *PasswordChange) error
 	List(ctx context.Context, q *UserQuery) (pagination.Page[entity.User], error)
 	Create(ctx context.Context, a *NewAccount) (*entity.User, error)
@@ -130,4 +140,51 @@ type Users interface {
 	BindPhone(ctx context.Context, caller *Caller, phone, code string) (*entity.User, error)
 	// BindWechatPhone sets the phone of the WeChat account behind a getPhoneNumber code.
 	BindWechatPhone(ctx context.Context, caller *Caller, code string) (*entity.User, error)
+}
+
+// Form yields the parts of a multipart/form-data body.
+type Form interface {
+	NextPart() (*multipart.Part, error)
+}
+
+// FileView is a file with its URL.
+type FileView struct {
+	File entity.File
+	URL  string
+}
+
+// Files uploads and serves files.
+type Files interface {
+	Upload(ctx context.Context, owner uuid.UUID, form Form) (*FileView, error)
+	Get(ctx context.Context, owner, id uuid.UUID) (*FileView, error)
+	// Content opens a local file for a getFileContent URL.
+	Content(ctx context.Context, id uuid.UUID, expires, signature string) (*entity.File, io.ReadCloser, error)
+	// URLs returns the URLs of the existing files among ids.
+	URLs(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]string, error)
+}
+
+// AuditQuery selects a page of audit logs after cursor ("" for the first page).
+type AuditQuery struct {
+	ActorSub *uuid.UUID
+	Action   *string
+	Cursor   string
+	Limit    int
+}
+
+// AuditEntry is a stored audit log.
+type AuditEntry struct {
+	ID           uuid.UUID
+	ActorSub     *uuid.UUID
+	Action       string
+	ResourceType string
+	ResourceID   string
+	RequestID    string
+	IP           string
+	Data         map[string]any
+	CreatedAt    time.Time
+}
+
+// Audits lists the audit logs.
+type Audits interface {
+	List(ctx context.Context, q *AuditQuery) (pagination.CursorPage[AuditEntry], error)
 }
