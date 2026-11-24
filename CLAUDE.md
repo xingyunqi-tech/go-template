@@ -67,7 +67,7 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 - 配置只从 `config.Config` 读取，业务代码禁止 `os.Getenv`（forbidigo）。
 - 日志用 `log/slog`，禁止 `fmt.Print*` 与标准库 `log`。
 - 构造函数手写，在 `internal/app` 组装，不引入 wire / fx。认证角色：`AUTH_SIGNING_KEY` 为签发服务；只设 `AUTH_JWKS_URL` 为验证服务，`internal/app/document.go` 从文档与 policy 中去掉 tag 为 `auth`、`me`、`users` 的操作（这些路由 404），只迁移 core，worker 订阅 `user.deleted` 后只运行 `corePurgers`。
-- `// modulegen:<slot>` 是 `cmd/modulegen` 插入登记代码的锚点（policy、v1 Server、`internal/app` 组装与 `corePurgers`、`rbac.go`），不删不改。
+- `modulegen:<slot>` 注释是 `cmd/modulegen` 插入登记代码的锚点（policy、v1 Server、`internal/app/app.go` 的 import 与模块组装、`corePurgers`、`rbac.go`、`.golangci.yml` 的 `dupl` 排除），不删不改。
 - 未导出的包级常量以下划线开头（`_scalarVersion`）；`mnd` 拒绝裸数字，先定义常量。
 - 表名单数 snake_case，主键 `uuid DEFAULT uuidv7()`（应用侧 `uuid.NewV7()` 生成），时间 `timestamptz`；约束与索引命名 `<table>_pkey`、`<table>_<columns>_key|fkey|idx|check`。core 表引用用户只存 `sub`，不建跨 schema 外键。
 

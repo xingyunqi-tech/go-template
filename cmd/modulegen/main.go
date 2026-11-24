@@ -432,6 +432,10 @@ func checkName(root string, m *Module) error {
 		return err
 	}
 
+	if err := checkApp(filepath.Join(root, "internal", "app"), m); err != nil {
+		return err
+	}
+
 	return checkSpec(filepath.Join(root, "openapi", "src"), m)
 }
 
@@ -472,6 +476,56 @@ func checkFile(fset *token.FileSet, path string, taken []string) error {
 	}
 
 	return nil
+}
+
+// checkApp rejects a package name that internal/app already uses for an import or a top-level
+// identifier, where the module's use case is imported.
+func checkApp(dir string, m *Module) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("modulegen: %w", err)
+	}
+
+	fset := token.NewFileSet()
+
+	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+
+		f, err := parser.ParseFile(fset, filepath.Join(dir, e.Name()), nil, parser.SkipObjectResolution)
+		if err != nil {
+			return fmt.Errorf("modulegen: %w", err)
+		}
+
+		if slices.Contains(appNames(f), m.Lower) {
+			return fmt.Errorf("%w: %s is taken in internal/app/%s", errClash, m.Lower, e.Name())
+		}
+	}
+
+	return nil
+}
+
+// appNames are the import names and top-level identifiers of f.
+func appNames(f *ast.File) []string {
+	var names []string
+
+	for _, imp := range f.Imports {
+		if imp.Name != nil {
+			names = append(names, imp.Name.Name)
+
+			continue
+		}
+
+		path := strings.Trim(imp.Path.Value, `"`)
+		names = append(names, path[strings.LastIndex(path, "/")+1:])
+	}
+
+	for _, decl := range f.Decls {
+		names = append(names, declNames(decl)...)
+	}
+
+	return names
 }
 
 func declNames(decl ast.Decl) []string {

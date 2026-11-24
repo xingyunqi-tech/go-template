@@ -26,6 +26,7 @@ func workspace(t *testing.T) string {
 	}
 
 	for _, dir := range []string{
+		filepath.Join("internal", "app"),
 		filepath.Join("templates", "module"), filepath.Join("migrations", "core"), filepath.Join("internal", "entity"),
 		filepath.Join("openapi", "src"), filepath.Join("openapi", "src", "paths"), filepath.Join("openapi", "src", "schemas"),
 	} {
@@ -149,7 +150,7 @@ func TestAMissingAnchorFails(t *testing.T) {
 func TestNamesThatClashAreRefusedBeforeAnythingIsWritten(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"type", "error", "order", "role", "page", "note"} {
+	for _, name := range []string{"type", "error", "order", "role", "page", "note", "config", "worker", "audit"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

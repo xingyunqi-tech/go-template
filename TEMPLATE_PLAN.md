@@ -464,7 +464,7 @@ otelhttp → requestid → 访问日志 + recover → 安全头 → CORS → i18
 | `_typos.toml` | 删除 `db/nestjs-schema.sql` 排除项 |
 | CLAUDE.md 约定 | 注释规范、提交与推送原文保留 |
 
-模块生成器 `make module NAME=<name> [PLURAL=<plural>] [PERMS=1]`（`cmd/modulegen`，模板 `templates/module/` 由 note 模块文件替换名称派生）以 `note` 为模板生成：`openapi/src/paths|schemas/<name>.yaml`、core 迁移、sqlc 查询、repo / usecase / handler、`Purger`、policy 条目、单元与集成测试骨架，然后执行 `make generate`。默认与 `note` 相同，只按本人归属控制访问、不声明权限码；`PERMS=1` 时在 `rbac.go` 登记私有权限码 `<name>:read`、`<name>:write`（不授予其他角色，`admin` 自动拥有）并在 policy 中引用。登记处为代码中的 `modulegen:<slot>` 锚点（policy、v1 Server 字段 / Deps / New、`internal/app` 的 import、模块组装与 `corePurgers`、`rbac.go`、`.golangci.yml` 的 `dupl` 排除），端口与用例接口追加到两个 `contracts.go` 末尾。全部文件先在内存中渲染与插入，成功后才写盘；拒绝 Go 关键字与预声明标识符、PostgreSQL 保留字、entity 中已有的同名标识符、spec 中已有的同名 path 或 component，以及已存在的文件。生成的模块与 note 结构相同，`dupl` 只对 note 的三个文件、两个 `contracts.go` 与生成器登记的模块文件关闭。
+模块生成器 `make module NAME=<name> [PLURAL=<plural>] [PERMS=1]`（`cmd/modulegen`，模板 `templates/module/` 由 note 模块文件替换名称派生）以 `note` 为模板生成：`openapi/src/paths|schemas/<name>.yaml`、core 迁移、sqlc 查询、repo / usecase / handler、`Purger`、policy 条目、单元与集成测试骨架，然后执行 `make generate`。默认与 `note` 相同，只按本人归属控制访问、不声明权限码；`PERMS=1` 时在 `rbac.go` 登记私有权限码 `<name>:read`、`<name>:write`（不授予其他角色，`admin` 自动拥有）并在 policy 中引用。登记处为代码中的 `modulegen:<slot>` 锚点（policy、v1 Server 字段 / Deps / New、`internal/app` 的 import、模块组装与 `corePurgers`、`rbac.go`、`.golangci.yml` 的 `dupl` 排除），端口与用例接口追加到两个 `contracts.go` 末尾。全部文件先在内存中渲染与插入，成功后才写盘；拒绝 Go 关键字与预声明标识符、PostgreSQL 保留字、entity 中已有的同名标识符、`internal/app` 中已有的同名 import 或顶层标识符、spec 中已有的同名 path 或 component，以及已存在的文件。生成的模块与 note 结构相同，`dupl` 只对 note 的三个文件、两个 `contracts.go` 与生成器登记的模块文件关闭。
 
 ---
 

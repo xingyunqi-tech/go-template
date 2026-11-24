@@ -40,7 +40,7 @@ make module NAME=category PLURAL=categories
 - `internal/entity/<name>.go`、`internal/repo/postgres/<plural>.go`（含 `Purger`）、`internal/usecase/<name>/`、`internal/controller/http/v1/<plural>.go`；
 - 用例单元测试与 `internal/app/<plural>_integration_test.go`。
 
-并在 `// modulegen:<slot>` 锚点处登记 policy、v1 Server 字段、`internal/app` 组装、注销清理器与权限码，在 `repo/contracts.go`、`usecase/contracts.go` 末尾追加端口与用例接口，最后执行 `make generate` 与 `make fmt`。已存在同名文件时拒绝生成。生成后按业务修改字段，再跑 `make check` 与 `make test-integration`。
+并在 `modulegen:<slot>` 锚点处登记 policy、v1 Server 字段、`internal/app/app.go` 的 import 与模块组装、注销清理器、权限码与 `.golangci.yml` 的 `dupl` 排除，在 `repo/contracts.go`、`usecase/contracts.go` 末尾追加端口与用例接口，最后执行 `make generate` 与 `make fmt`。全部内容先在内存中生成，成功后才写盘；名称是 Go 关键字或预声明标识符、PostgreSQL 保留字，或与 entity、`internal/app`、spec 中已有的名称重名，或目标文件已存在时，拒绝生成。生成后按业务修改字段，再跑 `make check` 与 `make test-integration`。
 
 ## 脚本
 
