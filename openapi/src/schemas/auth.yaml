@@ -74,3 +74,52 @@ components:
           type: string
           minLength: 1
           maxLength: 256
+    Phone:
+      type: string
+      minLength: 1
+      maxLength: 32
+      description: E.164, or an 11-digit mainland China number
+    SmsCode:
+      type: string
+      pattern: '^[0-9]{6}$'
+    SendSmsCodeInput:
+      type: object
+      required: [phone, scene]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        scene:
+          type: string
+          enum: [login, bind_phone]
+    SmsLoginInput:
+      type: object
+      required: [phone, code]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        code:
+          $ref: '#/components/schemas/SmsCode'
+    AuthProvider:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+    ProviderLoginInput:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 512
+  parameters:
+    Provider:
+      name: provider
+      in: path
+      required: true
+      description: wechat_miniapp, wechat_app or alipay
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 32

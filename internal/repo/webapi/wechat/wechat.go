@@ -1,5 +1,5 @@
-// Package wechat calls the WeChat sign-in APIs: mini program jscode2session, open platform OAuth,
-// the mini program phone number and subscribe messages.
+// Package wechat calls the WeChat sign-in APIs: mini program jscode2session, open platform OAuth
+// and the mini program phone number.
 package wechat
 
 import (
@@ -9,510 +9,305 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
-	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/repo"
 	"github.com/xingyunqi-tech/go-template/internal/repo/webapi/outbound"
+	"github.com/xingyunqi-tech/go-template/pkg/phone"
 )
 
 const (
-	// APIBase is the WeChat API host.
-	APIBase = "https://api.weixin.qq.com"
+	// DefaultAPIBase is the WeChat API host.
+	DefaultAPIBase = "https://api.weixin.qq.com"
 	// AccessTokenCacheKey caches the mini program access token.
-	AccessTokenCacheKey = "wechat:mini_app:access_token" //nolint:gosec // cache key, not a credential
+	AccessTokenCacheKey = "wechat:miniapp:access_token" //nolint:gosec // cache key, not a credential
 
 	_timeout          = 10 * time.Second
 	_maxBody          = 1 << 20
-	_tokenMargin      = 300
-	_tokenShortExpiry = 600
+	_tokenMargin      = 300 * time.Second
+	_tokenShortExpiry = 600 * time.Second
 
 	_errInvalidCredential = 40001
 	_errInvalidToken      = 40014
 	_errTokenExpired      = 42001
 	_errInvalidCode       = 40029
 	_errCodeUsed          = 40163
-
-	_errNotSubscribed   = 43101
-	_errInvalidOpenID   = 40003
-	_errInvalidTemplate = 40037
-	_errInvalidPage     = 41030
-	_errInvalidData     = 47003
 )
 
-var errAPI = errors.New("wechat: api error")
+var (
+	errAPI     = errors.New("wechat: api error")
+	errNoID    = errors.New("wechat: response has no openid")
+	errNoPhone = errors.New("wechat: response has no phone number")
+	errHTTP    = errors.New("wechat: request failed")
+)
 
-// Config holds the mini program and open platform credentials; MiniProgramState is the
-// miniprogram_state of subscribe messages.
-type Config struct {
-	MiniAppID        string
-	MiniAppSecret    string
-	AppID            string
-	AppSecret        string
-	MiniProgramState string
+// Credentials are the app id and secret of a mini program or an open platform app.
+type Credentials struct {
+	AppID     string
+	AppSecret string
 }
 
 // Client calls the WeChat APIs.
 type Client struct {
-	cfg     Config
-	http    *http.Client
-	cache   repo.Cache
-	log     *slog.Logger
-	tokenMu sync.Mutex
+	base  string
+	http  *http.Client
+	cache repo.Cache
+	mu    sync.Mutex
 }
 
-// New returns a Client; transport nil uses http.DefaultTransport.
-func New(cfg *Config, cache repo.Cache, transport http.RoundTripper, log *slog.Logger) *Client {
+// New returns a Client; transport nil uses http.DefaultTransport, base "" is DefaultAPIBase.
+func New(base string, cache repo.Cache, transport http.RoundTripper) *Client {
+	if base == "" {
+		base = DefaultAPIBase
+	}
+
 	return &Client{ //nolint:exhaustruct // zero mutex
-		cfg: *cfg, http: &http.Client{Transport: transport, Timeout: _timeout}, cache: cache, log: log, //nolint:exhaustruct // defaults
+		base: strings.TrimRight(base, "/"), http: &http.Client{Transport: transport, Timeout: _timeout}, cache: cache, //nolint:exhaustruct // defaults
 	}
 }
 
-func failure(field, key string, wechatError any) *entity.NestError {
-	fields := []entity.Detail{{Name: field, Value: key}}
-	if wechatError != nil {
-		fields = append(fields, entity.Detail{Name: "wechatError", Value: wechatError})
+type reply struct {
+	ErrCode     int    `json:"errcode"`
+	ErrMsg      string `json:"errmsg"`
+	OpenID      string `json:"openid"`
+	UnionID     string `json:"unionid"`
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+	PhoneInfo   *struct {
+		PurePhoneNumber string `json:"purePhoneNumber"`
+		CountryCode     string `json:"countryCode"`
+	} `json:"phone_info"`
+}
+
+func (r *reply) err() error {
+	return fmt.Errorf("%w %d: %s", errAPI, r.ErrCode, r.ErrMsg)
+}
+
+// codeError maps an errcode to auth.providerCodeInvalid for a bad code, else common.badGateway.
+func (r *reply) codeError() error {
+	if r.ErrCode == _errInvalidCode || r.ErrCode == _errCodeUsed {
+		return entity.Wrap(entity.KeyProviderCodeInvalid, r.err())
 	}
 
-	return entity.NestInvalidFields(fields...)
+	return entity.Wrap(entity.KeyBadGateway, r.err())
 }
 
-func notConfigured() *entity.NestError {
-	return failure("wechat", "notConfigured", nil)
-}
+// fetch GETs path, or POSTs body as JSON; transport and HTTP failures are common.badGateway.
+func (c *Client) fetch(ctx context.Context, path string, query url.Values, body any) (*reply, error) {
+	method, payload := http.MethodGet, io.Reader(http.NoBody)
 
-func requestFailed() *entity.NestError {
-	return failure("wechat", "requestFailed", nil)
-}
-
-// apiError is a non-zero errcode.
-type apiError struct {
-	code int
-	msg  any
-}
-
-func (e *apiError) Error() string {
-	return fmt.Sprintf("WeChat API error %d: %v", e.code, e.msg)
-}
-
-func (e *apiError) Unwrap() error {
-	return errAPI
-}
-
-// reply is a decoded response body.
-type reply map[string]any
-
-func (r reply) errcode() int {
-	switch v := r["errcode"].(type) {
-	case float64:
-		return int(v)
-	case string:
-		n, _ := strconv.Atoi(v)
-
-		return n
-	default:
-		return 0
-	}
-}
-
-func (r reply) str(key string) *string {
-	switch v := r[key].(type) {
-	case string:
-		return &v
-	case nil:
-		return nil
-	default:
-		s := fmt.Sprint(v)
-
-		return &s
-	}
-}
-
-func (r reply) text(key string) string {
-	if s := r.str(key); s != nil {
-		return *s
-	}
-
-	return ""
-}
-
-func newRequest(ctx context.Context, path string, query url.Values, body any) (*http.Request, error) {
-	target := APIBase + path
-	if len(query) > 0 {
-		target += "?" + query.Encode()
-	}
-
-	if body == nil {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, http.NoBody)
+	if body != nil {
+		raw, err := json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("wechat: %w", err)
 		}
 
-		return req, nil
+		method, payload = http.MethodPost, bytes.NewReader(raw)
 	}
 
-	raw, err := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, method, c.base+path+"?"+query.Encode(), payload)
 	if err != nil {
 		return nil, fmt.Errorf("wechat: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(raw))
-	if err != nil {
-		return nil, fmt.Errorf("wechat: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	return req, nil
-}
-
-// fetch GETs path, or POSTs body as JSON; a non-2xx status is wechat requestFailed.
-func (c *Client) fetch(ctx context.Context, path string, query url.Values, body any, label string) (reply, error) {
-	req, err := newRequest(ctx, path, query, body)
-	if err != nil {
-		return nil, err
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("wechat: %w", outbound.Redact(err))
+		return nil, entity.Wrap(entity.KeyBadGateway, fmt.Errorf("wechat: %w", outbound.Redact(err)))
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode >= http.StatusBadRequest {
-		c.log.ErrorContext(ctx, "WeChat HTTP error", "api", label, "status", res.StatusCode)
-
-		return nil, requestFailed()
-	}
-
 	raw, err := io.ReadAll(io.LimitReader(res.Body, _maxBody))
 	if err != nil {
-		return nil, fmt.Errorf("wechat: %w", err)
+		return nil, entity.Wrap(entity.KeyBadGateway, fmt.Errorf("wechat: %w", err))
 	}
 
 	var out reply
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, fmt.Errorf("wechat: %w", err)
+	if err := json.Unmarshal(raw, &out); err != nil || res.StatusCode >= http.StatusBadRequest {
+		return nil, entity.Wrap(entity.KeyBadGateway, fmt.Errorf("%w: %s %s: status %d", errHTTP, method, path, res.StatusCode))
 	}
 
-	if out == nil {
-		out = reply{}
-	}
-
-	return out, nil
+	return &out, nil
 }
 
-// passThrough keeps 422 responses and turns any other failure into wechat requestFailed.
-func passThrough(err error) error {
-	var known *entity.NestError
-	if errors.As(err, &known) {
-		return known
-	}
-
-	return requestFailed()
-}
-
-// MiniAppLogin exchanges a wx.login code with jscode2session.
-func (c *Client) MiniAppLogin(ctx context.Context, code string) (*entity.WechatUser, error) {
-	if c.cfg.MiniAppID == "" || c.cfg.MiniAppSecret == "" {
-		c.log.ErrorContext(ctx, "WeChat Mini App credentials not configured")
-
-		return nil, notConfigured()
-	}
-
-	data, err := c.fetch(ctx, "/sns/jscode2session", url.Values{
-		"appid": {c.cfg.MiniAppID}, "secret": {c.cfg.MiniAppSecret}, "js_code": {code}, "grant_type": {"authorization_code"},
-	}, nil, "WeChat Mini App login")
-	if err != nil {
-		c.log.ErrorContext(ctx, "WeChat Mini App login request failed", "error", err.Error())
-
-		return nil, passThrough(err)
-	}
-
-	if data.errcode() != 0 {
-		c.log.ErrorContext(ctx, "WeChat Mini App login failed", "errcode", data.errcode(), "errmsg", data["errmsg"])
-
-		return nil, failure("code", "invalidCode", data["errmsg"])
-	}
-
-	if data.text("openid") == "" {
-		c.log.ErrorContext(ctx, "WeChat Mini App login response has no openid")
-
-		return nil, requestFailed()
-	}
-
-	return &entity.WechatUser{OpenID: data.text("openid"), UnionID: data.str("unionid"), Nickname: nil, Gender: nil}, nil
-}
-
-// AppLogin exchanges an open platform OAuth code and reads the user profile.
-func (c *Client) AppLogin(ctx context.Context, code string) (*entity.WechatUser, error) {
-	if c.cfg.AppID == "" || c.cfg.AppSecret == "" {
-		c.log.ErrorContext(ctx, "WeChat App credentials not configured")
-
-		return nil, notConfigured()
-	}
-
-	u, err := c.appLogin(ctx, code)
-	if err != nil {
-		c.log.ErrorContext(ctx, "WeChat App login request failed", "error", err.Error())
-
-		return nil, passThrough(err)
-	}
-
-	return u, nil
-}
-
-func (c *Client) appLogin(ctx context.Context, code string) (*entity.WechatUser, error) {
-	token, err := c.fetch(ctx, "/sns/oauth2/access_token", url.Values{
-		"appid": {c.cfg.AppID}, "secret": {c.cfg.AppSecret}, "code": {code}, "grant_type": {"authorization_code"},
-	}, nil, "WeChat App token")
+func (c *Client) exchange(ctx context.Context, path string, query url.Values, provider string) (*entity.ExternalIdentity, error) {
+	r, err := c.fetch(ctx, path, query, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if token.errcode() != 0 {
-		return nil, failure("code", "invalidCode", token["errmsg"])
+	if r.ErrCode != 0 {
+		return nil, r.codeError()
 	}
 
-	if token.text("openid") == "" {
-		c.log.ErrorContext(ctx, "WeChat OAuth token response has no openid")
-
-		return nil, requestFailed()
+	if r.OpenID == "" {
+		return nil, entity.Wrap(entity.KeyBadGateway, errNoID)
 	}
 
-	info, err := c.fetch(ctx, "/sns/userinfo", url.Values{
-		"access_token": {token.text("access_token")}, "openid": {token.text("openid")},
-	}, nil, "WeChat App user info")
+	return &entity.ExternalIdentity{Provider: provider, Subject: r.OpenID, UnionID: r.UnionID}, nil
+}
+
+// MiniApp signs in with the code of wx.login.
+type MiniApp struct {
+	client *Client
+	creds  Credentials
+}
+
+// NewMiniApp returns the wechat_miniapp provider.
+func NewMiniApp(client *Client, creds Credentials) *MiniApp {
+	return &MiniApp{client: client, creds: creds}
+}
+
+// ID is wechat_miniapp.
+func (*MiniApp) ID() string { return entity.ProviderWechatMiniApp }
+
+// Exchange calls jscode2session.
+func (m *MiniApp) Exchange(ctx context.Context, code string) (*entity.ExternalIdentity, error) {
+	return m.client.exchange(ctx, "/sns/jscode2session", url.Values{
+		"appid": {m.creds.AppID}, "secret": {m.creds.AppSecret}, "js_code": {code}, "grant_type": {"authorization_code"},
+	}, entity.ProviderWechatMiniApp)
+}
+
+// Phone resolves the code of getPhoneNumber to an E.164 number.
+func (m *MiniApp) Phone(ctx context.Context, code string) (string, error) {
+	r, err := m.callWithToken(ctx, "/wxa/business/getuserphonenumber", map[string]string{"code": code})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	if info.errcode() != 0 {
-		return nil, failure("wechat", "userInfoFailed", info["errmsg"])
+	if r.ErrCode != 0 {
+		return "", r.codeError()
 	}
 
-	unionID := info.str("unionid")
-	if unionID == nil {
-		unionID = token.str("unionid")
+	if r.PhoneInfo == nil || r.PhoneInfo.PurePhoneNumber == "" {
+		return "", entity.Wrap(entity.KeyBadGateway, errNoPhone)
 	}
 
-	u := &entity.WechatUser{OpenID: token.text("openid"), UnionID: unionID, Nickname: info.str("nickname"), Gender: nil}
-	if sex, ok := info["sex"].(float64); ok {
-		g := int(sex)
-		u.Gender = &g
-	}
-
-	return u, nil
-}
-
-// PhoneNumber resolves a getPhoneNumber code.
-func (c *Client) PhoneNumber(ctx context.Context, code string) (*entity.WechatPhone, error) {
-	data, err := c.callMiniApp(ctx, "/wxa/business/getuserphonenumber", map[string]string{"code": code}, "Get phone number")
+	e164, err := phone.Normalize("+" + r.PhoneInfo.CountryCode + r.PhoneInfo.PurePhoneNumber)
 	if err != nil {
-		return nil, c.phoneError(ctx, err)
+		return "", entity.Wrap(entity.KeyBadGateway, err)
 	}
 
-	info, _ := data["phone_info"].(map[string]any)
-	number, _ := info["purePhoneNumber"].(string)
-
-	if number == "" {
-		return nil, c.phoneError(ctx, &apiError{code: -1, msg: "phone_info missing"})
-	}
-
-	country := ""
-	if v, ok := info["countryCode"]; ok && v != nil {
-		country = fmt.Sprint(v)
-	}
-
-	return &entity.WechatPhone{Number: number, CountryCode: country}, nil
-}
-
-func (c *Client) phoneError(ctx context.Context, err error) error {
-	var known *entity.NestError
-	if errors.As(err, &known) {
-		return known
-	}
-
-	c.log.ErrorContext(ctx, "Get phone number failed", "error", err.Error())
-
-	var api *apiError
-	if errors.As(err, &api) && (api.code == _errInvalidCode || api.code == _errCodeUsed) {
-		return entity.NestUnprocessable("invalidPhoneCode", entity.Detail{Name: "phoneCode", Value: "invalidCode"})
-	}
-
-	return requestFailed()
-}
-
-// SubscribeMessage is a mini program subscribe message; Data maps template field keys to values.
-type SubscribeMessage struct {
-	OpenID     string
-	TemplateID string
-	Page       *string
-	Data       map[string]string
-}
-
-type subscribeValue struct {
-	Value string `json:"value"`
-}
-
-type subscribeBody struct {
-	ToUser           string                    `json:"touser"`
-	TemplateID       string                    `json:"template_id"`
-	Page             *string                   `json:"page,omitempty"`
-	Data             map[string]subscribeValue `json:"data"`
-	MiniProgramState string                    `json:"miniprogram_state"`
-	Lang             string                    `json:"lang"`
-}
-
-// SendSubscribeMessage sends a subscribe message; a non-zero errcode is returned as
-// "WeChat API error <errcode>: <errmsg>".
-func (c *Client) SendSubscribeMessage(ctx context.Context, m *SubscribeMessage) error {
-	data := make(map[string]subscribeValue, len(m.Data))
-	for k, v := range m.Data {
-		data[k] = subscribeValue{Value: v}
-	}
-
-	_, err := c.callMiniApp(ctx, "/cgi-bin/message/subscribe/send", subscribeBody{
-		ToUser: m.OpenID, TemplateID: m.TemplateID, Page: m.Page, Data: data,
-		MiniProgramState: c.cfg.MiniProgramState, Lang: "zh_CN",
-	}, "Send subscribe message")
-
-	return err
-}
-
-// SubscribeUnrecoverable reports a subscribe message failure that retries cannot fix: errcode
-// 43101, 40003, 40037, 41030 or 47003, or mini program credentials not configured.
-func SubscribeUnrecoverable(err error) bool {
-	var api *apiError
-	if errors.As(err, &api) {
-		switch api.code {
-		case _errNotSubscribed, _errInvalidOpenID, _errInvalidTemplate, _errInvalidPage, _errInvalidData:
-			return true
-		default:
-			return false
-		}
-	}
-
-	var known *entity.NestError
-	if errors.As(err, &known) {
-		for _, f := range known.Fields {
-			if f.Name == "wechat" {
-				return f.Value == "notConfigured"
-			}
-		}
-	}
-
-	return false
+	return e164, nil
 }
 
 func invalidToken(code int) bool {
 	return code == _errInvalidCredential || code == _errInvalidToken || code == _errTokenExpired
 }
 
-// callMiniApp calls a mini program API with the access token, refreshing it once when WeChat
-// reports it invalid.
-func (c *Client) callMiniApp(ctx context.Context, path string, body any, label string) (reply, error) {
-	token, err := c.accessToken(ctx)
+// callWithToken calls a mini program API with the access token and fetches a new token once
+// when WeChat reports it invalid.
+func (m *MiniApp) callWithToken(ctx context.Context, path string, body any) (*reply, error) {
+	token, err := m.accessToken(ctx, "")
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := c.fetch(ctx, path, url.Values{"access_token": {token}}, body, label)
-	if err != nil {
+	r, err := m.client.fetch(ctx, path, url.Values{"access_token": {token}}, body)
+	if err != nil || !invalidToken(r.ErrCode) {
+		return r, err
+	}
+
+	if token, err = m.accessToken(ctx, token); err != nil {
 		return nil, err
 	}
 
-	if invalidToken(data.errcode()) {
-		c.log.WarnContext(ctx, "WeChat access_token invalid, refreshing", "api", label, "errcode", data.errcode())
-
-		if token, err = c.refreshAccessToken(ctx, token); err != nil {
-			return nil, err
-		}
-
-		if data, err = c.fetch(ctx, path, url.Values{"access_token": {token}}, body, label); err != nil {
-			return nil, err
-		}
-	}
-
-	if code := data.errcode(); code != 0 {
-		return nil, &apiError{code: code, msg: data.text("errmsg")}
-	}
-
-	return data, nil
+	return m.client.fetch(ctx, path, url.Values{"access_token": {token}}, body)
 }
 
-func (c *Client) accessToken(ctx context.Context) (string, error) {
-	var cached string
-
-	found, err := c.cache.Get(ctx, AccessTokenCacheKey, &cached)
-	if err != nil {
-		return "", fmt.Errorf("wechat: %w", err)
-	}
-
-	if found && cached != "" {
-		return cached, nil
-	}
-
-	return c.stableToken(ctx, false)
-}
-
-func (c *Client) refreshAccessToken(ctx context.Context, invalid string) (string, error) {
-	if err := c.cache.Delete(ctx, AccessTokenCacheKey); err != nil {
-		return "", fmt.Errorf("wechat: %w", err)
-	}
-
-	token, err := c.stableToken(ctx, false)
-	if err != nil || token != invalid {
+// accessToken returns the cached stable token unless it is invalid; one request at a time
+// fetches a new one, asking WeChat to force a refresh only when it hands out invalid again.
+func (m *MiniApp) accessToken(ctx context.Context, invalid string) (string, error) {
+	if token, err := m.cached(ctx, invalid); token != "" || err != nil {
 		return token, err
 	}
 
-	return c.stableToken(ctx, true)
-}
+	m.client.mu.Lock()
+	defer m.client.mu.Unlock()
 
-func (c *Client) stableToken(ctx context.Context, force bool) (string, error) {
-	if c.cfg.MiniAppID == "" || c.cfg.MiniAppSecret == "" {
-		c.log.ErrorContext(ctx, "WeChat Mini App credentials not configured")
-
-		return "", notConfigured()
+	if token, err := m.cached(ctx, invalid); token != "" || err != nil {
+		return token, err
 	}
 
-	c.tokenMu.Lock()
-	defer c.tokenMu.Unlock()
+	token, err := m.newToken(ctx, false)
+	if err != nil || invalid == "" || token != invalid {
+		return token, err
+	}
 
-	data, err := c.fetch(ctx, "/cgi-bin/stable_token", nil, map[string]any{
-		"grant_type": "client_credential", "appid": c.cfg.MiniAppID, "secret": c.cfg.MiniAppSecret, "force_refresh": force,
-	}, "Get stable_token")
+	return m.newToken(ctx, true)
+}
+
+// cached returns the cached token, "" when there is none or it is invalid.
+func (m *MiniApp) cached(ctx context.Context, invalid string) (string, error) {
+	var token string
+
+	found, err := m.client.cache.Get(ctx, AccessTokenCacheKey, &token)
+	if err != nil {
+		return "", entity.Wrap(entity.KeyServiceUnavailable, err)
+	}
+
+	if !found || token == invalid {
+		return "", nil
+	}
+
+	return token, nil
+}
+
+// newToken fetches a stable token and caches it until shortly before it expires; the caller
+// holds the client lock.
+func (m *MiniApp) newToken(ctx context.Context, force bool) (string, error) {
+	r, err := m.client.fetch(ctx, "/cgi-bin/stable_token", nil, map[string]any{
+		"grant_type": "client_credential", "appid": m.creds.AppID, "secret": m.creds.AppSecret, "force_refresh": force,
+	})
 	if err != nil {
 		return "", err
 	}
 
-	if code := data.errcode(); code != 0 {
-		c.log.ErrorContext(ctx, "Get stable_token failed", "errcode", code, "errmsg", data["errmsg"])
-
-		return "", &apiError{code: code, msg: data.text("errmsg")}
+	if r.ErrCode != 0 || r.AccessToken == "" {
+		return "", entity.Wrap(entity.KeyBadGateway, r.err())
 	}
 
-	expires := 0
-	if v, ok := data["expires_in"].(float64); ok {
-		expires = int(v)
-	}
+	expires := time.Duration(r.ExpiresIn) * time.Second
 
 	ttl := expires / 2 //nolint:mnd // half of a short lifetime
 	if expires > _tokenShortExpiry {
 		ttl = expires - _tokenMargin
 	}
 
-	token := data.text("access_token")
 	if ttl > 0 {
-		if err := c.cache.Set(ctx, AccessTokenCacheKey, token, time.Duration(ttl)*time.Second); err != nil {
-			return "", fmt.Errorf("wechat: %w", err)
+		if err := m.client.cache.Set(ctx, AccessTokenCacheKey, r.AccessToken, ttl); err != nil {
+			return "", entity.Wrap(entity.KeyServiceUnavailable, err)
 		}
 	}
 
-	return token, nil
+	return r.AccessToken, nil
+}
+
+// App signs in with the OAuth code of the open platform.
+type App struct {
+	client *Client
+	creds  Credentials
+}
+
+// NewApp returns the wechat_app provider.
+func NewApp(client *Client, creds Credentials) *App {
+	return &App{client: client, creds: creds}
+}
+
+// ID is wechat_app.
+func (*App) ID() string { return entity.ProviderWechatApp }
+
+// Exchange calls sns/oauth2/access_token.
+func (a *App) Exchange(ctx context.Context, code string) (*entity.ExternalIdentity, error) {
+	return a.client.exchange(ctx, "/sns/oauth2/access_token", url.Values{
+		"appid": {a.creds.AppID}, "secret": {a.creds.AppSecret}, "code": {code}, "grant_type": {"authorization_code"},
+	}, entity.ProviderWechatApp)
 }

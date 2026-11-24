@@ -29,12 +29,13 @@ const _password = "Passw0rd!"
 type identityApp struct {
 	*testApp
 
-	smtp *testutil.SMTPServer
+	smtp      *testutil.SMTPServer
+	workerLog *testutil.LogBuffer
 }
 
 // newIdentityApp runs the API and a worker against one database, mailing to a test SMTP server;
 // rate limits are off unless limits is true, and then X-Forwarded-For names the client.
-func newIdentityApp(t *testing.T, limits bool) *identityApp {
+func newIdentityApp(t *testing.T, limits bool, mutate ...func(*config.Config)) *identityApp {
 	t.Helper()
 
 	redisDB := _redis.Borrow(t)
@@ -49,15 +50,21 @@ func newIdentityApp(t *testing.T, limits bool) *identityApp {
 		c.App.FrontendURL = "https://app.example.com/"
 		c.HTTP.RateLimitEnabled = limits
 		c.HTTP.TrustedProxies = proxies
+
+		for _, fn := range mutate {
+			fn(c)
+		}
 	}, nil)
 
-	client, err := app.NewWorkerClient(a.cfg, slog.New(slog.DiscardHandler), a.infra)
+	workerLog := &testutil.LogBuffer{}
+
+	client, err := app.NewWorkerClient(a.cfg, slog.New(slog.NewJSONHandler(workerLog, nil)), a.infra)
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	require.NoError(t, client.Start(t.Context()))
 	t.Cleanup(func() { _ = client.Stop(t.Context()) })
 
-	return &identityApp{testApp: a, smtp: smtp}
+	return &identityApp{testApp: a, smtp: smtp, workerLog: workerLog}
 }
 
 type session struct {

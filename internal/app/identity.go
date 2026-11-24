@@ -10,14 +10,20 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/xingyunqi-tech/go-template/internal/config"
+	"github.com/xingyunqi-tech/go-template/internal/events"
 	"github.com/xingyunqi-tech/go-template/internal/i18n"
 	"github.com/xingyunqi-tech/go-template/internal/repo"
 	"github.com/xingyunqi-tech/go-template/internal/repo/postgres"
 	"github.com/xingyunqi-tech/go-template/internal/repo/redis"
+	"github.com/xingyunqi-tech/go-template/internal/repo/webapi/alipay"
 	"github.com/xingyunqi-tech/go-template/internal/repo/webapi/mail"
+	smsapi "github.com/xingyunqi-tech/go-template/internal/repo/webapi/sms"
+	"github.com/xingyunqi-tech/go-template/internal/repo/webapi/wechat"
 	"github.com/xingyunqi-tech/go-template/internal/usecase"
+	accountuc "github.com/xingyunqi-tech/go-template/internal/usecase/account"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/auth"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/session"
+	"github.com/xingyunqi-tech/go-template/internal/usecase/sms"
 	"github.com/xingyunqi-tech/go-template/internal/usecase/user"
 	"github.com/xingyunqi-tech/go-template/pkg/password"
 	"github.com/xingyunqi-tech/go-template/pkg/ratelimit"
@@ -29,6 +35,8 @@ type Identity struct {
 	Auth     *auth.Service
 	Sessions *session.Service
 	Users    *user.Service
+	SMS      *sms.Service
+	Accounts *accountuc.Service
 }
 
 // identityDeps are the infrastructure the identity use cases share with the router.
@@ -66,6 +74,50 @@ func newInsertClient(cfg *config.Config, log *slog.Logger, infra *Infra) (*river
 	return client, nil
 }
 
+func newSMSSender(cfg *config.Config, log *slog.Logger) repo.SMSSender {
+	if cfg.SMS.Provider != config.SMSAliyun {
+		return smsapi.NewLog(log)
+	}
+
+	return smsapi.New(&smsapi.Config{
+		AccessKeyID: cfg.SMS.AccessKeyID, AccessKeySecret: cfg.SMS.AccessKeySecret.Value(), SignName: cfg.SMS.SignName,
+		TemplateCode: cfg.SMS.TemplateCode, Endpoint: cfg.SMS.Endpoint,
+	}, nil)
+}
+
+// newProviders returns the providers whose credentials are set and the mini program phone
+// resolver, nil without wechat_miniapp.
+func newProviders(cfg *config.Config, cache repo.Cache) ([]auth.Provider, user.WechatPhone, error) {
+	var (
+		providers []auth.Provider
+		phone     user.WechatPhone
+	)
+
+	client := wechat.New(cfg.Wechat.APIBase, cache, nil)
+
+	if cfg.Wechat.MiniApp() {
+		mini := wechat.NewMiniApp(client, wechat.Credentials{AppID: cfg.Wechat.MiniAppID, AppSecret: cfg.Wechat.MiniAppSecret.Value()})
+		providers, phone = append(providers, mini), mini
+	}
+
+	if cfg.Wechat.App() {
+		providers = append(providers, wechat.NewApp(client, wechat.Credentials{AppID: cfg.Wechat.AppID, AppSecret: cfg.Wechat.AppSecret.Value()}))
+	}
+
+	if cfg.Alipay.Enabled() {
+		ali, err := alipay.New(&alipay.Config{
+			AppID: cfg.Alipay.AppID, PrivateKey: cfg.Alipay.PrivateKey.Value(), PublicKey: cfg.Alipay.PublicKey, Gateway: cfg.Alipay.Gateway,
+		}, nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("app: %w", err)
+		}
+
+		providers = append(providers, ali)
+	}
+
+	return providers, phone, nil
+}
+
 func newIdentity(d *identityDeps) (*Identity, error) {
 	hasher, err := password.New(password.Default(), d.cfg.Auth.HashConcurrency)
 	if err != nil {
@@ -87,8 +139,14 @@ func newIdentity(d *identityDeps) (*Identity, error) {
 		return nil, err
 	}
 
-	users, sessions := postgres.NewUsers(d.db), postgres.NewSessions(d.db)
+	providers, wechatPhone, err := newProviders(d.cfg, redis.NewCache(d.infra.Redis, d.cfg.Telemetry.ServiceName, d.log))
+	if err != nil {
+		return nil, err
+	}
+
+	users, sessions, identities := postgres.NewUsers(d.db), postgres.NewSessions(d.db), postgres.NewIdentities(d.db)
 	revocation := session.NewRevocation(sessions, d.revoker, d.cfg.Auth.AccessTTL)
+	smsService := sms.New(redis.NewSMSCodes(d.infra.Redis, d.cfg.Telemetry.ServiceName, sms.Limits()), newSMSSender(d.cfg, d.log), nil)
 	limits := usecase.Limits{Limiter: nil, Enabled: d.cfg.HTTP.RateLimitEnabled}
 
 	if d.limiter != nil {
@@ -103,16 +161,25 @@ func newIdentity(d *identityDeps) (*Identity, error) {
 	authService := auth.New(auth.Config{
 		AccessTTL: d.cfg.Auth.AccessTTL, RefreshTTL: d.cfg.Auth.RefreshTTL, FrontendURL: d.cfg.App.FrontendURL,
 	}, &auth.Deps{
-		Users: users, Sessions: sessions, Tokens: postgres.NewTokens(d.db), MailQueue: postgres.NewMailQueue(d.db, inserter),
+		Users: users, Identities: identities, Sessions: sessions, Tokens: postgres.NewTokens(d.db), MailQueue: postgres.NewMailQueue(inserter),
 		Mailer: mailer, Renderer: renderer, Grace: redis.NewRefreshGrace(d.infra.Redis, d.cfg.Telemetry.ServiceName),
-		Revocation: revocation, Signer: signer, Hasher: hasher, Limits: limits, Tx: d.db, Log: d.log, Now: nil,
+		Revocation: revocation, Signer: signer, Codes: smsService, Providers: providers, Hasher: hasher, Limits: limits,
+		Tx: d.db, Log: d.log, Now: nil,
 	})
 
 	return &Identity{
 		Auth:     authService,
 		Sessions: session.New(sessions, revocation),
 		Users: user.New(&user.Deps{
-			Users: users, Revocation: revocation, Hasher: hasher, Limits: limits, Now: nil, Outside: postgres.WithoutTx,
+			Users: users, Codes: smsService, WechatPhone: wechatPhone, Revocation: revocation, Hasher: hasher, Limits: limits,
+			Now: nil, Outside: postgres.WithoutTx,
+		}),
+		SMS: smsService,
+		Accounts: accountuc.New(&accountuc.Deps{
+			Users: users, Identities: identities, Revocation: revocation, Queue: postgres.NewAccountQueue(inserter),
+			Purgers:   []repo.Purger{postgres.NewNotes(d.db), postgres.NewAudits(d.db)},
+			Publisher: events.NewLog(d.log), Tx: d.db, Log: d.log, Grace: d.cfg.Account.DeletionGrace,
+			Source: d.cfg.Telemetry.ServiceName, Now: nil,
 		}),
 	}, nil
 }

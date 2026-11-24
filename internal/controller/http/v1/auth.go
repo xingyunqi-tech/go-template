@@ -96,3 +96,50 @@ func (s *Server) Logout(ctx context.Context, _ gen.LogoutRequestObject) (gen.Log
 
 	return gen.Logout200JSONResponse{Code: response.Code, Message: response.Message, Data: nil}, nil
 }
+
+// SendSmsCode handles POST /api/v1/auth/sms/send.
+// bind_phone needs the token, so a rejected one answers with its own error.
+func (s *Server) SendSmsCode(ctx context.Context, req gen.SendSmsCodeRequestObject) (gen.SendSmsCodeResponseObject, error) {
+	c := optionalCaller(ctx)
+	if c == nil && req.Body.Scene == gen.BindPhone {
+		return nil, reqctx.AuthError(ctx) //nolint:wrapcheck // entity errors
+	}
+
+	if err := s.sms.Send(ctx, c, req.Body.Phone, string(req.Body.Scene)); err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	return gen.SendSmsCode202JSONResponse{Code: response.Code, Message: response.Message, Data: nil}, nil
+}
+
+// LoginWithSms handles POST /api/v1/auth/sms/login.
+func (s *Server) LoginWithSms(ctx context.Context, req gen.LoginWithSmsRequestObject) (gen.LoginWithSmsResponseObject, error) {
+	r, err := s.auth.LoginWithSMS(ctx, client(ctx), req.Body.Phone, req.Body.Code)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	return gen.LoginWithSms200JSONResponse(loginEnvelope(r)), nil
+}
+
+// ListAuthProviders handles GET /api/v1/auth/providers.
+func (s *Server) ListAuthProviders(_ context.Context, _ gen.ListAuthProvidersRequestObject) (gen.ListAuthProvidersResponseObject, error) {
+	ids := s.auth.Providers()
+
+	items := make([]gen.AuthProvider, 0, len(ids))
+	for _, id := range ids {
+		items = append(items, gen.AuthProvider{Id: id})
+	}
+
+	return gen.ListAuthProviders200JSONResponse{Code: response.Code, Message: response.Message, Data: items}, nil
+}
+
+// LoginWithProvider handles POST /api/v1/auth/providers/{provider}/login.
+func (s *Server) LoginWithProvider(ctx context.Context, req gen.LoginWithProviderRequestObject) (gen.LoginWithProviderResponseObject, error) {
+	r, err := s.auth.LoginWithProvider(ctx, client(ctx), req.Provider, req.Body.Code)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	return gen.LoginWithProvider200JSONResponse(loginEnvelope(r)), nil
+}

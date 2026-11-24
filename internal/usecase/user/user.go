@@ -15,7 +15,6 @@ import (
 	"github.com/xingyunqi-tech/go-template/internal/usecase/session"
 	"github.com/xingyunqi-tech/go-template/pkg/pagination"
 	"github.com/xingyunqi-tech/go-template/pkg/password"
-	"github.com/xingyunqi-tech/go-template/pkg/phone"
 	"github.com/xingyunqi-tech/go-template/pkg/ratelimit"
 )
 
@@ -26,13 +25,25 @@ const (
 	_defaultSort        = "-createdAt"
 )
 
-// Deps are what the Service uses.
+// CodeVerifier consumes the SMS code of (scene, phone).
+type CodeVerifier interface {
+	Verify(ctx context.Context, scene, phone, code string) error
+}
+
+// WechatPhone resolves a getPhoneNumber code of the mini program to an E.164 number.
+type WechatPhone interface {
+	Phone(ctx context.Context, code string) (string, error)
+}
+
+// Deps are what the Service uses; a nil WechatPhone disables bindPhoneWithWechat.
 type Deps struct {
-	Users      repo.Users
-	Revocation *session.Revocation
-	Hasher     *password.Hasher
-	Limits     usecase.Limits
-	Now        func() time.Time
+	Users       repo.Users
+	Codes       CodeVerifier
+	WechatPhone WechatPhone
+	Revocation  *session.Revocation
+	Hasher      *password.Hasher
+	Limits      usecase.Limits
+	Now         func() time.Time
 	// Outside detaches ctx from the request transaction; nil keeps ctx.
 	Outside func(context.Context) context.Context
 }
@@ -233,9 +244,9 @@ func (s *Service) Create(ctx context.Context, a *usecase.NewAccount) (*entity.Us
 	}
 
 	if a.Phone != nil {
-		e164, err := phone.Normalize(*a.Phone)
+		e164, err := usecase.NormalizePhone("phone", *a.Phone)
 		if err != nil {
-			return nil, entity.Invalid("phone", entity.RuleFormat, map[string]any{"format": "phone"})
+			return nil, err
 		}
 
 		nu.Phone = &e164
@@ -267,18 +278,18 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (*entity.User, error) {
 	return &rec.User, nil
 }
 
-// keepAdmin rejects a change that leaves no active admin when u loses the admin role or stops
+// KeepAdmin rejects a change that leaves no active admin when u loses the admin role or stops
 // being active; it holds the admin lock until the transaction ends.
-func (s *Service) keepAdmin(ctx context.Context, u *entity.User) error {
+func KeepAdmin(ctx context.Context, users repo.Users, u *entity.User) error {
 	if !u.Active() || !slices.Contains(u.Roles, entity.RoleAdmin) {
 		return nil
 	}
 
-	if err := s.Users.LockAdmins(ctx); err != nil {
+	if err := users.LockAdmins(ctx); err != nil {
 		return err //nolint:wrapcheck // repo errors are wrapped
 	}
 
-	others, err := s.Users.CountActiveAdmins(ctx, u.ID)
+	others, err := users.CountActiveAdmins(ctx, u.ID)
 	if err != nil {
 		return err //nolint:wrapcheck // repo errors are wrapped
 	}
@@ -300,7 +311,7 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, displayName, status 
 			return nil, err
 		}
 
-		if err := s.keepAdmin(ctx, &rec.User); err != nil {
+		if err := KeepAdmin(ctx, s.Users, &rec.User); err != nil {
 			return nil, err
 		}
 	}
@@ -340,7 +351,7 @@ func (s *Service) SetRoles(ctx context.Context, id uuid.UUID, roles []string) (*
 	}
 
 	if !slices.Contains(roles, entity.RoleAdmin) {
-		if err := s.keepAdmin(ctx, &rec.User); err != nil {
+		if err := KeepAdmin(ctx, s.Users, &rec.User); err != nil {
 			return nil, err
 		}
 	}
@@ -354,4 +365,46 @@ func (s *Service) SetRoles(ctx context.Context, id uuid.UUID, roles []string) (*
 	}
 
 	return s.Get(ctx, id)
+}
+
+// BindPhone implements usecase.Users: the code is the bind_phone code sent to phone.
+func (s *Service) BindPhone(ctx context.Context, caller *usecase.Caller, phone, code string) (*entity.User, error) {
+	e164, err := usecase.NormalizePhone("phone", phone)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // entity errors
+	}
+
+	if err := s.Codes.Verify(ctx, entity.SMSSceneBindPhone, e164, code); err != nil {
+		return nil, err //nolint:wrapcheck // entity errors
+	}
+
+	return s.setPhone(ctx, caller.UserID, e164)
+}
+
+// BindWechatPhone implements usecase.Users; without the wechat_miniapp provider it is
+// auth.providerDisabled.
+func (s *Service) BindWechatPhone(ctx context.Context, caller *usecase.Caller, code string) (*entity.User, error) {
+	if s.WechatPhone == nil {
+		return nil, entity.New(entity.KeyProviderDisabled)
+	}
+
+	e164, err := s.WechatPhone.Phone(ctx, code)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // entity errors of the provider
+	}
+
+	return s.setPhone(ctx, caller.UserID, e164)
+}
+
+func (s *Service) setPhone(ctx context.Context, id uuid.UUID, e164 string) (*entity.User, error) {
+	u, found, err := s.Users.SetPhone(ctx, id, e164)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // repo errors are wrapped
+	}
+
+	if !found {
+		return nil, entity.New(entity.KeyUserNotFound)
+	}
+
+	return u, nil
 }

@@ -30,3 +30,7 @@ RETURNING *;
 UPDATE note
 SET deleted_at = now()
 WHERE id = @id AND owner_sub = @owner_sub AND deleted_at IS NULL;
+
+-- name: PurgeOwnerNotes :exec
+DELETE FROM note
+WHERE owner_sub = @owner_sub;

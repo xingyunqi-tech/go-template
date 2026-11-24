@@ -13,8 +13,7 @@ CREATE TABLE app_user (
     deleted_at        timestamptz,
     CONSTRAINT app_user_pkey PRIMARY KEY (id),
     CONSTRAINT app_user_status_check CHECK (status IN ('active', 'disabled')),
-    CONSTRAINT app_user_email_check CHECK (email = lower(btrim(email))),
-    CONSTRAINT app_user_contact_check CHECK (email IS NOT NULL OR phone IS NOT NULL)
+    CONSTRAINT app_user_email_check CHECK (email = lower(btrim(email)))
 );
 
 CREATE UNIQUE INDEX app_user_email_key ON app_user (email) WHERE deleted_at IS NULL;

@@ -35,7 +35,7 @@ func (p *pipeline) authenticate(r *http.Request, policy *Policy) (*http.Request,
 	case isServiceUnavailable(err):
 		return r, err
 	case policy.Auth == AuthOptional:
-		return r, nil
+		return r.WithContext(reqctx.WithAuthError(r.Context(), err)), nil
 	default:
 		return r, err
 	}

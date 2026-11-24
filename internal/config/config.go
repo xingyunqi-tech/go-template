@@ -78,6 +78,10 @@ type Config struct {
 	Metrics   Metrics
 	Telemetry Telemetry
 	Mail      Mail
+	SMS       SMS
+	Wechat    Wechat
+	Alipay    Alipay
+	Account   Account
 	Seed      Seed
 }
 
@@ -155,6 +159,62 @@ type Auth struct {
 type Mail struct {
 	SMTPURL Secret `env:"SMTP_URL"`
 	From    string `env:"MAIL_FROM" envDefault:"no-reply@example.com" validate:"email"`
+}
+
+// SMS providers accepted by SMS_PROVIDER.
+const (
+	SMSLog    = "log"
+	SMSAliyun = "aliyun"
+)
+
+// SMS selects how verification codes are sent: log only writes them to the log, aliyun sends
+// them with Dysms.
+type SMS struct {
+	Provider        string `env:"SMS_PROVIDER"                 envDefault:"log"                           validate:"oneof=log aliyun"`
+	AccessKeyID     string `env:"ALIYUN_SMS_ACCESS_KEY_ID"`
+	AccessKeySecret Secret `env:"ALIYUN_SMS_ACCESS_KEY_SECRET"`
+	SignName        string `env:"ALIYUN_SMS_SIGN_NAME"`
+	TemplateCode    string `env:"ALIYUN_SMS_TEMPLATE_CODE"`
+	Endpoint        string `env:"ALIYUN_SMS_ENDPOINT"          envDefault:"https://dysmsapi.aliyuncs.com" validate:"url"`
+}
+
+// Wechat holds the mini program and open platform app credentials; a provider is enabled when
+// both of its variables are set.
+type Wechat struct {
+	MiniAppID     string `env:"WECHAT_MINIAPP_APP_ID"`
+	MiniAppSecret Secret `env:"WECHAT_MINIAPP_APP_SECRET"`
+	AppID         string `env:"WECHAT_APP_APP_ID"`
+	AppSecret     Secret `env:"WECHAT_APP_APP_SECRET"`
+	APIBase       string `env:"WECHAT_API_BASE"            envDefault:"https://api.weixin.qq.com" validate:"url"`
+}
+
+// MiniApp reports whether wechat_miniapp is enabled.
+func (w *Wechat) MiniApp() bool {
+	return w.MiniAppID != "" && w.MiniAppSecret != ""
+}
+
+// App reports whether wechat_app is enabled.
+func (w *Wechat) App() bool {
+	return w.AppID != "" && w.AppSecret != ""
+}
+
+// Alipay holds what alipay.system.oauth.token needs; the provider is enabled when the app id
+// and both keys are set.
+type Alipay struct {
+	AppID      string `env:"ALIPAY_APP_ID"`
+	PrivateKey Secret `env:"ALIPAY_PRIVATE_KEY"`
+	PublicKey  string `env:"ALIPAY_PUBLIC_KEY"`
+	Gateway    string `env:"ALIPAY_GATEWAY"     envDefault:"https://openapi.alipay.com/gateway.do" validate:"url"`
+}
+
+// Enabled reports whether alipay is enabled.
+func (a *Alipay) Enabled() bool {
+	return a.AppID != "" && a.PrivateKey != "" && a.PublicKey != ""
+}
+
+// Account configures account deletion.
+type Account struct {
+	DeletionGrace time.Duration `env:"ACCOUNT_DELETION_GRACE" envDefault:"168h" validate:"gte=0"`
 }
 
 // Seed holds the administrator the production seed creates when no active admin exists.
@@ -270,6 +330,8 @@ func (c *Config) problems() []string {
 		problems = append(problems, fmt.Sprintf("SEED_ADMIN_PASSWORD: must have %d to %d characters", _minPassword, _maxPassword))
 	}
 
+	problems = append(problems, c.integrationProblems()...)
+
 	if token := c.Metrics.Token.Value(); token != "" && len(token) < _minMetricsToken {
 		problems = append(problems, fmt.Sprintf("METRICS_TOKEN: must be at least %d characters", _minMetricsToken))
 	}
@@ -327,11 +389,44 @@ func (c *Config) authProblems() []string {
 			problems = append(problems, "SMTP_URL: required in production for the issuing service")
 		}
 
+		if c.SMS.Provider != SMSAliyun {
+			problems = append(problems, "SMS_PROVIDER: must be aliyun in production for the issuing service")
+		}
+
 		return problems
 	case RoleVerifier:
 	}
 
 	return nil
+}
+
+// integrationProblems reports credentials that are set only in part.
+func (c *Config) integrationProblems() []string {
+	var problems []string
+
+	partial := func(names string, set ...bool) {
+		n := 0
+
+		for _, ok := range set {
+			if ok {
+				n++
+			}
+		}
+
+		if n > 0 && n < len(set) {
+			problems = append(problems, names+": set all of them or none")
+		}
+	}
+
+	partial("WECHAT_MINIAPP_APP_ID, WECHAT_MINIAPP_APP_SECRET", c.Wechat.MiniAppID != "", c.Wechat.MiniAppSecret != "")
+	partial("WECHAT_APP_APP_ID, WECHAT_APP_APP_SECRET", c.Wechat.AppID != "", c.Wechat.AppSecret != "")
+	partial("ALIPAY_APP_ID, ALIPAY_PRIVATE_KEY, ALIPAY_PUBLIC_KEY", c.Alipay.AppID != "", c.Alipay.PrivateKey != "", c.Alipay.PublicKey != "")
+
+	if c.SMS.Provider == SMSAliyun && (c.SMS.AccessKeyID == "" || c.SMS.AccessKeySecret == "" || c.SMS.SignName == "" || c.SMS.TemplateCode == "") {
+		problems = append(problems, "ALIYUN_SMS_ACCESS_KEY_ID, ALIYUN_SMS_ACCESS_KEY_SECRET, ALIYUN_SMS_SIGN_NAME, ALIYUN_SMS_TEMPLATE_CODE: required when SMS_PROVIDER=aliyun")
+	}
+
+	return problems
 }
 
 // parseEnv parses every settings group of cfg, names the variable of every field that failed and

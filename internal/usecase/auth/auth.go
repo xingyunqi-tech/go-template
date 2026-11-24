@@ -60,6 +60,7 @@ type Config struct {
 // Deps are what the Service uses.
 type Deps struct {
 	Users      repo.Users
+	Identities repo.Identities
 	Sessions   repo.Sessions
 	Tokens     repo.Tokens
 	MailQueue  repo.MailQueue
@@ -68,6 +69,8 @@ type Deps struct {
 	Grace      repo.RefreshGrace
 	Revocation *session.Revocation
 	Signer     Signer
+	Codes      CodeVerifier
+	Providers  []Provider
 	Hasher     *password.Hasher
 	Limits     usecase.Limits
 	Tx         TxRunner
@@ -79,14 +82,19 @@ type Deps struct {
 type Service struct {
 	Deps
 
-	cfg Config
+	cfg       Config
+	providers map[string]Provider
 }
 
 var _ usecase.Auth = (*Service)(nil)
 
 // New returns a Service; a nil d.Now is time.Now.
 func New(cfg Config, d *Deps) *Service {
-	s := &Service{Deps: *d, cfg: cfg}
+	s := &Service{Deps: *d, cfg: cfg, providers: map[string]Provider{}}
+	for _, p := range d.Providers {
+		s.providers[p.ID()] = p
+	}
+
 	if s.Now == nil {
 		s.Now = time.Now
 	}
@@ -175,10 +183,10 @@ func (s *Service) Register(ctx context.Context, c *usecase.Client, r *usecase.Re
 	var out *usecase.LoginResult
 
 	err = s.Tx.InTx(ctx, func(ctx context.Context) error {
-		u, err := s.Users.Create(ctx, &repo.NewUser{
-			ID: uuid.NewV7(), Email: &email, Phone: nil, PasswordHash: &hash, DisplayName: r.DisplayName,
-			EmailVerified: false, Roles: []string{entity.RoleUser},
-		})
+		nu := newUser(&email, nil)
+		nu.PasswordHash, nu.DisplayName = &hash, r.DisplayName
+
+		u, err := s.Users.Create(ctx, nu)
 		if err != nil {
 			return err //nolint:wrapcheck // repo errors are wrapped
 		}

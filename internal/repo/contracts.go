@@ -159,6 +159,15 @@ type Users interface {
 	// GetForUpdate locks the user row until the transaction ends.
 	GetForUpdate(ctx context.Context, id uuid.UUID) (u *UserRecord, found bool, err error)
 	GetByEmail(ctx context.Context, email string) (u *UserRecord, found bool, err error)
+	GetByPhone(ctx context.Context, phone string) (u *UserRecord, found bool, err error)
+	// SetPhone reports a phone taken by another user as user.phoneTaken.
+	SetPhone(ctx context.Context, id uuid.UUID, phone string) (u *entity.User, found bool, err error)
+	// SoftDelete marks the user deleted, which frees its email and phone.
+	SoftDelete(ctx context.Context, id uuid.UUID) (found bool, err error)
+	// Deleted reports whether id is soft-deleted; found is false once it is purged.
+	Deleted(ctx context.Context, id uuid.UUID) (deleted, found bool, err error)
+	// Purge removes a soft-deleted user and the rows that reference it.
+	Purge(ctx context.Context, id uuid.UUID) error
 	Update(ctx context.Context, id uuid.UUID, c *UserChanges) (u *entity.User, found bool, err error)
 	SetPassword(ctx context.Context, id uuid.UUID, hash string) error
 	MarkEmailVerified(ctx context.Context, id uuid.UUID) error
@@ -260,4 +269,73 @@ type Mailer interface {
 type RefreshGrace interface {
 	Put(ctx context.Context, key string, sealed []byte, ttl time.Duration) error
 	Get(ctx context.Context, key string) (sealed []byte, found bool, err error)
+}
+
+// Identities stores the provider identities of the users.
+type Identities interface {
+	// Lock takes a transaction lock on key; first sign-ins of one identity run one at a time.
+	Lock(ctx context.Context, key string) error
+	// Find returns the user of (provider, subject) and whether its union id is missing.
+	Find(ctx context.Context, provider, subject string) (userID uuid.UUID, missingUnion, found bool, err error)
+	// FindByUnion returns the user of the first identity of providers with unionID.
+	FindByUnion(ctx context.Context, unionID string, providers []string) (userID uuid.UUID, found bool, err error)
+	Create(ctx context.Context, userID uuid.UUID, id *entity.ExternalIdentity) error
+	SetUnion(ctx context.Context, provider, subject, unionID string) error
+	DeleteAll(ctx context.Context, userID uuid.UUID) error
+}
+
+// SMSVerdict is the outcome of an SMS code send or check.
+type SMSVerdict int
+
+// SMS verdicts.
+const (
+	SMSAllowed SMSVerdict = iota
+	// SMSLocked rejects a phone with too many failed checks.
+	SMSLocked
+	// SMSTooFrequent rejects a send within the cooldown or over the daily limit.
+	SMSTooFrequent
+	// SMSInvalid rejects a wrong, expired or exhausted code.
+	SMSInvalid
+)
+
+// SMSLimits are the rules of the verification codes (platform conventions §11.1).
+type SMSLimits struct {
+	CodeTTL     time.Duration
+	Cooldown    time.Duration
+	DailyMax    int
+	MaxAttempts int
+	FailWindow  time.Duration
+	FailMax     int
+	LockTTL     time.Duration
+}
+
+// SMSCodes stores the code hashes and the send and failure counters of phone numbers.
+type SMSCodes interface {
+	// Reserve counts a send to phone on day, whose counter lives for dayTTL.
+	Reserve(ctx context.Context, phone, day string, dayTTL time.Duration) (SMSVerdict, time.Duration, error)
+	// Save stores the code hash of (scene, phone) with fresh attempts.
+	Save(ctx context.Context, scene, phone string, hash []byte) error
+	// Cancel takes back a reserved send whose code was not delivered.
+	Cancel(ctx context.Context, scene, phone, day string) error
+	// Check consumes a matching code; a mismatch counts against the code and the phone.
+	Check(ctx context.Context, scene, phone string, hash []byte) (SMSVerdict, time.Duration, error)
+}
+
+// ErrSMSNotSent marks a send the gateway refused or never received; other failures may have
+// delivered the message.
+var ErrSMSNotSent = errors.New("repo: sms not sent")
+
+// SMSSender delivers a verification code.
+type SMSSender interface {
+	Send(ctx context.Context, phone, code string) error
+}
+
+// AccountQueue schedules the purge of a deleted account in the request transaction.
+type AccountQueue interface {
+	EnqueuePurge(ctx context.Context, userID uuid.UUID, at time.Time) error
+}
+
+// Purger removes the data a service keeps for a user.
+type Purger interface {
+	Purge(ctx context.Context, userID uuid.UUID) error
 }

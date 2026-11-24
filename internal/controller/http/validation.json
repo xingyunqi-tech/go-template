@@ -72,6 +72,17 @@
           "type": "integer"
         }
       },
+      "Provider": {
+        "description": "wechat_miniapp, wechat_app or alipay",
+        "in": "path",
+        "name": "provider",
+        "required": true,
+        "schema": {
+          "maxLength": 32,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
       "RoleFilter": {
         "in": "query",
         "name": "role",
@@ -132,6 +143,43 @@
       }
     },
     "responses": {
+      "BadGateway": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "code": {
+                  "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                  "type": "integer"
+                },
+                "data": {
+                  "description": "Extra information, null when there is none"
+                },
+                "errorKey": {
+                  "description": "Stable machine-readable key",
+                  "type": "string"
+                },
+                "message": {
+                  "description": "Text translated with Accept-Language, for display only",
+                  "type": "string"
+                },
+                "requestId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "errorKey",
+                "data",
+                "requestId"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "A third-party service failed"
+      },
       "BadRequest": {
         "content": {
           "application/json": {
@@ -574,6 +622,68 @@
       }
     },
     "schemas": {
+      "AuthProvider": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "AuthProviderListEnvelope": {
+        "properties": {
+          "code": {
+            "const": 0,
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "message": {
+            "const": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
+        "type": "object"
+      },
+      "BindPhoneInput": {
+        "properties": {
+          "code": {
+            "pattern": "^[0-9]{6}$",
+            "type": "string"
+          },
+          "phone": {
+            "description": "E.164, or an 11-digit mainland China number",
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone",
+          "code"
+        ],
+        "type": "object"
+      },
       "ChangePasswordInput": {
         "properties": {
           "currentPassword": {
@@ -1175,6 +1285,25 @@
         ],
         "type": "object"
       },
+      "Phone": {
+        "description": "E.164, or an 11-digit mainland China number",
+        "maxLength": 32,
+        "minLength": 1,
+        "type": "string"
+      },
+      "ProviderLoginInput": {
+        "properties": {
+          "code": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
       "RefreshInput": {
         "properties": {
           "refreshToken": {
@@ -1295,6 +1424,28 @@
         ],
         "type": "object"
       },
+      "SendSmsCodeInput": {
+        "properties": {
+          "phone": {
+            "description": "E.164, or an 11-digit mainland China number",
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string"
+          },
+          "scene": {
+            "enum": [
+              "login",
+              "bind_phone"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone",
+          "scene"
+        ],
+        "type": "object"
+      },
       "Session": {
         "properties": {
           "createdAt": {
@@ -1395,6 +1546,29 @@
         },
         "required": [
           "roles"
+        ],
+        "type": "object"
+      },
+      "SmsCode": {
+        "pattern": "^[0-9]{6}$",
+        "type": "string"
+      },
+      "SmsLoginInput": {
+        "properties": {
+          "code": {
+            "pattern": "^[0-9]{6}$",
+            "type": "string"
+          },
+          "phone": {
+            "description": "E.164, or an 11-digit mainland China number",
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone",
+          "code"
         ],
         "type": "object"
       },
@@ -1914,6 +2088,19 @@
           "errorKey",
           "data",
           "requestId"
+        ],
+        "type": "object"
+      },
+      "WechatPhoneInput": {
+        "properties": {
+          "code": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
         ],
         "type": "object"
       }
@@ -4143,6 +4330,666 @@
         ]
       }
     },
+    "/api/v1/auth/providers": {
+      "get": {
+        "operationId": "listAuthProviders",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": 0,
+                      "type": "integer"
+                    },
+                    "data": {
+                      "items": {
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "message": {
+                      "const": "ok",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "List the enabled sign-in providers"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "summary": "List the enabled sign-in providers",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/providers/{provider}/login": {
+      "parameters": [
+        {
+          "description": "wechat_miniapp, wechat_app or alipay",
+          "in": "path",
+          "name": "provider",
+          "required": true,
+          "schema": {
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Registers an identity signing in for the first time.",
+        "operationId": "loginWithProvider",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "code": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": 0,
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "accessToken": {
+                          "type": "string"
+                        },
+                        "expiresIn": {
+                          "description": "Seconds until the access token expires",
+                          "type": "integer"
+                        },
+                        "refreshToken": {
+                          "type": "string"
+                        },
+                        "tokenType": {
+                          "enum": [
+                            "Bearer"
+                          ],
+                          "type": "string"
+                        },
+                        "user": {
+                          "properties": {
+                            "avatarUrl": {
+                              "description": "May be a signed URL that expires; do not cache it for long",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "displayName": {
+                              "type": "string"
+                            },
+                            "email": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "emailVerified": {
+                              "type": "boolean"
+                            },
+                            "hasPassword": {
+                              "type": "boolean"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "phone": {
+                              "description": "E.164",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "roles": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "status": {
+                              "enum": [
+                                "active",
+                                "disabled"
+                              ],
+                              "type": "string"
+                            },
+                            "updatedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "email",
+                            "emailVerified",
+                            "phone",
+                            "displayName",
+                            "avatarUrl",
+                            "status",
+                            "roles",
+                            "hasPassword",
+                            "createdAt",
+                            "updatedAt"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "accessToken",
+                        "refreshToken",
+                        "expiresIn",
+                        "tokenType",
+                        "user"
+                      ],
+                      "type": "object"
+                    },
+                    "message": {
+                      "const": "ok",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Sign in with a third-party provider"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing permission"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body over BODY_LIMIT"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unsupported Content-Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A 422 error; data lists the failed fields when errorKey is common.validationFailed",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "errors": {
+                          "items": {
+                            "properties": {
+                              "field": {
+                                "description": "JSON path of the field; query.<name> or path.<name> for parameters",
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "params": {
+                                "additionalProperties": true,
+                                "type": "object"
+                              },
+                              "rule": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "rule",
+                              "message"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "errors"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "errorKey": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A third-party service failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "summary": "Sign in with a third-party provider",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/auth/refresh": {
       "post": {
         "operationId": "refreshToken",
@@ -4628,7 +5475,1131 @@
         ]
       }
     },
+    "/api/v1/auth/sms/login": {
+      "post": {
+        "description": "Registers a phone number signing in for the first time.",
+        "operationId": "loginWithSms",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "code": {
+                    "pattern": "^[0-9]{6}$",
+                    "type": "string"
+                  },
+                  "phone": {
+                    "description": "E.164, or an 11-digit mainland China number",
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "phone",
+                  "code"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": 0,
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "accessToken": {
+                          "type": "string"
+                        },
+                        "expiresIn": {
+                          "description": "Seconds until the access token expires",
+                          "type": "integer"
+                        },
+                        "refreshToken": {
+                          "type": "string"
+                        },
+                        "tokenType": {
+                          "enum": [
+                            "Bearer"
+                          ],
+                          "type": "string"
+                        },
+                        "user": {
+                          "properties": {
+                            "avatarUrl": {
+                              "description": "May be a signed URL that expires; do not cache it for long",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "displayName": {
+                              "type": "string"
+                            },
+                            "email": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "emailVerified": {
+                              "type": "boolean"
+                            },
+                            "hasPassword": {
+                              "type": "boolean"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "phone": {
+                              "description": "E.164",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "roles": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "status": {
+                              "enum": [
+                                "active",
+                                "disabled"
+                              ],
+                              "type": "string"
+                            },
+                            "updatedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "email",
+                            "emailVerified",
+                            "phone",
+                            "displayName",
+                            "avatarUrl",
+                            "status",
+                            "roles",
+                            "hasPassword",
+                            "createdAt",
+                            "updatedAt"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "accessToken",
+                        "refreshToken",
+                        "expiresIn",
+                        "tokenType",
+                        "user"
+                      ],
+                      "type": "object"
+                    },
+                    "message": {
+                      "const": "ok",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Sign in with an SMS verification code"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing permission"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body over BODY_LIMIT"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unsupported Content-Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A 422 error; data lists the failed fields when errorKey is common.validationFailed",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "errors": {
+                          "items": {
+                            "properties": {
+                              "field": {
+                                "description": "JSON path of the field; query.<name> or path.<name> for parameters",
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "params": {
+                                "additionalProperties": true,
+                                "type": "object"
+                              },
+                              "rule": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "rule",
+                              "message"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "errors"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "errorKey": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "summary": "Sign in with an SMS verification code",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/sms/send": {
+      "post": {
+        "description": "The bind_phone scene requires an access token.",
+        "operationId": "sendSmsCode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "phone": {
+                    "description": "E.164, or an 11-digit mainland China number",
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "scene": {
+                    "enum": [
+                      "login",
+                      "bind_phone"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "phone",
+                  "scene"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": 0,
+                      "type": "integer"
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "message": {
+                      "const": "ok",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Send an SMS verification code"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked access token"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body over BODY_LIMIT"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unsupported Content-Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A 422 error; data lists the failed fields when errorKey is common.validationFailed",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "errors": {
+                          "items": {
+                            "properties": {
+                              "field": {
+                                "description": "JSON path of the field; query.<name> or path.<name> for parameters",
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "params": {
+                                "additionalProperties": true,
+                                "type": "object"
+                              },
+                              "rule": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "rule",
+                              "message"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "errors"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "errorKey": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A third-party service failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Send an SMS verification code",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/me": {
+      "delete": {
+        "description": "Requires a recent sign-in. Signs every session out; the data is removed later.",
+        "operationId": "deleteMe",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": 0,
+                      "type": "integer"
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "message": {
+                      "const": "ok",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Delete the current user"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked access token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing permission"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Delete the current user",
+        "tags": [
+          "me"
+        ]
+      },
       "get": {
         "operationId": "getMe",
         "responses": {
@@ -5747,6 +7718,1048 @@
           }
         ],
         "summary": "Change the password",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/phone": {
+      "put": {
+        "operationId": "bindPhone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "code": {
+                    "pattern": "^[0-9]{6}$",
+                    "type": "string"
+                  },
+                  "phone": {
+                    "description": "E.164, or an 11-digit mainland China number",
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "phone",
+                  "code"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": 0,
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "avatarUrl": {
+                          "description": "May be a signed URL that expires; do not cache it for long",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "emailVerified": {
+                          "type": "boolean"
+                        },
+                        "hasPassword": {
+                          "type": "boolean"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "phone": {
+                          "description": "E.164",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "roles": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "status": {
+                          "enum": [
+                            "active",
+                            "disabled"
+                          ],
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "email",
+                        "emailVerified",
+                        "phone",
+                        "displayName",
+                        "avatarUrl",
+                        "status",
+                        "roles",
+                        "hasPassword",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "message": {
+                      "const": "ok",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bind a phone number with an SMS verification code"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body over BODY_LIMIT"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unsupported Content-Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A 422 error; data lists the failed fields when errorKey is common.validationFailed",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "errors": {
+                          "items": {
+                            "properties": {
+                              "field": {
+                                "description": "JSON path of the field; query.<name> or path.<name> for parameters",
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "params": {
+                                "additionalProperties": true,
+                                "type": "object"
+                              },
+                              "rule": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "rule",
+                              "message"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "errors"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "errorKey": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Bind a phone number with an SMS verification code",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/phone/wechat": {
+      "put": {
+        "description": "Requires the wechat_miniapp provider.",
+        "operationId": "bindPhoneWithWechat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "code": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": 0,
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "avatarUrl": {
+                          "description": "May be a signed URL that expires; do not cache it for long",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "emailVerified": {
+                          "type": "boolean"
+                        },
+                        "hasPassword": {
+                          "type": "boolean"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "phone": {
+                          "description": "E.164",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "roles": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "status": {
+                          "enum": [
+                            "active",
+                            "disabled"
+                          ],
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "email",
+                        "emailVerified",
+                        "phone",
+                        "displayName",
+                        "avatarUrl",
+                        "status",
+                        "roles",
+                        "hasPassword",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "message": {
+                      "const": "ok",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bind the phone number of the WeChat account"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Request body over BODY_LIMIT"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unsupported Content-Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A 422 error; data lists the failed fields when errorKey is common.validationFailed",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "errors": {
+                          "items": {
+                            "properties": {
+                              "field": {
+                                "description": "JSON path of the field; query.<name> or path.<name> for parameters",
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "params": {
+                                "additionalProperties": true,
+                                "type": "object"
+                              },
+                              "rule": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "rule",
+                              "message"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "errors"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "errorKey": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A third-party service failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Bind the phone number of the WeChat account",
         "tags": [
           "me"
         ]
@@ -9418,6 +12431,341 @@
       }
     },
     "/api/v1/users/{id}": {
+      "delete": {
+        "description": "Signs every session of the user out; the data is removed later.",
+        "operationId": "deleteUser",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "const": 0,
+                      "type": "integer"
+                    },
+                    "data": {
+                      "type": "null"
+                    },
+                    "message": {
+                      "const": "ok",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Delete a user"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing, invalid or revoked access token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Missing permission"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A 422 error; data lists the failed fields when errorKey is common.validationFailed",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "errors": {
+                          "items": {
+                            "properties": {
+                              "field": {
+                                "description": "JSON path of the field; query.<name> or path.<name> for parameters",
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "params": {
+                                "additionalProperties": true,
+                                "type": "object"
+                              },
+                              "rule": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "rule",
+                              "message"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "errors"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "errorKey": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "description": "HTTP status × 100 + sequence (platform conventions §2.4)",
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "Extra information, null when there is none"
+                    },
+                    "errorKey": {
+                      "description": "Stable machine-readable key",
+                      "type": "string"
+                    },
+                    "message": {
+                      "description": "Text translated with Accept-Language, for display only",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "errorKey",
+                    "data",
+                    "requestId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A dependency is unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Delete a user",
+        "tags": [
+          "users"
+        ]
+      },
       "get": {
         "operationId": "getUser",
         "responses": {

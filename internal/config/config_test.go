@@ -77,7 +77,7 @@ func TestProductionRequirements(t *testing.T) {
 	assert.False(t, cfg.App.Docs())
 }
 
-func TestProductionIssuerNeedsFrontendAndSMTP(t *testing.T) {
+func TestProductionIssuerNeedsFrontendSMTPAndAliyunSMS(t *testing.T) {
 	t.Setenv("OTEL_SERVICE_NAME", "svc")
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("AUTH_SIGNING_KEY", "pem")
@@ -86,6 +86,36 @@ func TestProductionIssuerNeedsFrontendAndSMTP(t *testing.T) {
 	require.ErrorIs(t, err, config.ErrInvalid)
 	assert.Contains(t, err.Error(), "APP_FRONTEND_URL")
 	assert.Contains(t, err.Error(), "SMTP_URL")
+	assert.Contains(t, err.Error(), "SMS_PROVIDER: must be aliyun")
+}
+
+func TestPartialCredentialsAreReported(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "svc")
+	t.Setenv("WECHAT_MINIAPP_APP_ID", "wx")
+	t.Setenv("WECHAT_APP_APP_SECRET", "s")
+	t.Setenv("ALIPAY_APP_ID", "2021")
+	t.Setenv("SMS_PROVIDER", "aliyun")
+
+	_, err := config.Load()
+	require.ErrorIs(t, err, config.ErrInvalid)
+
+	for _, name := range []string{"WECHAT_MINIAPP_APP_ID", "WECHAT_APP_APP_ID", "ALIPAY_PUBLIC_KEY", "ALIYUN_SMS_SIGN_NAME"} {
+		assert.Contains(t, err.Error(), name)
+	}
+}
+
+func TestProvidersAreEnabledByTheirCredentials(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "svc")
+	t.Setenv("WECHAT_MINIAPP_APP_ID", "wx")
+	t.Setenv("WECHAT_MINIAPP_APP_SECRET", "s")
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	assert.True(t, cfg.Wechat.MiniApp())
+	assert.False(t, cfg.Wechat.App())
+	assert.False(t, cfg.Alipay.Enabled())
+	assert.Equal(t, config.SMSLog, cfg.SMS.Provider)
+	assert.Equal(t, 168*time.Hour, cfg.Account.DeletionGrace)
 }
 
 func TestSigningKeyAndJWKSURLAreExclusive(t *testing.T) {
@@ -100,15 +130,17 @@ func TestSigningKeyAndJWKSURLAreExclusive(t *testing.T) {
 
 func TestInvalidValuesAreReported(t *testing.T) {
 	for name, value := range map[string]string{
-		"DATABASE_SCHEMA":       "Bad-Schema",
-		"BODY_LIMIT":            "1TB",
-		"TRUSTED_PROXIES":       "nope",
-		"LOG_FORMAT":            "xml",
-		"OTEL_METRICS_EXPORTER": "statsd",
-		"METRICS_TOKEN":         "short",
-		"AUTH_ACCESS_TTL":       "15",
-		"APP_DEFAULT_LOCALE":    "fr",
-		"SEED_ADMIN_PASSWORD":   "short",
+		"DATABASE_SCHEMA":        "Bad-Schema",
+		"BODY_LIMIT":             "1TB",
+		"TRUSTED_PROXIES":        "nope",
+		"LOG_FORMAT":             "xml",
+		"OTEL_METRICS_EXPORTER":  "statsd",
+		"METRICS_TOKEN":          "short",
+		"AUTH_ACCESS_TTL":        "15",
+		"APP_DEFAULT_LOCALE":     "fr",
+		"SEED_ADMIN_PASSWORD":    "short",
+		"SMS_PROVIDER":           "twilio",
+		"ACCOUNT_DELETION_GRACE": "-1h",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("OTEL_SERVICE_NAME", "svc")

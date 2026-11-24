@@ -127,6 +127,32 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+    delete:
+      operationId: deleteUser
+      tags:
+      - users
+      summary: Delete a user
+      description: Signs every session of the user out; the data is removed later.
+      security:
+      - bearerAuth: []
+      responses:
+        '202':
+          description: Delete a user
+          x-envelope: true
+          content:
+            application/json:
+              schema:
+                type: 'null'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
   /api/v1/users/{id}/roles:
     parameters:
     - $ref: '#/components/parameters/UserID'

@@ -121,7 +121,8 @@ func newServer(d *identityDeps) (*v1.Server, []byte, error) {
 	}
 
 	return v1.New(&v1.Deps{
-		Notes: note.New(postgres.NewNotes(d.db)), Auth: identity.Auth, Sessions: identity.Sessions, Users: identity.Users, Log: d.log,
+		Notes: note.New(postgres.NewNotes(d.db)), Auth: identity.Auth, Sessions: identity.Sessions, Users: identity.Users,
+		SMS: identity.SMS, Accounts: identity.Accounts, Log: d.log,
 	}), jwks, nil
 }
 

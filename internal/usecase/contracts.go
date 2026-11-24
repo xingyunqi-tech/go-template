@@ -60,6 +60,23 @@ type Auth interface {
 	ResetPassword(ctx context.Context, token, password string) (uuid.UUID, error)
 	Refresh(ctx context.Context, c *Client, refreshToken string) (*LoginResult, error)
 	Logout(ctx context.Context, caller *Caller) error
+	// LoginWithSMS registers a phone number signing in for the first time.
+	LoginWithSMS(ctx context.Context, c *Client, phone, code string) (*LoginResult, error)
+	// Providers lists the enabled sign-in providers.
+	Providers() []string
+	// LoginWithProvider registers an identity signing in for the first time.
+	LoginWithProvider(ctx context.Context, c *Client, provider, code string) (*LoginResult, error)
+}
+
+// SMS sends the verification codes; caller is nil for an anonymous request.
+type SMS interface {
+	Send(ctx context.Context, caller *Caller, phone, scene string) error
+}
+
+// Accounts deletes accounts: the user is soft-deleted and signed out, its data purged later.
+type Accounts interface {
+	DeleteMe(ctx context.Context, caller *Caller) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 // SessionView is a session of the caller, flagged when it is the caller's own.
@@ -109,4 +126,8 @@ type Users interface {
 	Get(ctx context.Context, id uuid.UUID) (*entity.User, error)
 	Update(ctx context.Context, id uuid.UUID, displayName, status *string) (*entity.User, error)
 	SetRoles(ctx context.Context, id uuid.UUID, roles []string) (*entity.User, error)
+	// BindPhone sets the phone verified by a bind_phone code.
+	BindPhone(ctx context.Context, caller *Caller, phone, code string) (*entity.User, error)
+	// BindWechatPhone sets the phone of the WeChat account behind a getPhoneNumber code.
+	BindWechatPhone(ctx context.Context, caller *Caller, code string) (*entity.User, error)
 }

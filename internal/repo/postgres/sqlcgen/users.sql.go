@@ -169,6 +169,31 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email *string) (*AppUser, 
 	return &i, err
 }
 
+const getUserByPhone = `-- name: GetUserByPhone :one
+SELECT id, email, phone, password_hash, display_name, avatar_file_id, status, email_verified_at, created_at, updated_at, deleted_at
+FROM app_user
+WHERE phone = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetUserByPhone(ctx context.Context, phone *string) (*AppUser, error) {
+	row := q.db.QueryRow(ctx, getUserByPhone, phone)
+	var i AppUser
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Phone,
+		&i.PasswordHash,
+		&i.DisplayName,
+		&i.AvatarFileID,
+		&i.Status,
+		&i.EmailVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return &i, err
+}
+
 const getUserForUpdate = `-- name: GetUserForUpdate :one
 SELECT id, email, phone, password_hash, display_name, avatar_file_id, status, email_verified_at, created_at, updated_at, deleted_at
 FROM app_user
@@ -319,6 +344,19 @@ func (q *Queries) MarkEmailVerified(ctx context.Context, id uuid.UUID) (int64, e
 	return result.RowsAffected(), nil
 }
 
+const purgeUser = `-- name: PurgeUser :execrows
+DELETE FROM app_user
+WHERE id = $1 AND deleted_at IS NOT NULL
+`
+
+func (q *Queries) PurgeUser(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeUser, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setUserPassword = `-- name: SetUserPassword :execrows
 UPDATE app_user
 SET password_hash = $1, updated_at = now()
@@ -332,6 +370,51 @@ type SetUserPasswordParams struct {
 
 func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setUserPassword, arg.PasswordHash, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setUserPhone = `-- name: SetUserPhone :one
+UPDATE app_user
+SET phone = $1, updated_at = now()
+WHERE id = $2 AND deleted_at IS NULL
+RETURNING id, email, phone, password_hash, display_name, avatar_file_id, status, email_verified_at, created_at, updated_at, deleted_at
+`
+
+type SetUserPhoneParams struct {
+	Phone *string
+	ID    uuid.UUID
+}
+
+func (q *Queries) SetUserPhone(ctx context.Context, arg SetUserPhoneParams) (*AppUser, error) {
+	row := q.db.QueryRow(ctx, setUserPhone, arg.Phone, arg.ID)
+	var i AppUser
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Phone,
+		&i.PasswordHash,
+		&i.DisplayName,
+		&i.AvatarFileID,
+		&i.Status,
+		&i.EmailVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return &i, err
+}
+
+const softDeleteUser = `-- name: SoftDeleteUser :execrows
+UPDATE app_user
+SET deleted_at = now(), updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) SoftDeleteUser(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteUser, id)
 	if err != nil {
 		return 0, err
 	}
@@ -381,4 +464,17 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (*AppUse
 		&i.DeletedAt,
 	)
 	return &i, err
+}
+
+const userDeleted = `-- name: UserDeleted :one
+SELECT (deleted_at IS NOT NULL)::bool AS deleted
+FROM app_user
+WHERE id = $1
+`
+
+func (q *Queries) UserDeleted(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, userDeleted, id)
+	var deleted bool
+	err := row.Scan(&deleted)
+	return deleted, err
 }

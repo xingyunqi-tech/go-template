@@ -122,6 +122,16 @@ func (q *Queries) ListNotes(ctx context.Context, arg ListNotesParams) ([]*Note, 
 	return items, nil
 }
 
+const purgeOwnerNotes = `-- name: PurgeOwnerNotes :exec
+DELETE FROM note
+WHERE owner_sub = $1
+`
+
+func (q *Queries) PurgeOwnerNotes(ctx context.Context, ownerSub uuid.UUID) error {
+	_, err := q.db.Exec(ctx, purgeOwnerNotes, ownerSub)
+	return err
+}
+
 const softDeleteNote = `-- name: SoftDeleteNote :execrows
 UPDATE note
 SET deleted_at = now()

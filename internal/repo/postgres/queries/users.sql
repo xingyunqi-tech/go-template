@@ -101,3 +101,28 @@ SELECT count(*)
 FROM app_user u
 JOIN user_role r ON r.user_id = u.id AND r.role_code = 'admin'
 WHERE u.id <> @id AND u.status = 'active' AND u.deleted_at IS NULL;
+
+-- name: GetUserByPhone :one
+SELECT *
+FROM app_user
+WHERE phone = @phone AND deleted_at IS NULL;
+
+-- name: SetUserPhone :one
+UPDATE app_user
+SET phone = @phone, updated_at = now()
+WHERE id = @id AND deleted_at IS NULL
+RETURNING *;
+
+-- name: SoftDeleteUser :execrows
+UPDATE app_user
+SET deleted_at = now(), updated_at = now()
+WHERE id = @id AND deleted_at IS NULL;
+
+-- name: PurgeUser :execrows
+DELETE FROM app_user
+WHERE id = @id AND deleted_at IS NOT NULL;
+
+-- name: UserDeleted :one
+SELECT (deleted_at IS NOT NULL)::bool AS deleted
+FROM app_user
+WHERE id = @id;

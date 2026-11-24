@@ -11,6 +11,17 @@ import (
 	"uuid"
 )
 
+const anonymizeActor = `-- name: AnonymizeActor :exec
+UPDATE audit_log
+SET actor_sub = NULL, ip = ''
+WHERE actor_sub = $1
+`
+
+func (q *Queries) AnonymizeActor(ctx context.Context, actorSub *uuid.UUID) error {
+	_, err := q.db.Exec(ctx, anonymizeActor, actorSub)
+	return err
+}
+
 const createAuditLog = `-- name: CreateAuditLog :exec
 INSERT INTO audit_log (id, actor_sub, action, resource_type, resource_id, request_id, ip, data)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

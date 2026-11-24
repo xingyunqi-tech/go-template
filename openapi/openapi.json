@@ -72,6 +72,17 @@
           "type": "integer"
         }
       },
+      "Provider": {
+        "description": "wechat_miniapp, wechat_app or alipay",
+        "in": "path",
+        "name": "provider",
+        "required": true,
+        "schema": {
+          "maxLength": 32,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
       "RoleFilter": {
         "in": "query",
         "name": "role",
@@ -132,6 +143,16 @@
       }
     },
     "responses": {
+      "BadGateway": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        },
+        "description": "A third-party service failed"
+      },
       "BadRequest": {
         "content": {
           "application/json": {
@@ -244,6 +265,56 @@
       }
     },
     "schemas": {
+      "AuthProvider": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "AuthProviderListEnvelope": {
+        "properties": {
+          "code": {
+            "const": 0,
+            "type": "integer"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AuthProvider"
+            },
+            "type": "array"
+          },
+          "message": {
+            "const": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
+        "type": "object"
+      },
+      "BindPhoneInput": {
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/SmsCode"
+          },
+          "phone": {
+            "$ref": "#/components/schemas/Phone"
+          }
+        },
+        "required": [
+          "phone",
+          "code"
+        ],
+        "type": "object"
+      },
       "ChangePasswordInput": {
         "properties": {
           "currentPassword": {
@@ -567,6 +638,25 @@
         ],
         "type": "object"
       },
+      "Phone": {
+        "description": "E.164, or an 11-digit mainland China number",
+        "maxLength": 32,
+        "minLength": 1,
+        "type": "string"
+      },
+      "ProviderLoginInput": {
+        "properties": {
+          "code": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
       "RefreshInput": {
         "properties": {
           "refreshToken": {
@@ -663,6 +753,25 @@
         ],
         "type": "object"
       },
+      "SendSmsCodeInput": {
+        "properties": {
+          "phone": {
+            "$ref": "#/components/schemas/Phone"
+          },
+          "scene": {
+            "enum": [
+              "login",
+              "bind_phone"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone",
+          "scene"
+        ],
+        "type": "object"
+      },
       "Session": {
         "properties": {
           "createdAt": {
@@ -732,6 +841,25 @@
         },
         "required": [
           "roles"
+        ],
+        "type": "object"
+      },
+      "SmsCode": {
+        "pattern": "^[0-9]{6}$",
+        "type": "string"
+      },
+      "SmsLoginInput": {
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/SmsCode"
+          },
+          "phone": {
+            "$ref": "#/components/schemas/Phone"
+          }
+        },
+        "required": [
+          "phone",
+          "code"
         ],
         "type": "object"
       },
@@ -998,6 +1126,19 @@
           "errorKey",
           "data",
           "requestId"
+        ],
+        "type": "object"
+      },
+      "WechatPhoneInput": {
+        "properties": {
+          "code": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
         ],
         "type": "object"
       }
@@ -1344,6 +1485,97 @@
         ]
       }
     },
+    "/api/v1/auth/providers": {
+      "get": {
+        "operationId": "listAuthProviders",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthProviderListEnvelope"
+                }
+              }
+            },
+            "description": "List the enabled sign-in providers"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "List the enabled sign-in providers",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/providers/{provider}/login": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Provider"
+        }
+      ],
+      "post": {
+        "description": "Registers an identity signing in for the first time.",
+        "operationId": "loginWithProvider",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderLoginInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseEnvelope"
+                }
+              }
+            },
+            "description": "Sign in with a third-party provider"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Sign in with a third-party provider",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/auth/refresh": {
       "post": {
         "operationId": "refreshToken",
@@ -1399,7 +1631,165 @@
         ]
       }
     },
+    "/api/v1/auth/sms/login": {
+      "post": {
+        "description": "Registers a phone number signing in for the first time.",
+        "operationId": "loginWithSms",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SmsLoginInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseEnvelope"
+                }
+              }
+            },
+            "description": "Sign in with an SMS verification code"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Sign in with an SMS verification code",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/sms/send": {
+      "post": {
+        "description": "The bind_phone scene requires an access token.",
+        "operationId": "sendSmsCode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendSmsCodeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            },
+            "description": "Send an SMS verification code"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Send an SMS verification code",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/me": {
+      "delete": {
+        "description": "Requires a recent sign-in. Signs every session out; the data is removed later.",
+        "operationId": "deleteMe",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            },
+            "description": "Delete the current user"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Delete the current user",
+        "tags": [
+          "me"
+        ]
+      },
       "get": {
         "operationId": "getMe",
         "responses": {
@@ -1551,6 +1941,136 @@
           }
         ],
         "summary": "Change the password",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/phone": {
+      "put": {
+        "operationId": "bindPhone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindPhoneInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            },
+            "description": "Bind a phone number with an SMS verification code"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Bind a phone number with an SMS verification code",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/phone/wechat": {
+      "put": {
+        "description": "Requires the wechat_miniapp provider.",
+        "operationId": "bindPhoneWithWechat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WechatPhoneInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            },
+            "description": "Bind the phone number of the WeChat account"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Bind the phone number of the WeChat account",
         "tags": [
           "me"
         ]
@@ -2123,6 +2643,52 @@
       }
     },
     "/api/v1/users/{id}": {
+      "delete": {
+        "description": "Signs every session of the user out; the data is removed later.",
+        "operationId": "deleteUser",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            },
+            "description": "Delete a user"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Delete a user",
+        "tags": [
+          "users"
+        ]
+      },
       "get": {
         "operationId": "getUser",
         "responses": {

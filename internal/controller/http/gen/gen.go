@@ -18,6 +18,36 @@ import (
 	"github.com/xingyunqi-tech/go-template/pkg/jsontime"
 )
 
+// Defines values for AuthProviderListEnvelopeCode.
+const (
+	AuthProviderListEnvelopeCodeN0 AuthProviderListEnvelopeCode = 0
+)
+
+// Valid indicates whether the value is a known member of the AuthProviderListEnvelopeCode enum.
+func (e AuthProviderListEnvelopeCode) Valid() bool {
+	switch e {
+	case AuthProviderListEnvelopeCodeN0:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuthProviderListEnvelopeMessage.
+const (
+	AuthProviderListEnvelopeMessageOk AuthProviderListEnvelopeMessage = "ok"
+)
+
+// Valid indicates whether the value is a known member of the AuthProviderListEnvelopeMessage enum.
+func (e AuthProviderListEnvelopeMessage) Valid() bool {
+	switch e {
+	case AuthProviderListEnvelopeMessageOk:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LoginResponseTokenType.
 const (
 	Bearer LoginResponseTokenType = "Bearer"
@@ -213,6 +243,24 @@ func (e RoleListEnvelopeMessage) Valid() bool {
 	}
 }
 
+// Defines values for SendSmsCodeInputScene.
+const (
+	BindPhone SendSmsCodeInputScene = "bind_phone"
+	Login     SendSmsCodeInputScene = "login"
+)
+
+// Valid indicates whether the value is a known member of the SendSmsCodeInputScene enum.
+func (e SendSmsCodeInputScene) Valid() bool {
+	switch e {
+	case BindPhone:
+		return true
+	case Login:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SessionListEnvelopeCode.
 const (
 	SessionListEnvelopeCodeN0 SessionListEnvelopeCode = 0
@@ -355,6 +403,32 @@ func (e ListUsersParamsStatus) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// AuthProvider defines model for AuthProvider.
+type AuthProvider struct {
+	Id string `json:"id"`
+}
+
+// AuthProviderListEnvelope defines model for AuthProviderListEnvelope.
+type AuthProviderListEnvelope struct {
+	Code    AuthProviderListEnvelopeCode    `json:"code"`
+	Data    []AuthProvider                  `json:"data"`
+	Message AuthProviderListEnvelopeMessage `json:"message"`
+}
+
+// AuthProviderListEnvelopeCode defines model for AuthProviderListEnvelope.Code.
+type AuthProviderListEnvelopeCode int
+
+// AuthProviderListEnvelopeMessage defines model for AuthProviderListEnvelope.Message.
+type AuthProviderListEnvelopeMessage string
+
+// BindPhoneInput defines model for BindPhoneInput.
+type BindPhoneInput struct {
+	Code SmsCode `json:"code"`
+
+	// Phone E.164, or an 11-digit mainland China number
+	Phone Phone `json:"phone"`
 }
 
 // ChangePasswordInput defines model for ChangePasswordInput.
@@ -509,6 +583,14 @@ type PermissionListEnvelopeCode int
 // PermissionListEnvelopeMessage defines model for PermissionListEnvelope.Message.
 type PermissionListEnvelopeMessage string
 
+// Phone E.164, or an 11-digit mainland China number
+type Phone = string
+
+// ProviderLoginInput defines model for ProviderLoginInput.
+type ProviderLoginInput struct {
+	Code string `json:"code"`
+}
+
 // RefreshInput defines model for RefreshInput.
 type RefreshInput struct {
 	RefreshToken string `json:"refreshToken"`
@@ -547,6 +629,16 @@ type RoleListEnvelopeCode int
 // RoleListEnvelopeMessage defines model for RoleListEnvelope.Message.
 type RoleListEnvelopeMessage string
 
+// SendSmsCodeInput defines model for SendSmsCodeInput.
+type SendSmsCodeInput struct {
+	// Phone E.164, or an 11-digit mainland China number
+	Phone Phone                 `json:"phone"`
+	Scene SendSmsCodeInputScene `json:"scene"`
+}
+
+// SendSmsCodeInputScene defines model for SendSmsCodeInput.Scene.
+type SendSmsCodeInputScene string
+
 // Session defines model for Session.
 type Session struct {
 	CreatedAt    jsontime.Time `json:"createdAt"`
@@ -573,6 +665,17 @@ type SessionListEnvelopeMessage string
 // SetUserRolesInput defines model for SetUserRolesInput.
 type SetUserRolesInput struct {
 	Roles []string `json:"roles"`
+}
+
+// SmsCode defines model for SmsCode.
+type SmsCode = string
+
+// SmsLoginInput defines model for SmsLoginInput.
+type SmsLoginInput struct {
+	Code SmsCode `json:"code"`
+
+	// Phone E.164, or an 11-digit mainland China number
+	Phone Phone `json:"phone"`
 }
 
 // TokenInput defines model for TokenInput.
@@ -676,6 +779,11 @@ type ValidationErrorResponse struct {
 	RequestId string `json:"requestId"`
 }
 
+// WechatPhoneInput defines model for WechatPhoneInput.
+type WechatPhoneInput struct {
+	Code string `json:"code"`
+}
+
 // Cursor defines model for Cursor.
 type Cursor = string
 
@@ -697,6 +805,9 @@ type Page = int
 // PageSize defines model for PageSize.
 type PageSize = int
 
+// Provider defines model for Provider.
+type Provider = string
+
 // RoleFilter defines model for RoleFilter.
 type RoleFilter = string
 
@@ -711,6 +822,9 @@ type UserID = uuid.UUID
 
 // UserSort defines model for UserSort.
 type UserSort = string
+
+// BadGateway defines model for BadGateway.
+type BadGateway = ErrorResponse
 
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
@@ -788,14 +902,29 @@ type ForgotPasswordJSONRequestBody = EmailInput
 // ResetPasswordJSONRequestBody defines body for ResetPassword for application/json ContentType.
 type ResetPasswordJSONRequestBody = ResetPasswordInput
 
+// LoginWithProviderJSONRequestBody defines body for LoginWithProvider for application/json ContentType.
+type LoginWithProviderJSONRequestBody = ProviderLoginInput
+
 // RefreshTokenJSONRequestBody defines body for RefreshToken for application/json ContentType.
 type RefreshTokenJSONRequestBody = RefreshInput
+
+// LoginWithSmsJSONRequestBody defines body for LoginWithSms for application/json ContentType.
+type LoginWithSmsJSONRequestBody = SmsLoginInput
+
+// SendSmsCodeJSONRequestBody defines body for SendSmsCode for application/json ContentType.
+type SendSmsCodeJSONRequestBody = SendSmsCodeInput
 
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeInput
 
 // ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
 type ChangePasswordJSONRequestBody = ChangePasswordInput
+
+// BindPhoneJSONRequestBody defines body for BindPhone for application/json ContentType.
+type BindPhoneJSONRequestBody = BindPhoneInput
+
+// BindPhoneWithWechatJSONRequestBody defines body for BindPhoneWithWechat for application/json ContentType.
+type BindPhoneWithWechatJSONRequestBody = WechatPhoneInput
 
 // CreateNoteJSONRequestBody defines body for CreateNote for application/json ContentType.
 type CreateNoteJSONRequestBody = CreateNoteInput
@@ -835,9 +964,24 @@ type ServerInterface interface {
 	// ResetPassword Set a new password with the token of the reset email
 	// (POST /api/v1/auth/password/reset)
 	ResetPassword(w http.ResponseWriter, r *http.Request)
+	// ListAuthProviders List the enabled sign-in providers
+	// (GET /api/v1/auth/providers)
+	ListAuthProviders(w http.ResponseWriter, r *http.Request)
+	// LoginWithProvider Sign in with a third-party provider
+	// (POST /api/v1/auth/providers/{provider}/login)
+	LoginWithProvider(w http.ResponseWriter, r *http.Request, provider Provider)
 	// RefreshToken Rotate the refresh token
 	// (POST /api/v1/auth/refresh)
 	RefreshToken(w http.ResponseWriter, r *http.Request)
+	// LoginWithSms Sign in with an SMS verification code
+	// (POST /api/v1/auth/sms/login)
+	LoginWithSms(w http.ResponseWriter, r *http.Request)
+	// SendSmsCode Send an SMS verification code
+	// (POST /api/v1/auth/sms/send)
+	SendSmsCode(w http.ResponseWriter, r *http.Request)
+	// DeleteMe Delete the current user
+	// (DELETE /api/v1/me)
+	DeleteMe(w http.ResponseWriter, r *http.Request)
 	// GetMe Get the current user
 	// (GET /api/v1/me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -847,6 +991,12 @@ type ServerInterface interface {
 	// ChangePassword Change the password
 	// (PUT /api/v1/me/password)
 	ChangePassword(w http.ResponseWriter, r *http.Request)
+	// BindPhone Bind a phone number with an SMS verification code
+	// (PUT /api/v1/me/phone)
+	BindPhone(w http.ResponseWriter, r *http.Request)
+	// BindPhoneWithWechat Bind the phone number of the WeChat account
+	// (PUT /api/v1/me/phone/wechat)
+	BindPhoneWithWechat(w http.ResponseWriter, r *http.Request)
 	// ListMySessions List the active sessions
 	// (GET /api/v1/me/sessions)
 	ListMySessions(w http.ResponseWriter, r *http.Request)
@@ -883,6 +1033,9 @@ type ServerInterface interface {
 	// CreateUser Create a user
 	// (POST /api/v1/users)
 	CreateUser(w http.ResponseWriter, r *http.Request)
+	// DeleteUser Delete a user
+	// (DELETE /api/v1/users/{id})
+	DeleteUser(w http.ResponseWriter, r *http.Request, id UserID)
 	// GetUser Get a user
 	// (GET /api/v1/users/{id})
 	GetUser(w http.ResponseWriter, r *http.Request, id UserID)
@@ -940,9 +1093,39 @@ func (_ Unimplemented) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ListAuthProviders List the enabled sign-in providers
+// (GET /api/v1/auth/providers)
+func (_ Unimplemented) ListAuthProviders(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// LoginWithProvider Sign in with a third-party provider
+// (POST /api/v1/auth/providers/{provider}/login)
+func (_ Unimplemented) LoginWithProvider(w http.ResponseWriter, r *http.Request, provider Provider) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // RefreshToken Rotate the refresh token
 // (POST /api/v1/auth/refresh)
 func (_ Unimplemented) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// LoginWithSms Sign in with an SMS verification code
+// (POST /api/v1/auth/sms/login)
+func (_ Unimplemented) LoginWithSms(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// SendSmsCode Send an SMS verification code
+// (POST /api/v1/auth/sms/send)
+func (_ Unimplemented) SendSmsCode(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteMe Delete the current user
+// (DELETE /api/v1/me)
+func (_ Unimplemented) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -961,6 +1144,18 @@ func (_ Unimplemented) UpdateMe(w http.ResponseWriter, r *http.Request) {
 // ChangePassword Change the password
 // (PUT /api/v1/me/password)
 func (_ Unimplemented) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// BindPhone Bind a phone number with an SMS verification code
+// (PUT /api/v1/me/phone)
+func (_ Unimplemented) BindPhone(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// BindPhoneWithWechat Bind the phone number of the WeChat account
+// (PUT /api/v1/me/phone/wechat)
+func (_ Unimplemented) BindPhoneWithWechat(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1033,6 +1228,12 @@ func (_ Unimplemented) ListUsers(w http.ResponseWriter, r *http.Request, params 
 // CreateUser Create a user
 // (POST /api/v1/users)
 func (_ Unimplemented) CreateUser(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteUser Delete a user
+// (DELETE /api/v1/users/{id})
+func (_ Unimplemented) DeleteUser(w http.ResponseWriter, r *http.Request, id UserID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1161,11 +1362,93 @@ func (siw *ServerInterfaceWrapper) ResetPassword(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ListAuthProviders operation middleware
+func (siw *ServerInterfaceWrapper) ListAuthProviders(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAuthProviders(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LoginWithProvider operation middleware
+func (siw *ServerInterfaceWrapper) LoginWithProvider(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "provider" -------------
+	var provider Provider
+
+	err = runtime.BindStyledParameterWithOptions("simple", "provider", chi.URLParam(r, "provider"), &provider, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LoginWithProvider(w, r, provider)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // RefreshToken operation middleware
 func (siw *ServerInterfaceWrapper) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RefreshToken(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LoginWithSms operation middleware
+func (siw *ServerInterfaceWrapper) LoginWithSms(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LoginWithSms(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendSmsCode operation middleware
+func (siw *ServerInterfaceWrapper) SendSmsCode(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendSmsCode(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMe operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMe(w, r)
 	}))
 
 	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
@@ -1208,6 +1491,34 @@ func (siw *ServerInterfaceWrapper) ChangePassword(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ChangePassword(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// BindPhone operation middleware
+func (siw *ServerInterfaceWrapper) BindPhone(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.BindPhone(w, r)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// BindPhoneWithWechat operation middleware
+func (siw *ServerInterfaceWrapper) BindPhoneWithWechat(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.BindPhoneWithWechat(w, r)
 	}))
 
 	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
@@ -1576,6 +1887,32 @@ func (siw *ServerInterfaceWrapper) CreateUser(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteUser operation middleware
+func (siw *ServerInterfaceWrapper) DeleteUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id UserID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteUser(w, r, id)
+	}))
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		handler = siw.HandlerMiddlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetUser operation middleware
 func (siw *ServerInterfaceWrapper) GetUser(w http.ResponseWriter, r *http.Request) {
 
@@ -1789,7 +2126,22 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/auth/password/reset", wrapper.ResetPassword)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/auth/providers", wrapper.ListAuthProviders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/providers/{provider}/login", wrapper.LoginWithProvider)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/auth/refresh", wrapper.RefreshToken)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/sms/login", wrapper.LoginWithSms)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/sms/send", wrapper.SendSmsCode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/me", wrapper.DeleteMe)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/me", wrapper.GetMe)
@@ -1799,6 +2151,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/v1/me/password", wrapper.ChangePassword)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/me/phone", wrapper.BindPhone)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/me/phone/wechat", wrapper.BindPhoneWithWechat)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/me/sessions", wrapper.ListMySessions)
@@ -1837,6 +2195,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/users", wrapper.CreateUser)
 	})
 	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/users/{id}", wrapper.DeleteUser)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/users/{id}", wrapper.GetUser)
 	})
 	r.Group(func(r chi.Router) {
@@ -1848,6 +2209,8 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 
 	return r
 }
+
+type BadGatewayJSONResponse ErrorResponse
 
 type BadRequestJSONResponse ErrorResponse
 
@@ -2023,6 +2386,50 @@ func (response ResetPassword200JSONResponse) VisitResetPasswordResponse(w http.R
 	return err
 }
 
+type ListAuthProvidersRequestObject struct {
+}
+
+type ListAuthProvidersResponseObject interface {
+	VisitListAuthProvidersResponse(w http.ResponseWriter) error
+}
+
+type ListAuthProviders200JSONResponse AuthProviderListEnvelope
+
+func (response ListAuthProviders200JSONResponse) VisitListAuthProvidersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithProviderRequestObject struct {
+	Provider Provider `json:"provider"`
+	Body     *LoginWithProviderJSONRequestBody
+}
+
+type LoginWithProviderResponseObject interface {
+	VisitLoginWithProviderResponse(w http.ResponseWriter) error
+}
+
+type LoginWithProvider200JSONResponse LoginResponseEnvelope
+
+func (response LoginWithProvider200JSONResponse) VisitLoginWithProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type RefreshTokenRequestObject struct {
 	Body *RefreshTokenJSONRequestBody
 }
@@ -2041,6 +2448,71 @@ func (response RefreshToken200JSONResponse) VisitRefreshTokenResponse(w http.Res
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithSmsRequestObject struct {
+	Body *LoginWithSmsJSONRequestBody
+}
+
+type LoginWithSmsResponseObject interface {
+	VisitLoginWithSmsResponse(w http.ResponseWriter) error
+}
+
+type LoginWithSms200JSONResponse LoginResponseEnvelope
+
+func (response LoginWithSms200JSONResponse) VisitLoginWithSmsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendSmsCodeRequestObject struct {
+	Body *SendSmsCodeJSONRequestBody
+}
+
+type SendSmsCodeResponseObject interface {
+	VisitSendSmsCodeResponse(w http.ResponseWriter) error
+}
+
+type SendSmsCode202JSONResponse NullEnvelope
+
+func (response SendSmsCode202JSONResponse) VisitSendSmsCodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMeRequestObject struct {
+}
+
+type DeleteMeResponseObject interface {
+	VisitDeleteMeResponse(w http.ResponseWriter) error
+}
+
+type DeleteMe202JSONResponse NullEnvelope
+
+func (response DeleteMe202JSONResponse) VisitDeleteMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2099,6 +2571,50 @@ type ChangePasswordResponseObject interface {
 type ChangePassword200JSONResponse NullEnvelope
 
 func (response ChangePassword200JSONResponse) VisitChangePasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BindPhoneRequestObject struct {
+	Body *BindPhoneJSONRequestBody
+}
+
+type BindPhoneResponseObject interface {
+	VisitBindPhoneResponse(w http.ResponseWriter) error
+}
+
+type BindPhone200JSONResponse UserEnvelope
+
+func (response BindPhone200JSONResponse) VisitBindPhoneResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BindPhoneWithWechatRequestObject struct {
+	Body *BindPhoneWithWechatJSONRequestBody
+}
+
+type BindPhoneWithWechatResponseObject interface {
+	VisitBindPhoneWithWechatResponse(w http.ResponseWriter) error
+}
+
+type BindPhoneWithWechat200JSONResponse UserEnvelope
+
+func (response BindPhoneWithWechat200JSONResponse) VisitBindPhoneWithWechatResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -2372,6 +2888,28 @@ func (response CreateUser201JSONResponse) VisitCreateUserResponse(w http.Respons
 	return err
 }
 
+type DeleteUserRequestObject struct {
+	Id UserID `json:"id"`
+}
+
+type DeleteUserResponseObject interface {
+	VisitDeleteUserResponse(w http.ResponseWriter) error
+}
+
+type DeleteUser202JSONResponse NullEnvelope
+
+func (response DeleteUser202JSONResponse) VisitDeleteUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetUserRequestObject struct {
 	Id UserID `json:"id"`
 }
@@ -2463,9 +3001,24 @@ type StrictServerInterface interface {
 	// ResetPassword Set a new password with the token of the reset email
 	// (POST /api/v1/auth/password/reset)
 	ResetPassword(ctx context.Context, request ResetPasswordRequestObject) (ResetPasswordResponseObject, error)
+	// ListAuthProviders List the enabled sign-in providers
+	// (GET /api/v1/auth/providers)
+	ListAuthProviders(ctx context.Context, request ListAuthProvidersRequestObject) (ListAuthProvidersResponseObject, error)
+	// LoginWithProvider Sign in with a third-party provider
+	// (POST /api/v1/auth/providers/{provider}/login)
+	LoginWithProvider(ctx context.Context, request LoginWithProviderRequestObject) (LoginWithProviderResponseObject, error)
 	// RefreshToken Rotate the refresh token
 	// (POST /api/v1/auth/refresh)
 	RefreshToken(ctx context.Context, request RefreshTokenRequestObject) (RefreshTokenResponseObject, error)
+	// LoginWithSms Sign in with an SMS verification code
+	// (POST /api/v1/auth/sms/login)
+	LoginWithSms(ctx context.Context, request LoginWithSmsRequestObject) (LoginWithSmsResponseObject, error)
+	// SendSmsCode Send an SMS verification code
+	// (POST /api/v1/auth/sms/send)
+	SendSmsCode(ctx context.Context, request SendSmsCodeRequestObject) (SendSmsCodeResponseObject, error)
+	// DeleteMe Delete the current user
+	// (DELETE /api/v1/me)
+	DeleteMe(ctx context.Context, request DeleteMeRequestObject) (DeleteMeResponseObject, error)
 	// GetMe Get the current user
 	// (GET /api/v1/me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
@@ -2475,6 +3028,12 @@ type StrictServerInterface interface {
 	// ChangePassword Change the password
 	// (PUT /api/v1/me/password)
 	ChangePassword(ctx context.Context, request ChangePasswordRequestObject) (ChangePasswordResponseObject, error)
+	// BindPhone Bind a phone number with an SMS verification code
+	// (PUT /api/v1/me/phone)
+	BindPhone(ctx context.Context, request BindPhoneRequestObject) (BindPhoneResponseObject, error)
+	// BindPhoneWithWechat Bind the phone number of the WeChat account
+	// (PUT /api/v1/me/phone/wechat)
+	BindPhoneWithWechat(ctx context.Context, request BindPhoneWithWechatRequestObject) (BindPhoneWithWechatResponseObject, error)
 	// ListMySessions List the active sessions
 	// (GET /api/v1/me/sessions)
 	ListMySessions(ctx context.Context, request ListMySessionsRequestObject) (ListMySessionsResponseObject, error)
@@ -2511,6 +3070,9 @@ type StrictServerInterface interface {
 	// CreateUser Create a user
 	// (POST /api/v1/users)
 	CreateUser(ctx context.Context, request CreateUserRequestObject) (CreateUserResponseObject, error)
+	// DeleteUser Delete a user
+	// (DELETE /api/v1/users/{id})
+	DeleteUser(ctx context.Context, request DeleteUserRequestObject) (DeleteUserResponseObject, error)
 	// GetUser Get a user
 	// (GET /api/v1/users/{id})
 	GetUser(ctx context.Context, request GetUserRequestObject) (GetUserResponseObject, error)
@@ -2764,6 +3326,63 @@ func (sh *strictHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ListAuthProviders operation middleware
+func (sh *strictHandler) ListAuthProviders(w http.ResponseWriter, r *http.Request) {
+	var request ListAuthProvidersRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAuthProviders(ctx, request.(ListAuthProvidersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAuthProviders")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAuthProvidersResponseObject); ok {
+		if err := validResponse.VisitListAuthProvidersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LoginWithProvider operation middleware
+func (sh *strictHandler) LoginWithProvider(w http.ResponseWriter, r *http.Request, provider Provider) {
+	var request LoginWithProviderRequestObject
+
+	request.Provider = provider
+
+	var body LoginWithProviderJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LoginWithProvider(ctx, request.(LoginWithProviderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LoginWithProvider")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LoginWithProviderResponseObject); ok {
+		if err := validResponse.VisitLoginWithProviderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // RefreshToken operation middleware
 func (sh *strictHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	var request RefreshTokenRequestObject
@@ -2788,6 +3407,92 @@ func (sh *strictHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RefreshTokenResponseObject); ok {
 		if err := validResponse.VisitRefreshTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LoginWithSms operation middleware
+func (sh *strictHandler) LoginWithSms(w http.ResponseWriter, r *http.Request) {
+	var request LoginWithSmsRequestObject
+
+	var body LoginWithSmsJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LoginWithSms(ctx, request.(LoginWithSmsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LoginWithSms")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LoginWithSmsResponseObject); ok {
+		if err := validResponse.VisitLoginWithSmsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SendSmsCode operation middleware
+func (sh *strictHandler) SendSmsCode(w http.ResponseWriter, r *http.Request) {
+	var request SendSmsCodeRequestObject
+
+	var body SendSmsCodeJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SendSmsCode(ctx, request.(SendSmsCodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SendSmsCode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SendSmsCodeResponseObject); ok {
+		if err := validResponse.VisitSendSmsCodeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMe operation middleware
+func (sh *strictHandler) DeleteMe(w http.ResponseWriter, r *http.Request) {
+	var request DeleteMeRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMe(ctx, request.(DeleteMeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMe")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMeResponseObject); ok {
+		if err := validResponse.VisitDeleteMeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2874,6 +3579,68 @@ func (sh *strictHandler) ChangePassword(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ChangePasswordResponseObject); ok {
 		if err := validResponse.VisitChangePasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// BindPhone operation middleware
+func (sh *strictHandler) BindPhone(w http.ResponseWriter, r *http.Request) {
+	var request BindPhoneRequestObject
+
+	var body BindPhoneJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.BindPhone(ctx, request.(BindPhoneRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "BindPhone")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(BindPhoneResponseObject); ok {
+		if err := validResponse.VisitBindPhoneResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// BindPhoneWithWechat operation middleware
+func (sh *strictHandler) BindPhoneWithWechat(w http.ResponseWriter, r *http.Request) {
+	var request BindPhoneWithWechatRequestObject
+
+	var body BindPhoneWithWechatJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.BindPhoneWithWechat(ctx, request.(BindPhoneWithWechatRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "BindPhoneWithWechat")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(BindPhoneWithWechatResponseObject); ok {
+		if err := validResponse.VisitBindPhoneWithWechatResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -3197,6 +3964,32 @@ func (sh *strictHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateUserResponseObject); ok {
 		if err := validResponse.VisitCreateUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteUser operation middleware
+func (sh *strictHandler) DeleteUser(w http.ResponseWriter, r *http.Request, id UserID) {
+	var request DeleteUserRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteUser(ctx, request.(DeleteUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteUserResponseObject); ok {
+		if err := validResponse.VisitDeleteUserResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

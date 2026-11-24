@@ -55,3 +55,12 @@ func caller(ctx context.Context) *usecase.Caller {
 
 	return &usecase.Caller{UserID: p.Subject, SessionID: p.SessionID, AuthTime: p.AuthTime}
 }
+
+// optionalCaller is the signed-in user of the request, nil for an anonymous one.
+func optionalCaller(ctx context.Context) *usecase.Caller {
+	if reqctx.PrincipalOf(ctx) == nil {
+		return nil
+	}
+
+	return caller(ctx)
+}

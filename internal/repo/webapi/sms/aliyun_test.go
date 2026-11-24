@@ -1,51 +1,32 @@
 package sms_test
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/xingyunqi-tech/go-template/internal/entity"
+	"github.com/xingyunqi-tech/go-template/internal/repo"
 	"github.com/xingyunqi-tech/go-template/internal/repo/webapi/sms"
 )
 
-type redirect struct {
-	target *url.URL
-}
-
-func (r redirect) RoundTrip(req *http.Request) (*http.Response, error) {
-	out := req.Clone(req.Context())
-	out.URL.Scheme, out.URL.Host = r.target.Scheme, r.target.Host
-
-	return http.DefaultTransport.RoundTrip(out)
-}
-
-func serve(t *testing.T, h http.HandlerFunc) http.RoundTripper {
+func account(t *testing.T, h http.HandlerFunc) *sms.Config {
 	t.Helper()
 
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 
-	target, err := url.Parse(srv.URL)
-	require.NoError(t, err)
-
-	return redirect{target: target}
-}
-
-func account() *sms.Config {
-	return &sms.Config{
-		AccessKeyID: "id", AccessKeySecret: "secret", SignName: "签名", TemplateCode: "SMS_1",
-		Endpoint: "dysmsapi.aliyuncs.com", Mock: false,
-	}
-}
-
-func discard() *slog.Logger {
-	return slog.New(slog.DiscardHandler)
+	return &sms.Config{AccessKeyID: "id", AccessKeySecret: "secret", SignName: "签名", TemplateCode: "SMS_1", Endpoint: srv.URL}
 }
 
 func TestSignMatchesAcs3Reference(t *testing.T) {
@@ -75,7 +56,7 @@ func TestSendCallsSendSms(t *testing.T) {
 
 	var got url.Values
 
-	rt := serve(t, func(w http.ResponseWriter, r *http.Request) {
+	cfg := account(t, func(w http.ResponseWriter, r *http.Request) {
 		got = r.URL.Query()
 
 		assert.Equal(t, http.MethodPost, r.Method)
@@ -85,147 +66,81 @@ func TestSendCallsSendSms(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"Code": "OK", "BizId": "b"})
 	})
 
-	require.NoError(t, sms.New(account(), rt, discard()).Send(t.Context(), "13800138000", map[string]string{"code": "123456"}))
+	require.NoError(t, sms.New(cfg, nil).Send(t.Context(), "+8613800138000", "123456"))
 	assert.Equal(t, "13800138000", got.Get("PhoneNumbers"))
 	assert.Equal(t, `{"code":"123456"}`, got.Get("TemplateParam"))
 	assert.Equal(t, "SMS_1", got.Get("TemplateCode"))
+	assert.Equal(t, "签名", got.Get("SignName"))
 }
 
-func TestSendFails(t *testing.T) {
+func TestNumber(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "13800138000", sms.Number("+8613800138000"))
+	assert.Equal(t, "14155552671", sms.Number("+14155552671"))
+}
+
+func TestSendFailuresAreBadGateway(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name   string
-		status int
-		body   string
+		name    string
+		status  int
+		body    string
+		notSent bool
 	}{
-		{"rejected", http.StatusOK, `{"Code":"isv.BUSINESS_LIMIT_CONTROL","Message":"limit"}`},
-		{"http error", http.StatusBadRequest, `{"Code":"InvalidParameter","Message":"bad"}`},
-		{"empty body", http.StatusOK, `null`},
-		{"not json", http.StatusOK, `<html>`},
+		{"rejected", http.StatusOK, `{"Code":"isv.BUSINESS_LIMIT_CONTROL","Message":"limit"}`, true},
+		{"http error", http.StatusBadRequest, `{"Code":"InvalidParameter","Message":"bad"}`, true},
+		{"empty body", http.StatusOK, `null`, true},
+		{"not json", http.StatusOK, `<html>`, false},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			rt := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+			cfg := account(t, func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tc.status)
 				_, _ = w.Write([]byte(tc.body))
 			})
 
-			require.Error(t, sms.New(account(), rt, discard()).Send(t.Context(), "13800138000", map[string]string{"code": "1"}))
+			err := sms.New(cfg, nil).Send(t.Context(), "+8613800138000", "123456")
+			require.ErrorIs(t, err, entity.New(entity.KeyBadGateway))
+			assert.Equal(t, tc.notSent, errors.Is(err, repo.ErrSMSNotSent))
 		})
 	}
 }
 
-func TestSendWithoutAccount(t *testing.T) {
+func TestSendUnreachableIsBadGatewayAndNotSent(t *testing.T) {
 	t.Parallel()
 
-	mock := account()
-	mock.Mock = true
-	mock.AccessKeyID = ""
-	require.NoError(t, sms.New(mock, nil, discard()).Send(t.Context(), "13800138000", map[string]string{"code": "1"}))
+	cfg := &sms.Config{AccessKeyID: "id", AccessKeySecret: "s", SignName: "n", TemplateCode: "t", Endpoint: "http://127.0.0.1:1"}
 
-	missing := account()
-	missing.AccessKeySecret = ""
-	require.EqualError(t, sms.New(missing, nil, discard()).Send(t.Context(), "13800138000", nil), "SMS client not initialized")
-
-	incomplete := account()
-	incomplete.TemplateCode = ""
-	require.EqualError(t, sms.New(incomplete, nil, discard()).Send(t.Context(), "13800138000", nil), "SMS configuration incomplete")
+	err := sms.New(cfg, nil).Send(t.Context(), "+8613800138000", "123456")
+	require.ErrorIs(t, err, entity.New(entity.KeyBadGateway))
+	require.ErrorIs(t, err, repo.ErrSMSNotSent)
 }
 
-func text(s string) *string { return &s }
-
-func TestSendSMSResults(t *testing.T) {
+func TestSendTimeoutMayHaveBeenSent(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name   string
-		status int
-		body   string
-		want   sms.Result
-	}{
-		{
-			"sent", http.StatusOK, `{"Code":"OK","Message":"OK","RequestId":"r1","BizId":"b1"}`,
-			sms.Result{Success: true, RequestID: "r1", BizID: "b1", Code: "OK", Message: text("OK")},
-		},
-		{
-			"rejected", http.StatusOK, `{"Code":"isv.BUSINESS_LIMIT_CONTROL","Message":"limit","RequestId":"r2"}`,
-			sms.Result{Success: false, RequestID: "r2", BizID: "", Code: "isv.BUSINESS_LIMIT_CONTROL", Message: text("limit")},
-		},
-		{
-			"rejected without message", http.StatusOK, `{"Code":"isv.X"}`,
-			sms.Result{Success: false, RequestID: "", BizID: "", Code: "isv.X", Message: nil},
-		},
-		{
-			"http error", http.StatusBadRequest, `{"Code":"InvalidParameter","Message":"bad","RequestId":"r3"}`,
-			sms.Result{Success: false, RequestID: "", BizID: "", Code: "SEND_ERROR", Message: text("InvalidParameter: code: 400, bad request id: r3")},
-		},
-		{
-			"http error without fields", http.StatusForbidden, `{}`,
-			sms.Result{Success: false, RequestID: "", BizID: "", Code: "SEND_ERROR", Message: text("undefined: code: 403, undefined request id: undefined")},
-		},
-		{
-			"empty body", http.StatusOK, `null`,
-			sms.Result{Success: false, RequestID: "", BizID: "", Code: "EMPTY_RESPONSE", Message: text("SMS response body is empty")},
-		},
-	}
+	cfg := account(t, func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	})
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
 
-			rt := serve(t, func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(tc.status)
-				_, _ = w.Write([]byte(tc.body))
-			})
-
-			assert.Equal(t, tc.want, sms.New(account(), rt, discard()).SendSMS(t.Context(), "13800138000", map[string]string{"content": "c"}))
-		})
-	}
+	err := sms.New(cfg, nil).Send(ctx, "+8613800138000", "123456")
+	require.ErrorIs(t, err, entity.New(entity.KeyBadGateway))
+	assert.NotErrorIs(t, err, repo.ErrSMSNotSent)
 }
 
-func TestSendSMSWithoutAccount(t *testing.T) {
+func TestLogWritesTheCode(t *testing.T) {
 	t.Parallel()
 
-	mock := account()
-	mock.Mock = true
-	assert.Equal(t, sms.Result{Success: true, RequestID: "mock-request-id", BizID: "mock-biz-id", Code: "OK", Message: text("Mock SMS sent successfully")},
-		sms.New(mock, nil, discard()).SendSMS(t.Context(), "13800138000", nil))
+	var buf bytes.Buffer
 
-	missing := account()
-	missing.AccessKeyID = ""
-	assert.Equal(t, sms.Result{Success: false, RequestID: "", BizID: "", Code: "CLIENT_NOT_INITIALIZED", Message: text("SMS client not initialized")},
-		sms.New(missing, nil, discard()).SendSMS(t.Context(), "13800138000", nil))
-
-	incomplete := account()
-	incomplete.SignName = ""
-	assert.Equal(t, sms.Result{Success: false, RequestID: "", BizID: "", Code: "CONFIG_ERROR", Message: text("SMS configuration incomplete")},
-		sms.New(incomplete, nil, discard()).SendSMS(t.Context(), "13800138000", nil))
-}
-
-func TestSendErrorIsTheResultMessage(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name string
-		body string
-		want string
-	}{
-		{"message", `{"Code":"isv.BUSINESS_LIMIT_CONTROL","Message":"触发分钟级流控Permits:1"}`, "触发分钟级流控Permits:1"},
-		{"no message", `{"Code":"isv.X"}`, "SMS send failed"},
-		{"empty message", `{"Code":"isv.X","Message":""}`, ""},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			rt := serve(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(tc.body)) })
-
-			require.EqualError(t, sms.New(account(), rt, discard()).Send(t.Context(), "13800138000", nil), tc.want)
-		})
-	}
+	require.NoError(t, sms.NewLog(slog.New(slog.NewJSONHandler(&buf, nil))).Send(t.Context(), "+8613800138000", "123456"))
+	assert.Contains(t, buf.String(), `"verification_code":"123456"`)
 }

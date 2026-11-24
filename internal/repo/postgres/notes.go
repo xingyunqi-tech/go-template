@@ -134,3 +134,12 @@ func (r *Notes) Delete(ctx context.Context, owner, id uuid.UUID) (bool, error) {
 
 	return n > 0, nil
 }
+
+// Purge implements repo.Purger: it removes every note of the owner.
+func (r *Notes) Purge(ctx context.Context, owner uuid.UUID) error {
+	if err := r.db.queries(ctx, func(q *sqlcgen.Queries) error { return q.PurgeOwnerNotes(ctx, owner) }); err != nil {
+		return fmt.Errorf("postgres: purge notes: %w", err)
+	}
+
+	return nil
+}

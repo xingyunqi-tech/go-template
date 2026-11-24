@@ -31,13 +31,12 @@ func (MailArgs) InsertOpts() river.InsertOpts {
 
 // MailQueue implements repo.MailQueue with an insert-only River client.
 type MailQueue struct {
-	db     *DB
 	client *river.Client[pgx.Tx]
 }
 
 // NewMailQueue returns MailQueue.
-func NewMailQueue(db *DB, client *river.Client[pgx.Tx]) *MailQueue {
-	return &MailQueue{db: db, client: client}
+func NewMailQueue(client *river.Client[pgx.Tx]) *MailQueue {
+	return &MailQueue{client: client}
 }
 
 var _ repo.MailQueue = (*MailQueue)(nil)
@@ -45,20 +44,7 @@ var _ repo.MailQueue = (*MailQueue)(nil)
 // Enqueue implements repo.MailQueue: in the request transaction, so the job exists only when the
 // transaction commits.
 func (q *MailQueue) Enqueue(ctx context.Context, job *repo.MailJob) error {
-	args := MailArgs{Mail: job.Kind, UserID: job.UserID, Locale: job.Locale}
-
-	var err error
-
-	if s := stateOf(ctx); s != nil {
-		var tx pgx.Tx
-
-		if tx, err = s.open(ctx); err == nil {
-			_, err = q.client.InsertTx(ctx, tx, args, nil)
-		}
-	} else {
-		_, err = q.client.Insert(ctx, args, nil)
-	}
-
+	err := insert(ctx, q.client, MailArgs{Mail: job.Kind, UserID: job.UserID, Locale: job.Locale}, nil)
 	if err != nil {
 		return fmt.Errorf("postgres: enqueue mail: %w", err)
 	}

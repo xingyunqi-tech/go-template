@@ -254,11 +254,18 @@ func identityOperations() map[string]identityOperation {
 		"resendVerificationEmail": {"POST", "/api/v1/auth/email/verify/resend", nil, "202"},
 		"forgotPassword":          {"POST", "/api/v1/auth/password/forgot", []string{"email"}, "202"},
 		"resetPassword":           {"POST", "/api/v1/auth/password/reset", []string{"token", "password"}, "200"},
+		"sendSmsCode":             {"POST", "/api/v1/auth/sms/send", []string{"phone", "scene"}, "202"},
+		"loginWithSms":            {"POST", "/api/v1/auth/sms/login", []string{"phone", "code"}, "200"},
+		"listAuthProviders":       {"GET", "/api/v1/auth/providers", nil, "200"},
+		"loginWithProvider":       {"POST", "/api/v1/auth/providers/{provider}/login", []string{"code"}, "200"},
 		"refreshToken":            {"POST", "/api/v1/auth/refresh", []string{"refreshToken"}, "200"},
 		"logout":                  {"POST", "/api/v1/auth/logout", nil, "200"},
 		"getMe":                   {"GET", "/api/v1/me", nil, "200"},
 		"updateMe":                {"PATCH", "/api/v1/me", []string{"displayName", "avatarFileId"}, "200"},
+		"deleteMe":                {"DELETE", "/api/v1/me", nil, "202"},
 		"changePassword":          {"PUT", "/api/v1/me/password", []string{"currentPassword", "newPassword"}, "200"},
+		"bindPhone":               {"PUT", "/api/v1/me/phone", []string{"phone", "code"}, "200"},
+		"bindPhoneWithWechat":     {"PUT", "/api/v1/me/phone/wechat", []string{"code"}, "200"},
 		"listMySessions":          {"GET", "/api/v1/me/sessions", nil, "200"},
 		"revokeMySession":         {"DELETE", "/api/v1/me/sessions/{id}", nil, "200"},
 		"revokeOtherSessions":     {"POST", "/api/v1/me/sessions/revoke-others", nil, "200"},
@@ -266,6 +273,7 @@ func identityOperations() map[string]identityOperation {
 		"createUser":              {"POST", "/api/v1/users", []string{"email", "phone", "password", "displayName"}, "201"},
 		"getUser":                 {"GET", "/api/v1/users/{id}", nil, "200"},
 		"updateUser":              {"PATCH", "/api/v1/users/{id}", []string{"displayName", "status"}, "200"},
+		"deleteUser":              {"DELETE", "/api/v1/users/{id}", nil, "202"},
 		"setUserRoles":            {"PUT", "/api/v1/users/{id}/roles", []string{"roles"}, "200"},
 		"listRoles":               {"GET", "/api/v1/roles", nil, "200"},
 		"listPermissions":         {"GET", "/api/v1/permissions", nil, "200"},
@@ -339,10 +347,24 @@ func TestIdentityObjectsHaveTheConventionFields(t *testing.T) {
 		"Role":          {"code", "name", "permissions"},
 		"Permission":    {"code"},
 		"LoginResponse": {"accessToken", "refreshToken", "expiresIn", "tokenType", "user"},
+		"AuthProvider":  {"id"},
 	} {
 		if assert.Contains(t, schemas, name) {
 			assert.Equal(t, sorted(fields), propertyNames(schemas[name]), name)
 			assert.Equal(t, sorted(fields), sorted(schemas[name].Value.Required), "%s fields are all required", name)
 		}
 	}
+}
+
+func TestSmsScenesAndProvidersFollowTheConventions(t *testing.T) {
+	t.Parallel()
+
+	doc := loadDocument(t)
+
+	scene := doc.Components.Schemas["SendSmsCodeInput"].Value.Properties["scene"].Value
+	assert.Equal(t, []any{"login", "bind_phone"}, scene.Enum)
+
+	provider := doc.Paths.Find("/api/v1/auth/providers/{provider}/login").Parameters[0].Value.Schema.Value
+	assert.True(t, provider.Type.Is("string"))
+	assert.Empty(t, provider.Enum, "provider is a plain string")
 }

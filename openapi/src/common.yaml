@@ -161,6 +161,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    BadGateway:
+      description: A third-party service failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     ServiceUnavailable:
       description: A dependency is unavailable
       content:

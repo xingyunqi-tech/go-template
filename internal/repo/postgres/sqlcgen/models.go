@@ -65,6 +65,15 @@ type SessionRefreshHistory struct {
 	RotatedAt   time.Time
 }
 
+type UserIdentity struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Provider  string
+	Subject   string
+	UnionID   *string
+	CreatedAt time.Time
+}
+
 type UserRole struct {
 	UserID   uuid.UUID
 	RoleCode string

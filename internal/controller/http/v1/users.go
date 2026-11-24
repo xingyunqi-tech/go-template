@@ -114,3 +114,12 @@ func (s *Server) ListPermissions(context.Context, gen.ListPermissionsRequestObje
 
 	return gen.ListPermissions200JSONResponse{Code: response.Code, Message: response.Message, Data: out}, nil
 }
+
+// DeleteUser handles DELETE /api/v1/users/{id}.
+func (s *Server) DeleteUser(ctx context.Context, req gen.DeleteUserRequestObject) (gen.DeleteUserResponseObject, error) {
+	if err := s.accounts.Delete(ctx, req.Id); err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	return gen.DeleteUser202JSONResponse{Code: response.Code, Message: response.Message, Data: nil}, nil
+}

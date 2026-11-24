@@ -80,3 +80,36 @@ func (s *Server) RevokeOtherSessions(ctx context.Context, _ gen.RevokeOtherSessi
 
 	return gen.RevokeOtherSessions200JSONResponse{Code: response.Code, Message: response.Message, Data: nil}, nil
 }
+
+// DeleteMe handles DELETE /api/v1/me.
+func (s *Server) DeleteMe(ctx context.Context, _ gen.DeleteMeRequestObject) (gen.DeleteMeResponseObject, error) {
+	c := caller(ctx)
+
+	if err := s.accounts.DeleteMe(ctx, c); err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	reqctx.SetAuditTarget(ctx, c.UserID, c.UserID)
+
+	return gen.DeleteMe202JSONResponse{Code: response.Code, Message: response.Message, Data: nil}, nil
+}
+
+// BindPhone handles PUT /api/v1/me/phone.
+func (s *Server) BindPhone(ctx context.Context, req gen.BindPhoneRequestObject) (gen.BindPhoneResponseObject, error) {
+	u, err := s.users.BindPhone(ctx, caller(ctx), req.Body.Phone, req.Body.Code)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	return gen.BindPhone200JSONResponse(userEnvelope(u)), nil
+}
+
+// BindPhoneWithWechat handles PUT /api/v1/me/phone/wechat.
+func (s *Server) BindPhoneWithWechat(ctx context.Context, req gen.BindPhoneWithWechatRequestObject) (gen.BindPhoneWithWechatResponseObject, error) {
+	u, err := s.users.BindWechatPhone(ctx, caller(ctx), req.Body.Code)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // use case errors are entity errors
+	}
+
+	return gen.BindPhoneWithWechat200JSONResponse(userEnvelope(u)), nil
+}

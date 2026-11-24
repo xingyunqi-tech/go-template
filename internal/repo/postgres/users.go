@@ -306,3 +306,72 @@ func (r *Users) CountActiveAdmins(ctx context.Context, except uuid.UUID) (int, e
 
 	return int(n), nil
 }
+
+// GetByPhone implements repo.Users.
+func (r *Users) GetByPhone(ctx context.Context, phone string) (*repo.UserRecord, bool, error) {
+	return r.one(ctx, "get", func(q *sqlcgen.Queries) (*sqlcgen.AppUser, error) { return q.GetUserByPhone(ctx, &phone) })
+}
+
+// SetPhone implements repo.Users.
+func (r *Users) SetPhone(ctx context.Context, id uuid.UUID, phone string) (*entity.User, bool, error) {
+	rec, found, err := r.one(ctx, "set phone", func(q *sqlcgen.Queries) (*sqlcgen.AppUser, error) {
+		return q.SetUserPhone(ctx, sqlcgen.SetUserPhoneParams{ID: id, Phone: &phone})
+	})
+	if !found || err != nil {
+		return nil, found, err
+	}
+
+	return &rec.User, true, nil
+}
+
+// SoftDelete implements repo.Users.
+func (r *Users) SoftDelete(ctx context.Context, id uuid.UUID) (bool, error) {
+	var n int64
+
+	err := r.db.queries(ctx, func(q *sqlcgen.Queries) error {
+		var err error
+
+		n, err = q.SoftDeleteUser(ctx, id)
+
+		return err //nolint:wrapcheck // wrapped below
+	})
+	if err != nil {
+		return false, fmt.Errorf("postgres: delete user: %w", err)
+	}
+
+	return n > 0, nil
+}
+
+// Deleted implements repo.Users.
+func (r *Users) Deleted(ctx context.Context, id uuid.UUID) (deleted, found bool, err error) {
+	err = r.db.queries(ctx, func(q *sqlcgen.Queries) error {
+		var err error
+
+		deleted, err = q.UserDeleted(ctx, id)
+
+		return err //nolint:wrapcheck // wrapped below
+	})
+
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, false, nil
+	case err != nil:
+		return false, false, fmt.Errorf("postgres: user deleted: %w", err)
+	}
+
+	return deleted, true, nil
+}
+
+// Purge implements repo.Users.
+func (r *Users) Purge(ctx context.Context, id uuid.UUID) error {
+	err := r.db.queries(ctx, func(q *sqlcgen.Queries) error {
+		_, err := q.PurgeUser(ctx, id)
+
+		return err //nolint:wrapcheck // wrapped below
+	})
+	if err != nil {
+		return fmt.Errorf("postgres: purge user: %w", err)
+	}
+
+	return nil
+}

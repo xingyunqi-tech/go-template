@@ -115,3 +115,68 @@ func TestInputsTheUseCaseRejects(t *testing.T) {
 	_, err = svc.UpdateMe(t.Context(), &usecase.Caller{UserID: uuid.NewV7()}, nil, &avatar)
 	assert.Equal(t, entity.RuleExists, fieldErrors(t, err)[0].Rule)
 }
+
+type codes struct{ err error }
+
+func (c codes) Verify(context.Context, string, string, string) error { return c.err }
+
+type wechatPhone struct {
+	phone string
+	err   error
+}
+
+func (w wechatPhone) Phone(context.Context, string) (string, error) { return w.phone, w.err }
+
+func phoneService(t *testing.T, verify error, wechat user.WechatPhone) (*user.Service, *mocks.MockUsers) {
+	t.Helper()
+
+	users := mocks.NewMockUsers(gomock.NewController(t))
+
+	return user.New(&user.Deps{
+		Users: users, Codes: codes{err: verify}, WechatPhone: wechat, Limits: usecase.Limits{Limiter: nil, Enabled: false},
+	}), users
+}
+
+func TestBindPhoneSetsTheVerifiedPhone(t *testing.T) {
+	t.Parallel()
+
+	svc, users := phoneService(t, nil, nil)
+	caller := &usecase.Caller{UserID: uuid.NewV7()}
+	phone := "+8613800138000"
+
+	users.EXPECT().SetPhone(gomock.Any(), caller.UserID, phone).Return(&entity.User{ID: caller.UserID, Phone: &phone}, true, nil)
+
+	u, err := svc.BindPhone(t.Context(), caller, "13800138000", "123456")
+	require.NoError(t, err)
+	assert.Equal(t, phone, *u.Phone)
+}
+
+func TestBindPhoneRejectsAWrongCode(t *testing.T) {
+	t.Parallel()
+
+	svc, _ := phoneService(t, entity.New(entity.KeyVerificationCodeInvalid), nil)
+
+	_, err := svc.BindPhone(t.Context(), &usecase.Caller{UserID: uuid.NewV7()}, "13800138000", "123456")
+	require.ErrorIs(t, err, entity.New(entity.KeyVerificationCodeInvalid))
+}
+
+func TestBindWechatPhone(t *testing.T) {
+	t.Parallel()
+
+	svc, _ := phoneService(t, nil, nil)
+	caller := &usecase.Caller{UserID: uuid.NewV7()}
+
+	_, err := svc.BindWechatPhone(t.Context(), caller, "pc")
+	require.ErrorIs(t, err, entity.New(entity.KeyProviderDisabled))
+
+	svc, users := phoneService(t, nil, wechatPhone{phone: "+8613800138000"})
+	users.EXPECT().SetPhone(gomock.Any(), caller.UserID, "+8613800138000").Return(nil, false, nil)
+
+	_, err = svc.BindWechatPhone(t.Context(), caller, "pc")
+	require.ErrorIs(t, err, entity.New(entity.KeyUserNotFound))
+
+	svc, _ = phoneService(t, nil, wechatPhone{err: entity.New(entity.KeyBadGateway)})
+
+	_, err = svc.BindWechatPhone(t.Context(), caller, "pc")
+	require.ErrorIs(t, err, entity.New(entity.KeyBadGateway))
+}

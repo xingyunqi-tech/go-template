@@ -1,11 +1,11 @@
-// Package alipay exchanges mini program auth codes for open ids with alipay.system.oauth.token.
+// Package alipay signs in with alipay.system.oauth.token: requests are signed with RSA2 and
+// responses verified with the Alipay public key.
 package alipay
 
 import (
 	"context"
 	"crypto"
 	"crypto/rsa"
-	"crypto/sha1" //nolint:gosec // ALIPAY_SIGN_TYPE=RSA signs with SHA-1
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -26,46 +25,70 @@ import (
 )
 
 const (
-	_timeout       = 30 * time.Second
+	// DefaultGateway is the production gateway.
+	DefaultGateway = "https://openapi.alipay.com/gateway.do"
+
+	_timeout       = 10 * time.Second
 	_maxBody       = 1 << 20
-	_pemLineLength = 64
-	_signTypeRSA   = "RSA"
 	_timeLayout    = "2006-01-02 15:04:05"
 	_beijingOffset = 8 * 60 * 60
 	_invalidCode   = "isv.code-"
+	_tokenNode     = "alipay_system_oauth_token_response"
+	_errorNode     = "error_response"
 )
 
 var (
-	errNotRSA     = errors.New("ALIPAY_PRIVATE_KEY must be an RSA private key")
-	errNoPEM      = errors.New("ALIPAY_PRIVATE_KEY holds no PEM block")
-	errHTTPStatus = errors.New("alipay: request failed")
+	errNotRSA      = errors.New("alipay: key is not RSA")
+	errNoKey       = errors.New("alipay: key holds no PEM block or base64 DER")
+	errSignature   = errors.New("alipay: response signature does not verify")
+	errNoSubject   = errors.New("alipay: response has no user_id or open_id")
+	errUnsupported = errors.New("alipay: response holds neither the token nor an error")
 )
 
-// Config holds what alipay.system.oauth.token needs.
+// Config holds the app id, its RSA private key, the Alipay public key and the gateway URL.
 type Config struct {
 	AppID      string
 	PrivateKey string
+	PublicKey  string
 	Gateway    string
-	SignType   string
-	Charset    string
 }
 
-// Client calls the Alipay open API gateway.
+// Client is the alipay provider.
 type Client struct {
-	cfg  Config
-	http *http.Client
-	log  *slog.Logger
-	now  func() time.Time
+	appID   string
+	gateway string
+	private *rsa.PrivateKey
+	public  *rsa.PublicKey
+	http    *http.Client
+	now     func() time.Time
 }
 
-// New returns a Client; transport nil uses http.DefaultTransport.
-func New(cfg *Config, transport http.RoundTripper, log *slog.Logger) *Client {
-	return &Client{cfg: *cfg, http: &http.Client{Transport: transport, Timeout: _timeout}, log: log, now: time.Now} //nolint:exhaustruct // defaults
+// New parses the keys; transport nil uses http.DefaultTransport, an empty gateway is
+// DefaultGateway.
+func New(cfg *Config, transport http.RoundTripper) (*Client, error) {
+	private, err := parsePrivate(cfg.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("ALIPAY_PRIVATE_KEY: %w", err)
+	}
+
+	public, err := parsePublic(cfg.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("ALIPAY_PUBLIC_KEY: %w", err)
+	}
+
+	gateway := cfg.Gateway
+	if gateway == "" {
+		gateway = DefaultGateway
+	}
+
+	return &Client{
+		appID: cfg.AppID, gateway: gateway, private: private, public: public,
+		http: &http.Client{Transport: transport, Timeout: _timeout}, now: time.Now, //nolint:exhaustruct // defaults
+	}, nil
 }
 
-func failure(key string) *entity.NestError {
-	return entity.NestInvalid("alipay", key)
-}
+// ID is alipay.
+func (*Client) ID() string { return entity.ProviderAlipay }
 
 // BeijingTime formats t in UTC+8 like the gateway expects.
 func BeijingTime(t time.Time) string {
@@ -91,39 +114,27 @@ func SignString(params map[string]string) string {
 	return strings.Join(parts, "&")
 }
 
-// FormatPrivateKey wraps a bare base64 key in a PKCS#8 PEM block.
-func FormatPrivateKey(key string) string {
-	if strings.Contains(key, "BEGIN PRIVATE KEY") {
-		return key
+// der decodes a PEM block or bare base64.
+func der(raw string) ([]byte, error) {
+	if block, _ := pem.Decode([]byte(raw)); block != nil {
+		return block.Bytes, nil
 	}
 
-	body := strings.Join(strings.Fields(key), "")
-
-	var b strings.Builder
-
-	b.WriteString("-----BEGIN PRIVATE KEY-----\n") // gitleaks:allow PEM header, no key material
-
-	for len(body) > _pemLineLength {
-		b.WriteString(body[:_pemLineLength] + "\n")
-		body = body[_pemLineLength:]
+	b, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(raw), ""))
+	if err != nil {
+		return nil, errNoKey
 	}
 
-	b.WriteString(body + "\n-----END PRIVATE KEY-----")
-
-	return b.String()
+	return b, nil
 }
 
-func parseKey(raw string) (*rsa.PrivateKey, error) {
-	if !strings.Contains(raw, "-----BEGIN") {
-		raw = FormatPrivateKey(raw)
+func parsePrivate(raw string) (*rsa.PrivateKey, error) {
+	b, err := der(raw)
+	if err != nil {
+		return nil, err
 	}
 
-	block, _ := pem.Decode([]byte(raw))
-	if block == nil {
-		return nil, errNoPEM
-	}
-
-	if key, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
+	if key, err := x509.ParsePKCS8PrivateKey(b); err == nil {
 		rsaKey, ok := key.(*rsa.PrivateKey)
 		if !ok {
 			return nil, errNotRSA
@@ -132,37 +143,38 @@ func parseKey(raw string) (*rsa.PrivateKey, error) {
 		return rsaKey, nil
 	}
 
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	key, err := x509.ParsePKCS1PrivateKey(b)
 	if err != nil {
-		return nil, fmt.Errorf("alipay: private key: %w", err)
+		return nil, fmt.Errorf("alipay: %w", err)
 	}
 
 	return key, nil
 }
 
-// Sign signs the parameters with RSA2 (SHA-256) or RSA (SHA-1).
-func (c *Client) Sign(params map[string]string) (string, error) {
-	key, err := parseKey(c.cfg.PrivateKey)
+func parsePublic(raw string) (*rsa.PublicKey, error) {
+	b, err := der(raw)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	data := []byte(SignString(params))
-
-	var (
-		hash   crypto.Hash
-		digest []byte
-	)
-
-	if c.cfg.SignType == _signTypeRSA {
-		sum := sha1.Sum(data) //nolint:gosec // see import
-		hash, digest = crypto.SHA1, sum[:]
-	} else {
-		sum := sha256.Sum256(data)
-		hash, digest = crypto.SHA256, sum[:]
+	key, err := x509.ParsePKIXPublicKey(b)
+	if err != nil {
+		return nil, fmt.Errorf("alipay: %w", err)
 	}
 
-	sig, err := rsa.SignPKCS1v15(nil, key, hash, digest)
+	rsaKey, ok := key.(*rsa.PublicKey)
+	if !ok {
+		return nil, errNotRSA
+	}
+
+	return rsaKey, nil
+}
+
+// Sign signs the parameters with RSA2 (SHA-256).
+func (c *Client) Sign(params map[string]string) (string, error) {
+	sum := sha256.Sum256([]byte(SignString(params)))
+
+	sig, err := rsa.SignPKCS1v15(nil, c.private, crypto.SHA256, sum[:])
 	if err != nil {
 		return "", fmt.Errorf("alipay: sign: %w", err)
 	}
@@ -170,32 +182,44 @@ func (c *Client) Sign(params map[string]string) (string, error) {
 	return base64.StdEncoding.EncodeToString(sig), nil
 }
 
+// verify checks sign over the raw JSON of a response node.
+func (c *Client) verify(node json.RawMessage, sign string) error {
+	sig, err := base64.StdEncoding.DecodeString(sign)
+	if err != nil {
+		return errSignature
+	}
+
+	sum := sha256.Sum256(node)
+	if rsa.VerifyPKCS1v15(c.public, crypto.SHA256, sum[:], sig) != nil {
+		return errSignature
+	}
+
+	return nil
+}
+
 type gatewayError struct {
 	Code    string `json:"code"`
+	Msg     string `json:"msg"`
 	SubCode string `json:"sub_code"`
 }
 
 type oauthToken struct {
+	UserID string `json:"user_id"`
 	OpenID string `json:"open_id"`
 }
 
-type gatewayReply struct {
-	Error *gatewayError `json:"error_response"`
-	Token *oauthToken   `json:"alipay_system_oauth_token_response"`
-}
-
-func (c *Client) send(ctx context.Context, params map[string]string) (*gatewayReply, error) {
-	query := url.Values{}
+func (c *Client) send(ctx context.Context, params map[string]string) (map[string]json.RawMessage, error) {
+	form := url.Values{}
 	for k, v := range params {
-		query.Set(k, v)
+		form.Set(k, v)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.cfg.Gateway+"?"+query.Encode(), http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.gateway, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("alipay: %w", err)
 	}
 
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded;charset=utf-8")
 
 	res, err := c.http.Do(req)
 	if err != nil {
@@ -203,66 +227,84 @@ func (c *Client) send(ctx context.Context, params map[string]string) (*gatewayRe
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("%w: %s", errHTTPStatus, res.Status)
-	}
-
 	raw, err := io.ReadAll(io.LimitReader(res.Body, _maxBody))
 	if err != nil {
 		return nil, fmt.Errorf("alipay: %w", err)
 	}
 
-	var reply gatewayReply
-	if err := json.Unmarshal(raw, &reply); err != nil {
-		return nil, fmt.Errorf("alipay: %w", err)
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("alipay: status %d: %w", res.StatusCode, err)
 	}
 
-	return &reply, nil
+	return out, nil
 }
 
-// ExchangeAuthCode returns the open id of an auth code.
-func (c *Client) ExchangeAuthCode(ctx context.Context, authCode string) (string, error) {
-	if c.cfg.AppID == "" || c.cfg.PrivateKey == "" {
-		c.log.ErrorContext(ctx, "Alipay credentials not configured")
-
-		return "", failure("notConfigured")
-	}
-
+// Exchange trades an auth_code for the user: open_id when the app uses open ids, else user_id.
+// A rejected code is auth.providerCodeInvalid; other failures, including a token response
+// whose signature does not verify, are common.badGateway.
+func (c *Client) Exchange(ctx context.Context, code string) (*entity.ExternalIdentity, error) {
 	params := map[string]string{
-		"app_id": c.cfg.AppID, "method": "alipay.system.oauth.token", "format": "JSON", "charset": c.cfg.Charset,
-		"sign_type": c.cfg.SignType, "timestamp": BeijingTime(c.now()), "version": "1.0",
-		"grant_type": "authorization_code", "code": authCode,
+		"app_id": c.appID, "method": "alipay.system.oauth.token", "format": "JSON", "charset": "utf-8",
+		"sign_type": "RSA2", "timestamp": BeijingTime(c.now()), "version": "1.0",
+		"grant_type": "authorization_code", "code": code,
 	}
 
 	sign, err := c.Sign(params)
 	if err != nil {
-		return "", err
+		return nil, entity.Wrap(entity.KeyInternalError, err)
 	}
 
 	params["sign"] = sign
 
 	reply, err := c.send(ctx, params)
 	if err != nil {
-		c.log.ErrorContext(ctx, "Alipay oauth token request failed", "error", err.Error())
-
-		return "", failure("requestFailed")
+		return nil, entity.Wrap(entity.KeyBadGateway, err)
 	}
 
-	if reply.Error != nil {
-		c.log.ErrorContext(ctx, "Alipay oauth token failed", "code", reply.Error.Code, "sub_code", reply.Error.SubCode)
+	if node, ok := reply[_errorNode]; ok {
+		var e gatewayError
 
-		if strings.HasPrefix(reply.Error.SubCode, _invalidCode) {
-			return "", entity.NestUnprocessable("invalidAlipayAuthCode", entity.Detail{Name: "authCode", Value: "invalidCode"})
+		_ = json.Unmarshal(node, &e)
+		cause := fmt.Errorf("alipay: %s %s %s", e.Code, e.SubCode, e.Msg) //nolint:err113 // gateway message
+
+		if strings.HasPrefix(e.SubCode, _invalidCode) {
+			return nil, entity.Wrap(entity.KeyProviderCodeInvalid, cause)
 		}
 
-		return "", failure("requestFailed")
+		return nil, entity.Wrap(entity.KeyBadGateway, cause)
 	}
 
-	if reply.Token == nil || reply.Token.OpenID == "" {
-		c.log.ErrorContext(ctx, "Alipay oauth token response has no open_id, check that OpenID is enabled for the app")
-
-		return "", failure("requestFailed")
+	node, ok := reply[_tokenNode]
+	if !ok {
+		return nil, entity.Wrap(entity.KeyBadGateway, errUnsupported)
 	}
 
-	return reply.Token.OpenID, nil
+	return c.identity(node, reply["sign"])
+}
+
+func (c *Client) identity(node, rawSign json.RawMessage) (*entity.ExternalIdentity, error) {
+	var sign string
+
+	_ = json.Unmarshal(rawSign, &sign)
+
+	if err := c.verify(node, sign); err != nil {
+		return nil, entity.Wrap(entity.KeyBadGateway, err)
+	}
+
+	var token oauthToken
+	if err := json.Unmarshal(node, &token); err != nil {
+		return nil, entity.Wrap(entity.KeyBadGateway, fmt.Errorf("alipay: %w", err))
+	}
+
+	subject := token.OpenID
+	if subject == "" {
+		subject = token.UserID
+	}
+
+	if subject == "" {
+		return nil, entity.Wrap(entity.KeyBadGateway, errNoSubject)
+	}
+
+	return &entity.ExternalIdentity{Provider: entity.ProviderAlipay, Subject: subject, UnionID: ""}, nil
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/xingyunqi-tech/go-template/internal/entity"
 	"github.com/xingyunqi-tech/go-template/internal/repo"
 )
 
@@ -14,6 +15,7 @@ type (
 	principalKey struct{}
 	operationKey struct{}
 	clientKey    struct{}
+	authErrorKey struct{}
 	auditKey     struct{}
 )
 
@@ -93,6 +95,21 @@ func RequestID(ctx context.Context) string {
 // WithPrincipal stores the authenticated caller.
 func WithPrincipal(ctx context.Context, p *Principal) context.Context {
 	return context.WithValue(ctx, principalKey{}, p)
+}
+
+// WithAuthError stores why the token of an optional operation was not accepted.
+func WithAuthError(ctx context.Context, err error) context.Context {
+	return context.WithValue(ctx, authErrorKey{}, err)
+}
+
+// AuthError returns why the token of an anonymous request was not accepted: unauthorized when
+// it sent none.
+func AuthError(ctx context.Context) error {
+	if err, ok := ctx.Value(authErrorKey{}).(error); ok {
+		return err
+	}
+
+	return entity.New(entity.KeyUnauthorized)
 }
 
 // PrincipalOf returns the authenticated caller, or nil for an anonymous request.

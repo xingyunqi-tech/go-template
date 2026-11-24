@@ -50,13 +50,14 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 
 | 目录 | 内容 |
 |---|---|
-| `internal/entity` | 领域对象（`user.go`）、角色与权限码（`rbac.go`，约定 §5.5，代码固定）、错误码表（`errors.go`，与约定 §2.4 逐条一致）、`ValidationError`；不引用 pgx、生成代码、net/http（depguard 检查）。`nest_error.go`、`social.go` 只供 `repo/webapi/{sms,wechat,alipay}` 使用，B4 删除 |
-| `internal/usecase` | 业务规则：`auth`（注册、登录、刷新轮换与宽限期、一次性邮件令牌）、`session`（会话与吊销键）、`user`（当前用户与管理、最后一个管理员）、`note`（CRUD 示例）、`health`、`audit`；按账号、会话计数与只计失败的共享限流规则经 `usecase.Limits` 在用例内检查；返回 `entity.Error` / `entity.ValidationError`；不引用 controller |
+| `internal/entity` | 领域对象（`user.go`）、provider 与短信场景（`identity.go`）、角色与权限码（`rbac.go`，约定 §5.5，代码固定）、错误码表（`errors.go`，与约定 §2.4 逐条一致）、`ValidationError`；不引用 pgx、生成代码、net/http（depguard 检查） |
+| `internal/usecase` | 业务规则：`auth`（注册、邮箱与短信登录、第三方 provider 登录与身份匹配、刷新轮换与宽限期、一次性邮件令牌）、`sms`（验证码发送与校验）、`account`（注销与 `account.purge`）、`session`（会话与吊销键）、`user`（当前用户与管理、绑定手机号、最后一个管理员）、`note`（CRUD 示例）、`health`、`audit`；按账号、会话计数与只计失败的共享限流规则经 `usecase.Limits` 在用例内检查；返回 `entity.Error` / `entity.ValidationError`；不引用 controller |
 | `internal/controller/http` | 中间件链、操作表、校验适配器、鉴权与限流、幂等键、事务、审计、`policy.go`、ops 路由（health、metrics、`/openapi.json`、`/docs`）；`gen/` 为生成代码，`v1/` 实现 `gen.StrictServerInterface`，`httperr/` 写错误信封，`reqctx/` 为请求 ID、主体、操作 |
 | `internal/i18n` | go-i18n 消息文件 `locales/{zh,en}.json`（按 errorKey 与 `validation.<rule>` 组织）与 `Accept-Language` 解析 |
 | `internal/config` | caarlos0/env 解析约定 §9 与本服务变量，启动时一次性校验并列出全部问题 |
-| `internal/repo` | 端口在 `contracts.go`；`postgres/` 为 sqlc 查询与端口实现（请求事务经 context 传递，`AfterCommit` 登记提交后副作用，River 表在 `DATABASE_SCHEMA`），`redis/` 为缓存、锁、吊销键、幂等键、刷新宽限期暂存（键带 `{OTEL_SERVICE_NAME}:` 前缀，吊销键 `auth:revoked:sid:` 除外；未配置 `REDIS_URL` 时进程内实现），`webapi/mail` 为 SMTP 发信（未配置 `SMTP_URL` 时只写日志），`webapi/storage` 为 local / S3 文件存储，`webapi/{sms,wechat,alipay}` 为第三方客户端（B4 改写） |
-| `internal/worker` | River 客户端配置（otelriver）与任务：`mail` 队列由 worker 签发一次性令牌（只存哈希）并发信 |
+| `internal/repo` | 端口在 `contracts.go`；`postgres/` 为 sqlc 查询与端口实现（请求事务经 context 传递，`AfterCommit` 登记提交后副作用，River 表在 `DATABASE_SCHEMA`），`redis/` 为缓存、锁、吊销键、幂等键、刷新宽限期暂存、短信验证码与发送 / 失败计数（键带 `{OTEL_SERVICE_NAME}:` 前缀，吊销键 `auth:revoked:sid:` 除外；未配置 `REDIS_URL` 时进程内实现），`webapi/mail` 为 SMTP 发信（未配置 `SMTP_URL` 时只写日志），`webapi/storage` 为 local / S3 文件存储，`webapi/sms` 为阿里云 Dysms（`SMS_PROVIDER=log` 只写日志），`webapi/{wechat,alipay}` 为 provider（失败映射为 `auth.providerCodeInvalid` / `common.badGateway`，支付宝响应用 `ALIPAY_PUBLIC_KEY` 验签）；第三方基址由 `ALIYUN_SMS_ENDPOINT`、`WECHAT_API_BASE`、`ALIPAY_GATEWAY` 配置 |
+| `internal/worker` | River 客户端配置（otelriver）与任务：`mail` 队列由 worker 签发一次性令牌（只存哈希）并发信；`account` 队列执行 `account.purge`（依次调用 `Purger`、物理删除用户、发布 `user.deleted`） |
+| `internal/events` | `user.deleted` 等事件（CloudEvents 1.0 JSON）与 `Publisher` 端口；默认实现只写日志 |
 | `templates/` | 邮件模板 `mail/<kind>.{html,txt}.tmpl`，文案在 i18n 的 `mail.*` |
 | `migrations/`、`seeds/` | goose 迁移：`core/` 每个服务都执行，`identity/` 只在签发服务执行，版本表 `goose_<set>_version`；`seeds/seed.json` 为演示账号定义 |
 | `pkg/` | 与业务无关的封装，不引用 `internal/`：`clientip`（`TRUSTED_PROXIES`）、`jwtx`（EdDSA 签名、JWKS、验签）、`ratelimit`（GCRA 与共享规则表）、`telemetry`、`logger`、`pagination`、`phone`、`jsontime`、`postgres` 等 |
@@ -71,7 +72,7 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 
 - 全局：otelhttp（`http.route` 取自操作查找设置的 `r.Pattern`）→ Request ID → 访问日志与 panic 兜底 → 安全头 → CORS（预检 204）→ 语言。
 - 根路径：`/health/live`、`/health/ready`、`/metrics`（`METRICS_TOKEN` 或 `METRICS_PORT`）、`/openapi.json`、`/docs`（`DOCS_ENABLED`）直接处理。
-- `/api/v1`：操作查找（未命中：路径存在 405 + `Allow`，否则 404）→ `{service}-ip` 限流 → 令牌验证（public 不读 `Authorization`；optional 无效按匿名）与吊销键检查 → `{service}-user` 与 policy 声明的共享限流 → 权限 → 近期登录 → 已验证邮箱 → 请求体上限（413）、`Content-Type`（415）、JSON 语法（400）→ `openapi3filter` 校验（422）→ 幂等键 → 事务 → 生成的处理器 → 审计。
+- `/api/v1`：操作查找（未命中：路径存在 405 + `Allow`，否则 404）→ `{service}-ip` 限流 → 令牌验证（public 不读 `Authorization`；optional 无效按匿名，验证错误经 `reqctx.AuthError` 取得）与吊销键检查 → `{service}-user` 与 policy 声明的共享限流 → 权限 → 近期登录 → 已验证邮箱 → 请求体上限（413）、`Content-Type`（415）、JSON 语法（400）→ `openapi3filter` 校验（422）→ 幂等键 → 事务 → 生成的处理器 → 审计。
 - 路由区分大小写，末尾斜杠不归一。校验错误的 `field` 为 JSON 路径，查询与路径参数为 `query.<name>` / `path.<name>`。
 
 ## 测试
@@ -90,6 +91,7 @@ cmd/app → internal/app → internal/controller/http/v1 → internal/usecase（
 - MinIO（`chainguard/minio`，按 digest 固定）同样由 testcontainers 启动。
 - Redis 每个测试包一个容器：`TestMain` 调 `testutil.StartRedisPool`，用例 `pool.Borrow(t)` 独占借一个逻辑库（DB 0–15，全部借出时阻塞），借出前、归还前各 `FLUSHDB`，`RedisDB.URL()` 给出 `REDIS_URL`；用例里只用 `FLUSHDB`，不用 `FLUSHALL` 或跨库的全局命令。
 - 端口 mock 由 mockgen 生成（`internal/repo/mocks`），新增端口时把源文件加入 Makefile `MOCK_SOURCES`；简单端口用手写 fake。
+- 短信、微信、支付宝用例用 httptest 假服务器，经 `ALIYUN_SMS_ENDPOINT`、`WECHAT_API_BASE`、`ALIPAY_GATEWAY` 指过去；注销用例把 `ACCOUNT_DELETION_GRACE` 设为 0 让 worker 立即清理，`identityApp.workerLog` 收集 worker 日志（含发布的事件）。
 - testcontainers 起不来时测试失败，不跳过。Docker Desktop 的 socket 不在 `/var/run/docker.sock` 时，夹具自动使用 `~/.docker/run/docker.sock`。
 
 ## 生成文件（不手改）

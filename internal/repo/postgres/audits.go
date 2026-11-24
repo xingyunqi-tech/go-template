@@ -45,3 +45,12 @@ func (a *Audits) Create(ctx context.Context, l *repo.AuditLog) error {
 
 	return nil
 }
+
+// Purge implements repo.Purger: the audit logs of the actor lose its sub and IP.
+func (a *Audits) Purge(ctx context.Context, actor uuid.UUID) error {
+	if err := a.db.queries(ctx, func(q *sqlcgen.Queries) error { return q.AnonymizeActor(ctx, &actor) }); err != nil {
+		return fmt.Errorf("postgres: anonymize audit logs: %w", err)
+	}
+
+	return nil
+}

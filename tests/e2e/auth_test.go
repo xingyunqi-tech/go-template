@@ -157,3 +157,31 @@ func TestJWKSVerifiesTheIssuedTokens(t *testing.T) {
 	key, _ := keys[0].(map[string]any)
 	assert.Equal(t, kid, key["kid"])
 }
+
+func TestDeleteMeSignsOutAndFreesTheEmail(t *testing.T) {
+	t.Parallel()
+
+	email := fmt.Sprintf("e2e-%s@example.com", uuid.NewV7())
+
+	registered := call(t, http.MethodPost, "/api/v1/auth/email/register", "", `{"email":"`+email+`","password":"`+_password+`"}`)
+	require.Equal(t, http.StatusCreated, registered.status, string(registered.raw))
+
+	access, refresh := loginData(t, registered)
+
+	deleted := call(t, http.MethodDelete, "/api/v1/me", access, "")
+	require.Equal(t, http.StatusAccepted, deleted.status, string(deleted.raw))
+
+	assert.Equal(t, http.StatusUnauthorized, call(t, http.MethodGet, "/api/v1/me", access, "").status)
+	assert.Equal(t, http.StatusUnauthorized, call(t, http.MethodPost, "/api/v1/auth/refresh", "", `{"refreshToken":"`+refresh+`"}`).status)
+
+	again := call(t, http.MethodPost, "/api/v1/auth/email/register", "", `{"email":"`+email+`","password":"`+_password+`"}`)
+	require.Equal(t, http.StatusCreated, again.status, string(again.raw))
+}
+
+func TestNoProviderIsEnabledWithoutCredentials(t *testing.T) {
+	t.Parallel()
+
+	providers := call(t, http.MethodGet, "/api/v1/auth/providers", "", "")
+	require.Equal(t, http.StatusOK, providers.status)
+	assert.Equal(t, []any{}, providers.body["data"])
+}

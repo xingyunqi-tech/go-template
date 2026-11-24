@@ -87,7 +87,7 @@ const _userResource = "user"
 
 // Policies returns the policy of every documented operation, keyed by operationId. The
 // account, session and failures-only rules of platform conventions §11.6 are counted by the
-// auth and user use cases. registerWithEmail and loginWithEmail run their own transactions.
+// auth and user use cases. registerWithEmail and the sign-ins run their own transactions.
 func Policies() map[string]Policy {
 	return map[string]Policy{
 		"registerWithEmail":       {Auth: AuthPublic, RateLimits: []string{"auth-register"}},
@@ -96,12 +96,19 @@ func Policies() map[string]Policy {
 		"resendVerificationEmail": {Auth: AuthJWT, RateLimits: []string{"auth-mail"}, Tx: true},
 		"forgotPassword":          {Auth: AuthPublic, RateLimits: []string{"auth-mail"}, Tx: true},
 		"resetPassword":           {Auth: AuthPublic, Tx: true, Audit: &Audit{Action: "user.password.reset", Resource: _userResource}},
+		"sendSmsCode":             {Auth: AuthOptional, RateLimits: []string{"auth-sms"}},
+		"loginWithSms":            {Auth: AuthPublic, RateLimits: []string{"auth-login"}},
+		"listAuthProviders":       {Auth: AuthPublic},
+		"loginWithProvider":       {Auth: AuthPublic, RateLimits: []string{"auth-login"}},
 		"refreshToken":            {Auth: AuthPublic, Tx: true},
 		"logout":                  {Auth: AuthJWT, Tx: true},
 
 		"getMe":               {Auth: AuthJWT},
 		"updateMe":            {Auth: AuthJWT, Tx: true},
+		"deleteMe":            {Auth: AuthJWT, Reauth: true, Tx: true, Audit: &Audit{Action: "user.delete", Resource: _userResource}},
 		"changePassword":      {Auth: AuthJWT, Tx: true, Audit: &Audit{Action: "user.password.change", Resource: _userResource}},
+		"bindPhone":           {Auth: AuthJWT, Tx: true, Audit: &Audit{Action: "user.phone.bind", Resource: _userResource}},
+		"bindPhoneWithWechat": {Auth: AuthJWT, Tx: true, Audit: &Audit{Action: "user.phone.bind", Resource: _userResource}},
 		"listMySessions":      {Auth: AuthJWT},
 		"revokeMySession":     {Auth: AuthJWT, Tx: true},
 		"revokeOtherSessions": {Auth: AuthJWT, Tx: true},
@@ -110,6 +117,7 @@ func Policies() map[string]Policy {
 		"createUser":      {Auth: AuthJWT, Perms: All(entity.PermUserWrite), Tx: true, Audit: &Audit{Action: "user.create", Resource: _userResource}},
 		"getUser":         {Auth: AuthJWT, Perms: All(entity.PermUserRead)},
 		"updateUser":      {Auth: AuthJWT, Perms: All(entity.PermUserWrite), Tx: true, Audit: &Audit{Action: "user.update", Resource: _userResource}},
+		"deleteUser":      {Auth: AuthJWT, Perms: All(entity.PermUserWrite), Tx: true, Audit: &Audit{Action: "user.delete", Resource: _userResource}},
 		"setUserRoles":    {Auth: AuthJWT, Perms: All(entity.PermRoleWrite), Tx: true, Audit: &Audit{Action: "user.roles.set", Resource: _userResource}},
 		"listRoles":       {Auth: AuthJWT, Perms: All(entity.PermRoleRead)},
 		"listPermissions": {Auth: AuthJWT, Perms: All(entity.PermRoleRead)},

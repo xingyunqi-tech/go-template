@@ -23,7 +23,7 @@ const _stopAndCancelGrace = 5 * time.Second
 // NewWorkerClient builds the River client that works the queues and schedules the periodic
 // jobs; it is nil while no job is registered. The issuing service works the mail queue.
 func NewWorkerClient(cfg *config.Config, log *slog.Logger, infra *Infra) (*river.Client[pgx.Tx], error) {
-	deps := &worker.Deps{Schema: cfg.Database.Schema, Log: log, Mail: nil}
+	deps := &worker.Deps{Schema: cfg.Database.Schema, Log: log, Mail: nil, Accounts: nil}
 
 	if cfg.Auth.Role() != config.RoleVerifier {
 		translator, err := i18n.New(cfg.App.DefaultLocale)
@@ -39,7 +39,7 @@ func NewWorkerClient(cfg *config.Config, log *slog.Logger, infra *Infra) (*river
 			return nil, err
 		}
 
-		deps.Mail = identity.Auth
+		deps.Mail, deps.Accounts = identity.Auth, identity.Accounts
 	}
 
 	riverCfg, workers := worker.Config(deps)
